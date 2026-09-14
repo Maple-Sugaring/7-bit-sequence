@@ -47,12 +47,13 @@ export function Login() {
                 <h1>Login</h1>
                 <Paper id="login-paper">
                     <form>
-                        <TextField id="outlined-basic" width='25ch' label="Email" variant="outlined" /><br />
+                        <TextField id="outlined-basic" width='25ch' label="Email" variant="outlined" size="small" /><br />
                         <FormControl sx={{ m: 1, width: '25ch' }} variant="outlined">
                             <InputLabel htmlFor={`${outlinedPasswordId}-input`}>Password</InputLabel>
                             <OutlinedInput
                                 id={`${outlinedPasswordId}-input`}
                                 type={showPassword ? 'text' : 'password'}
+                                size="small"
                                 endAdornment={
                                 <InputAdornment position="end">
                                     <IconButton
