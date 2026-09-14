@@ -1,33 +1,14 @@
+/* CSS Stylesheet for global styles */
 html{
   font-family: "Helvetica Neue", "Helvetica", "Roboto", "Arial", sans-serif;
+}
+
+#root{
+  max-width: 100%;
+  width:100%;
 }
 
 .main-content{
   flex: 1;
 }
 
-/***** Login *****/
-#login-content{
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-#login-img{
-  max-width: 15%;
-  filter: drop-shadow(#F76902 5px 5px 2px);
-  margin: 2%;
-}
-
-#login-content > h1{
-  font-weight: bold;
-  color: #F76902;
-}
-
-#login-paper{
-  width: 33%;
-}
-
-
-
-/***** Login *****/

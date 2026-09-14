@@ -17,7 +17,7 @@ import './css/App.css'
 
 function Layout() {
   return (
-    <Container disableGutters className="layout-container" sx={{padding:0 ,display:'flex', flexDirection:'column', flexGrow:1}}>
+    <Container className="layout" disableGutters maxWidth={false} sx={{display:'flex', flexDirection:'column', flexGrow:1, margin:0, }}>
       <Header />
       <main className="main-content">
         <Outlet />

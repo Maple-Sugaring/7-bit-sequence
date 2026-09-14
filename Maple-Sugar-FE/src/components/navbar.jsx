@@ -1,5 +1,4 @@
 import * as React from 'react';
-import {useEffect} from 'react'
 import Box from '@mui/material/Box';
 import RestoreIcon from '@mui/icons-material/Restore';
 import FavoriteIcon from '@mui/icons-material/Favorite';

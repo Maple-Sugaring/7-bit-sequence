@@ -1,0 +1,27 @@
+/* CSS Stylesheet for login specific components */
+
+/***** Login *****/
+#login-content{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#login-img{
+  max-width: 15%;
+  filter: drop-shadow(#F76902 5px 5px 2px);
+  margin: 2%;
+}
+
+#login-content > h1{
+  font-weight: bold;
+  color: #F76902;
+}
+
+#login-paper{
+  width: 33%;
+}
+
+
+
+/***** Login *****/
