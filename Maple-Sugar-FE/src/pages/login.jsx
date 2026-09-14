@@ -10,9 +10,11 @@ import FormControl from '@mui/material/FormControl';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import InfoOutlined from '@mui/icons-material/InfoOutlined';
+import Button from '@mui/material/Button';
 
 //Style
 import '../css/App.css';
+import '../css/login.css';
 
 export function Login() {
 
@@ -47,9 +49,9 @@ export function Login() {
                 <h1>Login</h1>
                 <Paper id="login-paper">
                     <form>
-                        <TextField id="outlined-basic" width='25ch' label="Email" variant="outlined" size="small" /><br />
-                        <FormControl sx={{ m: 1, width: '25ch' }} variant="outlined">
-                            <InputLabel htmlFor={`${outlinedPasswordId}-input`}>Password</InputLabel>
+                        <TextField id="outlined-basic" label="Email" variant="outlined" size="small" fullWidth/>
+                        <FormControl fullWidth variant="outlined">
+                            <InputLabel htmlFor={`${outlinedPasswordId}-input`} size="small">Password</InputLabel>
                             <OutlinedInput
                                 id={`${outlinedPasswordId}-input`}
                                 type={showPassword ? 'text' : 'password'}
@@ -72,7 +74,8 @@ export function Login() {
                                 label="Password"
                             />
                         </FormControl>
-                        <br />
+                        <Button variant="contained" fullWidth>Sign In</Button>
+                        <Button className="forgot-pswd" size="small">Forgot Password?</Button>
                     </form>
                 </Paper>
             </div>
