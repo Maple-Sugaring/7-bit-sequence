@@ -1,5 +1,7 @@
 /* CSS Stylesheet for login specific components */
-
+#login-page{
+  background-color: #f2f2f7;
+}
 #login-content{
   display: flex;
   flex-direction: column;
