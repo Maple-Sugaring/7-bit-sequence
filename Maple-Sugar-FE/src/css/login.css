@@ -21,7 +21,9 @@
   width: 33%;
   padding: 2%
 }
-
+#sign-in{
+  background-color: #000000;
+}
 form {
   display: flex;
   flex-direction: column;
@@ -31,4 +33,28 @@ form {
 
 .forgot-pswd{
   align-self: flex-start;
+  color:#000000;
+  text-decoration: underline;
+}
+
+/* label styles */
+.field-with-label{
+  margin-bottom: 20px;
+}
+
+.field-label{
+  display:block;
+  font-size:1rem;
+  font-weight:400;
+  margin-bottom:8px;
+  color: #000000;
+  text-align: left;
+}
+
+.field-with-label .MuiOutlinedInput-root{
+  border-radius: 8px;
+}
+
+.field-with-label .MuiOutlinedInput-notchedOutline{
+  border-color: #D9D9D9;
 }
