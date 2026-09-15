@@ -1,0 +1,11 @@
+{
+  "dependencies": {
+    "react-battery-gauge": "^1.0.7",
+    "react-icons": "^5.7.0"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.6.1",
+    "postcss": "^8.5.28",
+    "tailwindcss": "^4.3.3"
+  }
+}

@@ -9,8 +9,8 @@ import { Schedule_Admin } from './pages/schedule-admin'
 import { Table } from './pages/table'
 import { Schedule } from './pages/schedule'
 import { Container } from '@mui/material'
-import {Header} from './components/header'
-import {Footer} from './components/footer'
+import {Header} from './components/Header'
+import {Footer} from './components/Footer'
 
 //CSS styles
 import './css/App.css'

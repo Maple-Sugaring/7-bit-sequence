@@ -1,1 +1,11 @@
 /* CSS Stylesheet for dashboard specific components */
+.battery{
+    display:flex;
+    flex-Direction:row;
+    justify-Content:space-around;
+    background:white;
+    border-Radius:10px;
+    margin:0px;
+    width:100%;
+    max-width: none;
+}
