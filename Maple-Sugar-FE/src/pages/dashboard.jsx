@@ -16,21 +16,21 @@ export function Dashboard() {
             */}
             <Container className="battery" disableGutters>
                 <Box>
-                    <BasicGauge/>
+                    <BasicGauge value="20"/>
                     <h3>Node 1</h3>
                 </Box>
                 <Box>
-                    <BasicGauge/>
+                    <BasicGauge  value="35"/>
                     <h3>Node 2</h3>
 
                 </Box>
                 <Box>
-                    <BasicGauge/>
+                    <BasicGauge  value="80"/>
                     <h3>Node 3</h3>
 
                 </Box>
                 <Box>
-                    <BasicGauge/>
+                    <BasicGauge  value="0"/>
                     <h3>Node 4</h3>
                 </Box>
             </Container>

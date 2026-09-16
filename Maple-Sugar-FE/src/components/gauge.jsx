@@ -19,11 +19,11 @@ const BasicGauge = () => {
 }
 */
 
-const BasicGauge = () => {
+const BasicGauge = ({value}) => {
   return (
     <Stack direction={{ xs: 'column', md: 'row' }} spacing={{ xs: 1, md: 3 }}>
       <Box sx={{ position: 'relative', width: 100, height: 100 }}>
-        <Gauge sx={{postion:"absolute"}} width={100} height={100} value={60} startAngle={-90} endAngle={90} zindex={1}/>
+        <Gauge sx={{postion:"absolute"}} width={100} height={100} value={value} startAngle={-90} endAngle={90} zindex={1}/>
         < BsBattery className="bat"/>
       </Box>
     </Stack>
