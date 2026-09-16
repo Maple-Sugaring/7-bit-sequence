@@ -12,3 +12,7 @@ html{
   flex: 1;
 }
 
+.page-main{
+  background-color: #ffffff;
+  color:#000000;
+}

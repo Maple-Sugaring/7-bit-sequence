@@ -50,7 +50,7 @@ const outlinedEmailId = React.useId();
           <h1>Maple Sugaring</h1>
         </Box>
       </header>
-<main id="login-page">
+<main className="page-main" id="login-page">
       <div id="login-content">
         <img id="login-img" src={mapleLogo} alt="RIT Maple Leaf" />
         <h1>Login</h1>
