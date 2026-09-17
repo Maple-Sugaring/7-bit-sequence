@@ -1,0 +1,18 @@
+footer{
+    background-color: black;
+}
+
+.fbox{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 40px;
+    box-sizing: border-box;
+}
+
+.fbox > p{
+    color: #F76902;
+    font-size: 20px;
+    margin: 0;
+}
+

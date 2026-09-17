@@ -1,0 +1,29 @@
+header{
+    background-color: black;
+}
+
+.navbar{
+    display: flex;
+    gap: 10%;
+}
+
+.webTitle{
+    display:flex;
+    justify-content:center;
+    align-items: center;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 30px;
+    border-bottom: solid #F76902;
+}
+
+.webTitle > h1{
+    font-size: 50px;
+    margin:0 0 1% 0;
+    right:10%;
+}
+
+.bell{
+    position:fixed;
+    left:30%;
+}
