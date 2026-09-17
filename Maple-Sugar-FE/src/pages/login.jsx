@@ -50,71 +50,73 @@ const outlinedEmailId = React.useId();
           <h1>Maple Sugaring</h1>
         </Box>
       </header>
-<main id="login-page">
-      <div id="login-content">
-        <img id="login-img" src={mapleLogo} alt="RIT Maple Leaf" />
-        <h1>Login</h1>
-        <Paper id="login-paper">
-          <form>
-            {/* <TextField
-              id="outlined-basic"
-              label="Email"
-              variant="outlined"
-              size="small"
-              fullWidth
-            /> */}
-            <FormControl fullWidth variant="outlined" className="field-with-label">
+      <main id="login-page">
+        <div id="login-content">
+          <div id="badge">
+            <img id="login-img" src={mapleLogo} alt="RIT Maple Leaf" />
+          </div>
+          <h1>Login</h1>
+          <Paper id="login-paper">
+            <form>
+              {/* <TextField
+                id="outlined-basic"
+                label="Email"
+                variant="outlined"
+                size="small"
+                fullWidth
+              /> */}
+              <FormControl fullWidth variant="outlined" className="field-with-label">
                 <label htmlFor={`${outlinedEmailId}-input`} className="field-label">
                     Email
                 </label>
-<OutlinedInput
-id={`${outlinedEmailId}-input`}
-placeholder="Enter your email.."
-size="small"
+                <OutlinedInput
+                  id={`${outlinedEmailId}-input`}
+                  placeholder="Enter your email.."
+                  size="small"
 
-/>
-            </FormControl>
-            <FormControl fullWidth variant="outlined" className="field-with-label">
+                />
+              </FormControl>
+              <FormControl fullWidth variant="outlined" className="field-with-label">
                 <label htmlFor={`${outlinedPasswordId}-input`} className="field-label">
                     Password
                 </label>
-              {/* <InputLabel htmlFor={`${outlinedPasswordId}-input`} size="small">
-                Password
-              </InputLabel> */}
-              <OutlinedInput
-                id={`${outlinedPasswordId}-input`}
-                type={showPassword ? "text" : "password"}
-                placeholder="Enter your password.."
-                size="small"
-                endAdornment={
-                  <InputAdornment position="end">
-                    <IconButton
-                      aria-label={
-                        showPassword
-                          ? "hide the password"
-                          : "display the password"
-                      }
-                      onClick={handleClickShowPassword}
-                      onMouseDown={handleMouseDownPassword}
-                      onMouseUp={handleMouseUpPassword}
-                      edge="end"
-                    >
-                      {showPassword ? <VisibilityOff /> : <Visibility />}
-                    </IconButton>
-                  </InputAdornment>
-                }
-              />
-            </FormControl>
-            <Button id="sign-in" variant="contained" fullWidth>
-              Sign In
-            </Button>
-            <Button className="forgot-pswd" size="small">
-              Forgot Password?
-            </Button>
-          </form>
-        </Paper>
-      </div>
-</main>
+                {/* <InputLabel htmlFor={`${outlinedPasswordId}-input`} size="small">
+                  Password
+                </InputLabel> */}
+                <OutlinedInput
+                  id={`${outlinedPasswordId}-input`}
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Enter your password.."
+                  size="small"
+                  endAdornment={
+                    <InputAdornment position="end">
+                      <IconButton
+                        aria-label={
+                          showPassword
+                            ? "hide the password"
+                            : "display the password"
+                        }
+                        onClick={handleClickShowPassword}
+                        onMouseDown={handleMouseDownPassword}
+                        onMouseUp={handleMouseUpPassword}
+                        edge="end"
+                      >
+                        {showPassword ? <VisibilityOff /> : <Visibility />}
+                      </IconButton>
+                    </InputAdornment>
+                  }
+                />
+              </FormControl>
+              <Button id="sign-in" variant="contained" fullWidth>
+                Sign In
+              </Button>
+              <Button className="forgot-pswd" size="small">
+                Forgot Password?
+              </Button>
+            </form>
+          </Paper>
+        </div>
+      </main>
     
     </>
   );

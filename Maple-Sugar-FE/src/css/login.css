@@ -8,9 +8,22 @@
   align-items: center;
 }
 
+#badge{
+  margin-top: 2%;
+  height: 100px;
+  width: 100px;
+  background-color: #ffffff;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border: 0.5px solid #000000;
+  box-shadow: 5px 5px 3px #F76902;
+}
+
 #login-img{
-  max-width: 15%;
-  filter: drop-shadow(#F76902 5px 5px 2px);
+  max-width: 75%;
+  /* filter: drop-shadow(#F76902 5px 5px 2px); */
   margin: 2%;
 }
 
@@ -26,6 +39,11 @@
 #sign-in{
   background-color: #000000;
 }
+
+.webTitle > h1{
+  color: #ffffff;
+}
+
 form {
   display: flex;
   flex-direction: column;
