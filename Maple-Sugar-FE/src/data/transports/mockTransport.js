@@ -58,6 +58,23 @@ function withinRange(isoDate, from, to) {
   return true;
 }
 
+/**
+ * Mirrors the backend's slot query, which resolves each assignment to a display
+ * name so the schedule view does not need the admin-only user roster. Kept in
+ * sync with mapScheduleSlot's Assignees field.
+ */
+function withAssignees(slot) {
+  const assignees = slot.Assigned_UserIDs.map((id) => {
+    const user = db.users.find((candidate) => candidate.UserID === id);
+    return {
+      userId: id,
+      name: user ? `${user.First_Name} ${user.Last_Name}`.trim() : `User ${id}`,
+      email: user?.Email ?? null,
+    };
+  });
+  return { ...slot, Assignees: assignees };
+}
+
 const routes = [
   // ---- Auth -------------------------------------------------------------
   {
@@ -304,7 +321,9 @@ const routes = [
     method: 'GET',
     match: /^\/schedule\/slots$/,
     handler: (unused, { query }) =>
-      db.scheduleSlots.filter((slot) => withinRange(slot.Starts_At, query?.from, query?.to)),
+      db.scheduleSlots
+        .filter((slot) => withinRange(slot.Starts_At, query?.from, query?.to))
+        .map(withAssignees),
   },
   {
     method: 'POST',
@@ -321,7 +340,7 @@ const routes = [
         Is_Complete: false,
       };
       db.scheduleSlots.push(slot);
-      return slot;
+      return withAssignees(slot);
     },
   },
   {
@@ -331,7 +350,7 @@ const routes = [
       const slot = db.scheduleSlots.find((candidate) => candidate.SlotID === Number(id));
       if (!slot) notFound('Shift');
       Object.assign(slot, body);
-      return slot;
+      return withAssignees(slot);
     },
   },
   {
@@ -375,7 +394,7 @@ const routes = [
       }
 
       slot.Assigned_UserIDs.push(userId);
-      return slot;
+      return withAssignees(slot);
     },
   },
   {
@@ -387,7 +406,7 @@ const routes = [
 
       const userId = Number(body?.userId ?? session?.user?.UserID);
       slot.Assigned_UserIDs = slot.Assigned_UserIDs.filter((assigned) => assigned !== userId);
-      return slot;
+      return withAssignees(slot);
     },
   },
 ];

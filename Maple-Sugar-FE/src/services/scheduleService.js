@@ -1,6 +1,5 @@
 import dayjs from 'dayjs';
 import * as scheduleRepository from '../data/repositories/scheduleRepository';
-import * as usersRepository from '../data/repositories/usersRepository';
 
 /**
  * Shift scheduling (FR-020, EIR-003).
@@ -21,24 +20,20 @@ function overlaps(a, b) {
 }
 
 export async function getSchedule({ from, to, userId } = {}) {
-  const [slots, users] = await Promise.all([
-    scheduleRepository.listSlots({ from, to }),
-    usersRepository.listUsers(),
-  ]);
+  // Assignee names now travel with each slot, so the schedule no longer fetches
+  // the admin-only user roster. That request 403'd for students, which is the
+  // role that uses this page the most.
+  const slots = await scheduleRepository.listSlots({ from, to });
 
-  const userById = new Map(users.map((user) => [user.UserID, user]));
   const mine = userId ? slots.filter((slot) => slot.Assigned_UserIDs.includes(userId)) : [];
 
   const rows = slots
     .map((slot) => {
-      const assigned = slot.Assigned_UserIDs.map((id) => {
-        const user = userById.get(id);
-        return {
-          userId: id,
-          name: user ? `${user.First_Name} ${user.Last_Name}`.trim() : `User ${id}`,
-          email: user?.Email ?? null,
-        };
-      });
+      const assigned = (slot.Assignees ?? []).map((person) => ({
+        userId: person.userId,
+        name: person.name?.trim() ? person.name.trim() : `User ${person.userId}`,
+        email: person.email ?? null,
+      }));
 
       const isMine = userId ? slot.Assigned_UserIDs.includes(userId) : false;
       const isPast = dayjs(slot.Ends_At).isBefore(dayjs());

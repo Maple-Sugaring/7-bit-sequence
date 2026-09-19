@@ -19,9 +19,20 @@ const SLOT_SELECT = `
            array_agg(a.user_id order by a.assigned_at)
              filter (where a.user_id is not null),
            '{}'
-         ) as assigned_user_ids
+         ) as assigned_user_ids,
+         -- Assignee display names travel with the slot so the schedule view
+         -- does not have to fetch the admin-only user roster just to label a
+         -- shift. Only id/name/email are exposed, never role or account state.
+         coalesce(
+           jsonb_agg(
+             jsonb_build_object('userId', a.user_id, 'name', u.full_name, 'email', u.email)
+             order by a.assigned_at
+           ) filter (where a.user_id is not null),
+           '[]'::jsonb
+         ) as assignees
     from schedule_slots s
     left join schedule_assignments a on a.slot_id = s.id
+    left join users u on u.id = a.user_id
 `;
 
 const SLOT_GROUP_BY = 'group by s.id';

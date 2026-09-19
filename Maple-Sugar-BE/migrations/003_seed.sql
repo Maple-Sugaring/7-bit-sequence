@@ -38,7 +38,7 @@ values
   (2, 1, 'Dana',       'Whitfield', 'dwhitfield@rit.edu', '2024-01-08', '2026-09-10T18:02:00Z', true,  null,         'maple-admin@rit.edu'),
   (3, 2, 'Innocenzio', 'Rizzuto',   'ir8643@g.rit.edu',   '2026-08-25', '2026-09-11T13:15:00Z', true,  '2026-12-19', null),
   (4, 2, 'Nolan',      'Cooper',    'nc4417@g.rit.edu',   '2026-08-25', '2026-09-09T15:30:00Z', true,  '2026-12-19', null),
-  (5, 2, 'Oliver',     'Grant',     'odg1896@g.rit.edu',  '2026-08-25', '2026-09-08T09:12:00Z', true,  '2026-12-19', null),
+  (5, 1, 'Oliver',     'Grant',     'odg1896@g.rit.edu',  '2026-08-25', '2026-09-08T09:12:00Z', true,  '2026-12-19', null),
   -- Deliberately lapsed, so the expired-account lockout has something to hit.
   (6, 2, 'Priya',      'Raman',     'pr2288@g.rit.edu',   '2025-08-26', '2026-05-02T11:00:00Z', false, '2026-05-09', null),
   (7, 3, 'Ben',        'Marino',    'bmm8699@g.rit.edu',  '2025-02-14', '2026-09-10T16:45:00Z', true,  '2027-05-14', null),

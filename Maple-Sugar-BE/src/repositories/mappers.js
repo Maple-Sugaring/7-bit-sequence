@@ -152,6 +152,9 @@ export function mapScheduleSlot(row) {
     // Aggregated from schedule_assignments. Coalesced to an empty array so the
     // client can map over it without a null check on every unclaimed shift.
     Assigned_UserIDs: row.assigned_user_ids ?? [],
+    // Same assignments, resolved to display names so the schedule can label a
+    // shift without pulling the admin-only user roster. Shape: { userId, name, email }.
+    Assignees: row.assignees ?? [],
     Is_Complete: row.is_complete,
   };
 }
