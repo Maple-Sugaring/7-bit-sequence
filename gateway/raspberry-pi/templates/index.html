@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Maple LoRa link test</title>
+    <style>
+      :root {
+        --bg: #1c1410;
+        --panel: #2a1d16;
+        --ink: #f4ebe3;
+        --muted: #c4b2a4;
+        --line: #4a3428;
+        --wait: #c9a227;
+        --up: #3f8f5a;
+        --bad: #c4493a;
+        --accent: #e4572e;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Avenir Next", "Segoe UI", sans-serif;
+        background: var(--bg);
+        color: var(--ink);
+      }
+      header {
+        padding: 1.25rem 1.5rem 1rem;
+        border-bottom: 1px solid var(--line);
+      }
+      header p { margin: 0.35rem 0 0; color: var(--muted); }
+      main { padding: 1.25rem 1.5rem 2rem; max-width: 980px; }
+      .banner {
+        border-radius: 12px;
+        padding: 1.1rem 1.2rem;
+        margin-bottom: 1.25rem;
+        border: 1px solid var(--line);
+      }
+      .banner.wait { background: #3a2e12; }
+      .banner.up { background: #163222; }
+      .banner.error { background: #3a1c18; }
+      .banner h2 { margin: 0 0 0.25rem; font-size: 1.4rem; }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 0.75rem;
+        margin-bottom: 1.25rem;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 0.85rem 1rem;
+      }
+      .card span { display: block; color: var(--muted); font-size: 0.8rem; }
+      .card strong { font-size: 1.35rem; }
+      table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+      th, td { text-align: left; padding: 0.55rem 0.4rem; border-bottom: 1px solid var(--line); }
+      th { color: var(--muted); font-weight: 600; }
+      .pill {
+        display: inline-block;
+        padding: 0.15rem 0.5rem;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        background: #3a2a22;
+      }
+      .pill.ok { background: #1f4a2e; }
+      .pill.bad { background: #5a221c; }
+      code { font-size: 0.8rem; color: var(--muted); }
+      .empty { color: var(--muted); padding: 1rem 0; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Maple LoRa link test</h1>
+      <p>Heltec ESP32 → Raspberry Pi SX1262. This page is local to the Pi and does not need the maple server.</p>
+    </header>
+    <main>
+      <section id="banner" class="banner wait">
+        <h2 id="banner-title">Waiting for packets</h2>
+        <p id="banner-detail">Opening the LoRa hat…</p>
+      </section>
+      <section class="grid">
+        <div class="card"><span>Packets received</span><strong id="rx-count">0</strong></div>
+        <div class="card"><span>Seconds since last RX</span><strong id="age">—</strong></div>
+        <div class="card"><span>Last RSSI</span><strong id="rssi">—</strong></div>
+        <div class="card"><span>Server forward</span><strong id="forward">skipped</strong></div>
+      </section>
+      <section class="card" style="margin-bottom: 1.25rem">
+        <span>Last sap reading</span>
+        <p id="last-reading" class="empty">Nothing yet. Watch the Heltec OLED for “Sent OK”.</p>
+      </section>
+      <section>
+        <h2>Recent packets</h2>
+        <div id="table-wrap"><p class="empty">History fills in as packets arrive.</p></div>
+      </section>
+    </main>
+    <script>
+      const banner = document.getElementById("banner");
+      const bannerTitle = document.getElementById("banner-title");
+      const bannerDetail = document.getElementById("banner-detail");
+
+      function ageSeconds(iso) {
+        if (!iso) return null;
+        return Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000));
+      }
+
+      function render(data) {
+        const last = data.last;
+        const age = ageSeconds(data.last_received_at);
+        let kind = "wait";
+        let title = "Waiting for packets";
+        if (data.radio_status === "error") {
+          kind = "error";
+          title = "Radio error";
+        } else if (data.rx_count > 0 && age !== null && age < 45) {
+          kind = "up";
+          title = "Link up";
+        }
+        banner.className = "banner " + kind;
+        bannerTitle.textContent = title;
+        bannerDetail.textContent = data.radio_detail || "";
+        document.getElementById("rx-count").textContent = data.rx_count;
+        document.getElementById("age").textContent = age === null ? "—" : age + "s";
+        document.getElementById("rssi").textContent =
+          last && last.rssi_dbm != null ? last.rssi_dbm + " dBm" : "—";
+        document.getElementById("forward").textContent = last
+          ? last.forward.status
+          : "skipped";
+
+        const reading = document.getElementById("last-reading");
+        if (!last) {
+          reading.className = "empty";
+          reading.textContent = "Nothing yet. Watch the Heltec OLED for “Sent OK”.";
+        } else if (last.parse_error) {
+          reading.className = "";
+          reading.textContent = "Parse issue: " + last.parse_error + "  raw: " + last.raw_text;
+        } else {
+          const p = last.payload;
+          reading.className = "";
+          reading.textContent =
+            "Node " + p.NodeID +
+            "   " + p.Weight + " lb   " +
+            p.Temperature + " °F   " +
+            p.Sugar_Percent + "% sugar   " +
+            (p.Weather_Conditions || "");
+        }
+
+        if (!data.packets.length) return;
+        const rows = data.packets.map((pkt) => {
+          const p = pkt.payload || {};
+          const pillClass = pkt.parse_error ? "bad" : "ok";
+          const pill = pkt.parse_error ? pkt.parse_error : "ok";
+          return `<tr>
+            <td>${pkt.seq}</td>
+            <td>${pkt.received_at.replace("T", " ").replace("Z", " UTC")}</td>
+            <td>${p.NodeID ?? "—"}</td>
+            <td>${p.Weight ?? "—"}</td>
+            <td>${p.Temperature ?? "—"}</td>
+            <td>${p.Sugar_Percent ?? "—"}</td>
+            <td>${pkt.rssi_dbm ?? "—"}</td>
+            <td><span class="pill ${pillClass}">${pill}</span></td>
+            <td><span class="pill">${pkt.forward.status}</span></td>
+          </tr>`;
+        }).join("");
+        document.getElementById("table-wrap").innerHTML = `
+          <table>
+            <thead>
+              <tr>
+                <th>#</th><th>Received</th><th>Node</th><th>lb</th>
+                <th>°F</th><th>%</th><th>RSSI</th><th>Parse</th><th>POST</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>`;
+      }
+
+      async function tick() {
+        try {
+          const res = await fetch("/api/packets");
+          render(await res.json());
+        } catch (err) {
+          banner.className = "banner error";
+          bannerTitle.textContent = "Dashboard unreachable";
+          bannerDetail.textContent = String(err);
+        }
+      }
+      tick();
+      setInterval(tick, 2000);
+    </script>
+  </body>
+</html>
