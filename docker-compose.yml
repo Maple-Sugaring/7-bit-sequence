@@ -2,7 +2,9 @@ name: maple-sugar
 
 services:
   db:
-    image: postgres:17-alpine
+    # Pinned to a digest, not just the mutable `17-alpine` tag, so an upstream
+    # repush can't silently change what gets pulled.
+    image: postgres:17-alpine@sha256:f02121de6f74d30d8a94cd1d9584125e2178d7e6c377d8130112d4e52d867995
     environment:
       POSTGRES_USER: maple
       POSTGRES_PASSWORD: maple
@@ -15,37 +17,54 @@ services:
       timeout: 5s
       retries: 10
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: 1.0
 
   cache:
-    image: redis:7-alpine
+    image: redis:7-alpine@sha256:520775a41a63e77e06c73e35d2fd9cc15921a609516818796b4ecbb813078bc7
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
     restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.5
 
   api:
     build:
       context: ./Maple-Sugar-BE
+    # Required before first run: cp Maple-Sugar-BE/.env.example Maple-Sugar-BE/.env
+    # and fill in JWT_SECRET plus a Google OAuth client (Cloud Console > APIs &
+    # Services > Credentials). See Maple-Sugar-BE/.env.example for every value
+    # this needs, including which ones must match the values below.
     env_file:
-      - ./Maple-Sugar-BE/.env
+      - path: ./Maple-Sugar-BE/.env
+        required: true
     environment:
       NODE_ENV: production
       PORT: 3000
       DATABASE_URL: postgresql://maple:maple@db:5432/maple_sugaring
       REDIS_URL: redis://cache:6379
-      # Browser-facing URLs, not the container's internal ones. nginx owns /api.
-      PUBLIC_API_URL: http://localhost:8080/api
-      PUBLIC_WEB_URL: http://localhost:8080
+      # PUBLIC_API_URL / PUBLIC_WEB_URL are intentionally NOT set here: they
+      # come from .env so the same file that documents the Google OAuth
+      # redirect URIs is also what actually controls them. For this compose
+      # stack (nginx published on :8080) .env needs:
+      #   PUBLIC_API_URL=http://localhost:8080/api
+      #   PUBLIC_WEB_URL=http://localhost:8080
     depends_on:
       db:
         condition: service_healthy
+      # Not service_healthy: connectCache() already degrades to direct SQL
+      # when Redis is slow or unreachable, so the API container shouldn't
+      # refuse to start over a cache outage it's designed to tolerate.
       cache:
-        condition: service_healthy
+        condition: service_started
     expose:
       - "3000"
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: 1.0
 
   web:
     build:
@@ -55,11 +74,17 @@ services:
         VITE_API_MODE: http
     environment:
       API_UPSTREAM: http://api:3000
+    depends_on:
+      # service_healthy (not just "started") so nginx only starts fronting
+      # traffic once the API has finished running migrations and is actually
+      # answering /health, matching the db/cache dependency pattern above.
+      api:
+        condition: service_healthy
     ports:
       - "8080:80"
-    depends_on:
-      - api
     restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.5
 
 volumes:
   postgres_data:

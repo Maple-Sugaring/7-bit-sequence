@@ -1,0 +1,49 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main, backend]
+    paths:
+      - "Maple-Sugar-BE/**"
+      - ".github/workflows/backend-ci.yml"
+  pull_request:
+    paths:
+      - "Maple-Sugar-BE/**"
+      - ".github/workflows/backend-ci.yml"
+
+jobs:
+  check-env-sync:
+    name: config.js / .env.example sync
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Maple-Sugar-BE
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Fails the build if src/config.js reads an env var that .env.example
+      # doesn't document, or vice versa, so the two can't silently drift
+      # apart the way they had before.
+      - run: npm run check-env
+
+  lint:
+    name: ESLint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Maple-Sugar-BE
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Maple-Sugar-BE/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint

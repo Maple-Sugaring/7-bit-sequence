@@ -13,7 +13,8 @@
     "migrate": "node src/db/migrate.js",
     "smoke": "node --env-file=.env.test scripts/smoke.js",
     "test": "node --test test/**/*.test.js",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "check-env": "node scripts/check-env-sync.js"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",
