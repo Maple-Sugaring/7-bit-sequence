@@ -36,7 +36,7 @@ insert into users (id, role_id, first_name, last_name, email, created_at, last_l
 values
   (1, 1, 'Tom',        'Palmer',    'tpalmer@rit.edu',    '2024-01-08', '2026-09-11T12:41:00Z', true,  null,         'maple-admin@rit.edu'),
   (2, 1, 'Dana',       'Whitfield', 'dwhitfield@rit.edu', '2024-01-08', '2026-09-10T18:02:00Z', true,  null,         'maple-admin@rit.edu'),
-  (3, 2, 'Innocenzio', 'Rizzuto',   'ir8643@g.rit.edu',   '2026-08-25', '2026-09-11T13:15:00Z', true,  '2026-12-19', null),
+  (3, 1, 'Innocenzio', 'Rizzuto',   'ir8643@g.rit.edu',   '2026-08-25', '2026-09-11T13:15:00Z', true,  '2026-12-19', null),
   (4, 2, 'Nolan',      'Cooper',    'nc4417@g.rit.edu',   '2026-08-25', '2026-09-09T15:30:00Z', true,  '2026-12-19', null),
   (5, 1, 'Oliver',     'Grant',     'odg1896@g.rit.edu',  '2026-08-25', '2026-09-08T09:12:00Z', true,  '2026-12-19', null),
   -- Deliberately lapsed, so the expired-account lockout has something to hit.

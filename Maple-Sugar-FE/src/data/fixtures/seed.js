@@ -60,7 +60,7 @@ export const users = [
   },
   {
     UserID: 3,
-    RoleID: ROLE_STUDENT,
+    RoleID: ROLE_ADMIN,
     First_Name: 'Innocenzio',
     Last_Name: 'Rizzuto',
     Email: 'ir8643@g.rit.edu',
