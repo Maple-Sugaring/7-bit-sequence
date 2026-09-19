@@ -15,10 +15,10 @@
     "@mui/icons-material": "^9.4.0",
     "@mui/material": "^9.4.0",
     "@mui/x-charts": "^9.13.0",
-    "bootstrap": "^5.3.8",
+    "@mui/x-data-grid": "^9.13.0",
+    "@mui/x-date-pickers": "^9.13.0",
+    "dayjs": "^1.11.23",
     "react": "^19.2.8",
-    "react-battery-gauge": "^1.0.7",
-    "react-bootstrap": "^2.10.10",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.3"
   },

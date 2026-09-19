@@ -1,0 +1,65 @@
+name: maple-sugar
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: maple
+      POSTGRES_PASSWORD: maple
+      POSTGRES_DB: maple_sugaring
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U maple -d maple_sugaring"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  cache:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./Maple-Sugar-BE
+    env_file:
+      - ./Maple-Sugar-BE/.env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://maple:maple@db:5432/maple_sugaring
+      REDIS_URL: redis://cache:6379
+      # Browser-facing URLs, not the container's internal ones. nginx owns /api.
+      PUBLIC_API_URL: http://localhost:8080/api
+      PUBLIC_WEB_URL: http://localhost:8080
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+    expose:
+      - "3000"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./Maple-Sugar-FE
+      args:
+        VITE_API_BASE_URL: /api
+        VITE_API_MODE: http
+    environment:
+      API_UPSTREAM: http://api:3000
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

@@ -1,11 +1,14 @@
 /* CSS Stylesheet for dashboard specific components */
 .battery{
     display:flex;
-    flex-Direction:row;
-    justify-Content:space-around;
+    flex-direction:row;
+    flex-wrap: wrap;
+    justify-content:space-around;
     background:white;
-    border-Radius:10px;
+    border-radius:10px;
     margin:0px;
     width:100%;
     max-width: none;
+    gap: 16px;
+    text-align: center;
 }

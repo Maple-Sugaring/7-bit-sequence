@@ -1,52 +1,21 @@
-//React Components
-import { HashRouter as Router, Routes, Route, Outlet } from 'react-router-dom'
-import { Login } from './pages/login'
-import { Admin } from './pages/admin'
-import { Dashboard } from './pages/dashboard'
-import { Input } from './pages/input'
-import { Notifications } from './pages/notifications'
-import { Schedule_Admin } from './pages/schedule-admin'
-import { Table } from './pages/table'
-import { Schedule } from './pages/schedule'
-import { Container } from '@mui/material'
-import {Header} from './components/Header'
-import {Footer} from './components/Footer'
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { BrowserRouter } from 'react-router-dom';
+import { AuthProvider } from './context/AuthProvider';
+import { AppRoutes } from './routes/AppRoutes';
+import { ColorModeProvider } from './theme/ColorModeProvider';
+import './css/App.css';
 
-//CSS styles
-import './css/App.css'
-
-function Layout() {
+export default function App() {
   return (
-    <Container className="layout" disableGutters maxWidth={false} sx={{display:'flex', flexDirection:'column', flexGrow:1, margin:0, }}>
-      <Header />
-      <main className="main-content">
-        <Outlet />
-      </main>
-      <Footer />
-    </Container>
-  )
-
-  }
-
-function App() {
-
-  return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<Login/>}/>
-        <Route element={<Layout />}>
-          <Route path="/admin" element={<Admin/>}/>
-          <Route path="/dashboard" element={<Dashboard/>}/>
-          <Route path="/input" element={<Input/>}/>
-          <Route path="/notifications" element={<Notifications/>}/>
-          <Route path="/schedule-admin" element={<Schedule_Admin/>}/>
-          <Route path="/schedule" element={<Schedule/>}/>
-          <Route path="/table" element={<Table/>}/>
-        </Route>
-      </Routes>
-    </Router>
-  )
-  
+    <ColorModeProvider>
+      <LocalizationProvider dateAdapter={AdapterDayjs}>
+        <BrowserRouter>
+          <AuthProvider>
+            <AppRoutes />
+          </AuthProvider>
+        </BrowserRouter>
+      </LocalizationProvider>
+    </ColorModeProvider>
+  );
 }
-
-export default App

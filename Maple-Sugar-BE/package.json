@@ -1,0 +1,37 @@
+{
+  "name": "maple-sugar-be",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Express API for the RIT Maple Sugaring monitoring system.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "migrate": "node src/db/migrate.js",
+    "smoke": "node --env-file=.env.test scripts/smoke.js",
+    "test": "node --test test/**/*.test.js",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dayjs": "^1.11.13",
+    "express": "^5.1.0",
+    "google-auth-library": "^10.1.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.16.0",
+    "pino": "^9.7.0",
+    "pino-http": "^10.4.0",
+    "redis": "^5.5.6",
+    "zod": "^4.0.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.31.0",
+    "eslint": "^9.31.0",
+    "globals": "^16.3.0"
+  }
+}

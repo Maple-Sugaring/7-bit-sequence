@@ -3,13 +3,50 @@ html{
   font-family: "Helvetica Neue", "Helvetica", "Roboto", "Arial", sans-serif;
 }
 
+html,
+body,
 #root{
   max-width: 100%;
   width:100%;
+  margin: 0;
+}
+
+#root{
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+
+.layout{
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  min-height: 100svh;
+  margin: 0;
 }
 
 .main-content{
   flex: 1;
+  background: #fff;
+  padding: 0 24px 32px;
+}
+
+.main-content > h1,
+.page-header > h1{
+  font-family: "Helvetica Neue", "Helvetica", "Roboto", "Arial", sans-serif;
+  font-size: 56px;
+  font-weight: 500;
+  letter-spacing: -1.68px;
+  text-align: center;
+  margin: 32px 0;
+  color: #08060d;
+}
+
+.page-header-actions{
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 0 0 16px;
 }
 
 .page-main{
