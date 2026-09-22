@@ -247,6 +247,17 @@ Switching data sources is VITE_API_MODE only (http | mock).
 Repositories never talk to fetch directly.
 
 
+Backend documentation (Maple-Sugar-BE/docs)
+---------------------------------------------
+
+  README.md     How the layers fit together
+  ddl.md        Postgres schema
+  api.md        HTTP routes, auth, errors
+  dal.md        Repositories (data access)
+  services.md   Auth, metrics, weather, calendar
+  business.md   Roles, sap flow, buckets, alerts
+
+
 Backend layout (Maple-Sugar-BE/src)
 -----------------------------------
 

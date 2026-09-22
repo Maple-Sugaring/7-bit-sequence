@@ -18,6 +18,9 @@ const SapDataPage = lazy(() =>
 const NodePage = lazy(() =>
   import('../pages/NodePage').then((module) => ({ default: module.NodePage })),
 );
+const PlacementPage = lazy(() =>
+  import('../pages/PlacementPage').then((module) => ({ default: module.PlacementPage })),
+);
 const AlertsPage = lazy(() =>
   import('../pages/AlertsPage').then((module) => ({ default: module.AlertsPage })),
 );
@@ -39,6 +42,7 @@ const PROTECTED = [
   { path: '/table', element: <SapDataPage />, capability: Capability.VIEW_DATA_TABLE },
   { path: '/collection', element: <CollectionPage />, capability: Capability.RECORD_DATA },
   { path: '/nodes/:nodeId', element: <NodePage />, capability: Capability.VIEW_DASHBOARD },
+  { path: '/placement', element: <PlacementPage />, capability: Capability.VIEW_DASHBOARD },
   { path: '/notifications', element: <AlertsPage />, capability: Capability.VIEW_ALERTS },
   { path: '/schedule', element: <SchedulePage />, capability: Capability.VIEW_SCHEDULE },
   {

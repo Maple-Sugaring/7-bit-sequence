@@ -64,6 +64,53 @@ function groupForecast(list) {
   });
 }
 
+function harshWeather({ tempMinF, tempMaxF, precipIn, windMph, description }) {
+  const found = [];
+  const sky = String(description ?? '').toLowerCase();
+
+  if (tempMinF != null && tempMinF <= 0) {
+    found.push({
+      Alert_Type: 'Extreme Cold',
+      severity: 'critical',
+      Description: `Overnight low ${tempMinF}°F at the sugarbush. Buckets can freeze solid. Check them once it is safe to walk.`,
+    });
+  }
+
+  if (windMph != null && windMph >= 25) {
+    found.push({
+      Alert_Type: 'High Wind',
+      severity: windMph >= 40 ? 'critical' : 'warning',
+      Description: `Wind about ${Math.round(windMph)} mph. Buckets tip easily in this. Look for a spill after it eases.`,
+    });
+  }
+
+  if (precipIn != null && precipIn >= 0.5) {
+    found.push({
+      Alert_Type: 'Heavy Precipitation',
+      severity: 'warning',
+      Description: `About ${precipIn.toFixed(2)} in of precipitation today. Rain dilutes sap. Snow and ice add weight above the 10 gallon line.`,
+    });
+  }
+
+  if (sky.includes('ice') || sky.includes('freezing rain') || sky.includes('sleet')) {
+    found.push({
+      Alert_Type: 'Ice Storm',
+      severity: 'critical',
+      Description: `The forecast says ${description}. Stay off the sugarbush until it is safe, then check every bucket for a tip or a freeze.`,
+    });
+  }
+
+  if (tempMaxF != null && tempMaxF <= 20 && tempMinF != null && tempMinF < 32) {
+    found.push({
+      Alert_Type: 'Hard Freeze',
+      severity: 'warning',
+      Description: `The day only reaches ${tempMaxF}°F after a low of ${tempMinF}°F. Expect ice in the buckets rather than a liquid run.`,
+    });
+  }
+
+  return found;
+}
+
 async function fetchJson(url) {
   const response = await fetch(url);
   const payload = await response.json().catch(() => null);
@@ -157,18 +204,33 @@ export async function getLive() {
     previous,
   });
 
+  const pending = [];
   if (change.increased) {
-    const open = await alertsRepository.hasOpenAlertOfType(null, 'Sap Run');
-    if (!open) {
-      await alertsRepository.createAlert({
-        NodeID: null,
-        Alert_Type: 'Sap Run',
-        severity: 'info',
-        Description: change.summary,
-      });
-      await invalidateNamespaces([cacheNamespaces.ALERTS]);
-      logger.info('Raised sap-run alert from live weather');
-    }
+    pending.push({
+      Alert_Type: 'Sap Run',
+      severity: 'info',
+      Description: change.summary,
+    });
+  }
+  pending.push(
+    ...harshWeather({
+      tempMinF: today?.Temp_Min_F ?? null,
+      tempMaxF: today?.Temp_Max_F ?? null,
+      precipIn: today?.Precip_In ?? 0,
+      windMph: current.wind?.speed ?? null,
+      description: current.weather?.[0]?.description ?? today?.Conditions,
+    }),
+  );
+
+  let raised = false;
+  for (const candidate of pending) {
+    if (await alertsRepository.hasOpenAlertOfType(null, candidate.Alert_Type)) continue;
+    await alertsRepository.createAlert({ ...candidate, NodeID: null });
+    raised = true;
+  }
+  if (raised) {
+    await invalidateNamespaces([cacheNamespaces.ALERTS]);
+    logger.info({ types: pending.map((item) => item.Alert_Type) }, 'Raised weather alerts');
   }
 
   await weatherRepository.insertLive({

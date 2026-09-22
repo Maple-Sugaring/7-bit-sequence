@@ -47,3 +47,21 @@ jobs:
 
       - run: npm ci
       - run: npm run lint
+
+  test:
+    name: Unit, security, and load tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Maple-Sugar-BE
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Maple-Sugar-BE/package-lock.json
+
+      - run: npm ci
+      - run: npm test

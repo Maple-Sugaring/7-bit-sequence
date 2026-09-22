@@ -24,6 +24,7 @@ import { useAuth } from '../context/auth';
 import { useBush } from '../services/hooks';
 import { useAction, useAsync } from '../services/hooks/useAsync';
 import { getUsers } from '../services/adminService';
+import { flagNode } from '../services/alertService';
 import { runNodeAction } from '../services/nodeService';
 import { assignShift, SHIFT_TASKS } from '../services/scheduleService';
 import { getDailySeries } from '../services/weatherService';
@@ -57,6 +58,12 @@ export function NodePage() {
   const action = useAction(async (name) => {
     await runNodeAction(Number(nodeId), { Action: name, Notes: notes });
     await bush.refresh();
+  });
+  const report = useAction(async (type) => {
+    await flagNode(Number(nodeId), {
+      type,
+      description: notes.trim() || (type === 'Spill' ? 'Bucket spilled. Needs a manual check.' : 'Ice in the bucket. Weight may sit above 10 gallons.'),
+    });
   });
   const createShift = useAction(async () => {
     await assignShift({
@@ -178,7 +185,11 @@ export function NodePage() {
                 fullWidth
                 sx={{ mb: 2 }}
               />
-              {action.error ? <Alert severity="error" sx={{ mb: 2 }}>{action.error}</Alert> : null}
+              {action.error || report.error ? (
+                <Alert severity="error" sx={{ mb: 2 }}>
+                  {action.error ?? report.error}
+                </Alert>
+              ) : null}
               <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
                 <Button variant="contained" disabled={action.pending} onClick={() => action.execute('collect')}>
                   Collect bucket
@@ -188,6 +199,12 @@ export function NodePage() {
                 </Button>
                 <Button variant="outlined" disabled={action.pending} onClick={() => action.execute('online')}>
                   Mark online
+                </Button>
+                <Button variant="outlined" color="warning" disabled={report.pending} onClick={() => report.execute('Spill')}>
+                  Report a spill
+                </Button>
+                <Button variant="outlined" color="info" disabled={report.pending} onClick={() => report.execute('Freezing')}>
+                  Report freezing
                 </Button>
               </Stack>
             </CardContent>

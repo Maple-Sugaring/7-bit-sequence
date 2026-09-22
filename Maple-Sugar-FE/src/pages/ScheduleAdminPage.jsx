@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
@@ -215,24 +216,27 @@ export function ScheduleAdminPage() {
                   setFormError('');
                 }}
                 error={form.bucketIds.length === 0 && Boolean(formError)}
-                helperText={
-                  form.bucketIds.length === 0 && formError
-                    ? formError
-                    : 'Open the list and choose one or more taps.'
-                }
+                helperText={form.bucketIds.length === 0 && formError ? formError : 'Choose one or more taps.'}
                 fullWidth
+                sx={{
+                  '& .MuiSelect-select': {
+                    display: 'flex',
+                    alignItems: 'center',
+                    whiteSpace: 'normal',
+                    minHeight: '1.5em',
+                  },
+                }}
                 slotProps={{
                   select: {
                     multiple: true,
-                    displayEmpty: true,
-                    renderValue: (selected) => {
-                      if (!selected.length) return 'Choose buckets';
-                      return selected
-                        .map((id) => bucketOptions.find((node) => node.BucketID === id))
-                        .filter(Boolean)
-                        .map((node) => node.Barcode_ID)
-                        .join(', ');
-                    },
+                    renderValue: (selected) => (
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, py: 0.5 }}>
+                        {selected.map((id) => {
+                          const node = bucketOptions.find((item) => item.BucketID === id);
+                          return <Chip key={id} size="small" label={node ? `${node.Barcode_ID} · ${node.Stand}` : id} />;
+                        })}
+                      </Box>
+                    ),
                   },
                 }}
               >
