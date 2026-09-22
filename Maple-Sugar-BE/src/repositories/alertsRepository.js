@@ -56,7 +56,9 @@ export async function createAlert({ NodeID, Alert_Type, Description, severity = 
 export async function hasOpenAlertOfType(nodeId, alertType) {
   const row = await queryOne(
     `select 1 from alerts
-      where node_id = $1 and alert_type = $2 and is_resolved = false
+      where alert_type = $2
+        and is_resolved = false
+        and node_id is not distinct from $1
       limit 1`,
     [nodeId, alertType],
   );

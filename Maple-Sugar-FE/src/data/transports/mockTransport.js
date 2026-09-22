@@ -72,7 +72,7 @@ function withAssignees(slot) {
       email: user?.Email ?? null,
     };
   });
-  return { ...slot, Assignees: assignees };
+  return { ...slot, Assignees: assignees, Awaiting_Time: slot.Awaiting_Time ?? !slot.Starts_At };
 }
 
 const routes = [
@@ -197,6 +197,7 @@ const routes = [
         Temperature: body.Temperature != null ? Number(body.Temperature) : null,
         Sugar_Percent: body.Sugar_Percent != null ? Number(body.Sugar_Percent) : null,
         Weather_Conditions: body.Weather_Conditions ?? null,
+        Ice_Present: Boolean(body.Ice_Present),
       };
 
       db.metrics.push(row);
@@ -329,15 +330,24 @@ const routes = [
     method: 'POST',
     match: /^\/schedule\/slots$/,
     handler: (unused, { body }) => {
+      if (!body?.AlertID) invalid('A collection task can only be opened from a full-bucket alert.');
+      const alert = db.alerts.find((item) => item.AlertID === Number(body.AlertID));
+      if (!alert || alert.Is_Resolved || alert.Alert_Type !== 'Full Bucket') {
+        invalid('A collection task can only be opened from an unresolved full-bucket alert.');
+      }
+      const node = db.nodes.find((item) => item.NodeID === alert.NodeID);
       const slot = {
         SlotID: nextId.slot++,
-        Task: body.Task,
-        Stand: body.Stand,
-        Starts_At: body.Starts_At,
-        Ends_At: body.Ends_At,
-        Capacity: Number(body.Capacity ?? 2),
+        Task: 'Sap Collection',
+        Stand: node?.Stand ?? 'Sugarbush',
+        Starts_At: null,
+        Ends_At: null,
+        Capacity: 1,
         Assigned_UserIDs: [],
         Is_Complete: false,
+        Alert_ID: alert.AlertID,
+        Node_ID: alert.NodeID,
+        Awaiting_Time: true,
       };
       db.scheduleSlots.push(slot);
       return withAssignees(slot);
@@ -408,6 +418,90 @@ const routes = [
       slot.Assigned_UserIDs = slot.Assigned_UserIDs.filter((assigned) => assigned !== userId);
       return withAssignees(slot);
     },
+  },
+  {
+    method: 'GET',
+    match: /^\/schedule\/availability$/,
+    handler: () => ({
+      Time_Zone: 'America/New_York',
+      Busy: [],
+      Windows: [
+        {
+          Starts_At: dayjs().add(1, 'day').hour(8).minute(0).second(0).toISOString(),
+          Ends_At: dayjs().add(1, 'day').hour(10).minute(0).second(0).toISOString(),
+          Label: 'Tomorrow · 8:00 AM – 10:00 AM',
+        },
+        {
+          Starts_At: dayjs().add(1, 'day').hour(14).minute(0).second(0).toISOString(),
+          Ends_At: dayjs().add(1, 'day').hour(16).minute(0).second(0).toISOString(),
+          Label: 'Tomorrow · 2:00 PM – 4:00 PM',
+        },
+      ],
+    }),
+  },
+  {
+    method: 'POST',
+    match: /^\/schedule\/slots\/(\d+)\/claim-time$/,
+    handler: ([id], { body }) => {
+      const slot = db.scheduleSlots.find((candidate) => candidate.SlotID === Number(id));
+      if (!slot) notFound('Shift');
+      slot.Starts_At = body.Starts_At;
+      slot.Ends_At = body.Ends_At;
+      slot.Awaiting_Time = false;
+      const userId = session?.user?.UserID;
+      if (userId && !slot.Assigned_UserIDs.includes(userId)) slot.Assigned_UserIDs.push(userId);
+      return withAssignees(slot);
+    },
+  },
+  {
+    method: 'GET',
+    match: /^\/weather\/daily$/,
+    handler: () => ({
+      Station: null,
+      Note: 'Mock mode has no historic station file.',
+      Days: [],
+    }),
+  },
+  {
+    method: 'GET',
+    match: /^\/weather\/live$/,
+    handler: () => ({
+      Configured: false,
+      Message: 'Live weather is available when the API is running with an OpenWeather key.',
+    }),
+  },
+  {
+    method: 'GET',
+    match: /^\/journal$/,
+    handler: () => [],
+  },
+  {
+    method: 'POST',
+    match: /^\/journal$/,
+    handler: (unused, { body }) => ({
+      EntryID: 1,
+      Title: body.Title,
+      Process_Notes: body.Process_Notes,
+      Ice_Present: Boolean(body.Ice_Present),
+      Weight_Lb: body.Weight,
+      Sugar_Percent: body.Sugar_Percent,
+      Collected_At: body.Collected_At,
+      Author: 'You',
+      Node_Name: null,
+    }),
+  },
+  {
+    method: 'GET',
+    match: /^\/settings$/,
+    handler: () => ({ Report_Interval_Seconds: 900, Report_Interval_Minutes: 15 }),
+  },
+  {
+    method: 'PATCH',
+    match: /^\/settings$/,
+    handler: (unused, { body }) => ({
+      Report_Interval_Minutes: Number(body.Report_Interval_Minutes),
+      Report_Interval_Seconds: Number(body.Report_Interval_Minutes) * 60,
+    }),
   },
 ];
 

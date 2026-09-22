@@ -102,6 +102,13 @@ export const config = {
   publicWebUrl,
   allowedEmailDomains: list('ALLOWED_EMAIL_DOMAINS'),
   corsOrigins: [...new Set([publicWebUrl, ...list('CORS_ORIGINS')])].filter(Boolean),
+
+  // RIT sugarbush, not a developer machine. Override when the stand moves.
+  sugarbushLatitude: Number(optional('SUGARBUSH_LATITUDE', '43.084')),
+  sugarbushLongitude: Number(optional('SUGARBUSH_LONGITUDE', '-77.680')),
+  openWeatherApiKey: optional('OPENWEATHER_API_KEY') || null,
+  // Comma-separated. Promoted to Admin on boot so the role is not baked into SQL.
+  bootstrapAdminEmails: list('BOOTSTRAP_ADMIN_EMAILS'),
 };
 
 export const sessionTtlSeconds = config.sessionTtlDays * 24 * 60 * 60;

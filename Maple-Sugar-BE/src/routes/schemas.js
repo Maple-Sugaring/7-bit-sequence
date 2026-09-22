@@ -38,6 +38,7 @@ export const createMetricBody = z.object({
   Temperature: nullableNumber,
   Sugar_Percent: nullableNumber,
   Weather_Conditions: z.string().max(50).nullish(),
+  Ice_Present: z.boolean().optional().default(false),
 });
 
 export const updateMetricBody = z
@@ -48,6 +49,7 @@ export const updateMetricBody = z
     Temperature: nullableNumber,
     Sugar_Percent: nullableNumber,
     Weather_Conditions: z.string().max(50).nullish(),
+    Ice_Present: z.boolean().optional(),
   })
   .refine((body) => Object.keys(body).length > 0, { message: 'Nothing to update.' });
 
@@ -96,7 +98,7 @@ export const inviteUserBody = z.object({
   lastName: z.string().max(100).optional(),
   accountExpiry: z
     .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD.')
+    .refine((value) => !Number.isNaN(Date.parse(value)), { message: 'Pick a valid date and time.' })
     .nullish(),
 });
 
@@ -108,9 +110,13 @@ export const updateUserBody = z
     Email: z.string().trim().email().optional(),
     Is_Active: z.boolean().optional(),
     Account_Expiry: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD.')
-      .nullish(),
+      .union([
+        z.string().refine((value) => !Number.isNaN(Date.parse(value)), {
+          message: 'Pick a valid date and time.',
+        }),
+        z.null(),
+      ])
+      .optional(),
     Google_Calendar_ID: z.string().max(255).nullish(),
   })
   .refine((body) => Object.keys(body).length > 0, { message: 'Nothing to update.' });
@@ -120,13 +126,30 @@ export const scheduleQuery = z.object({
   to: isoDateTime.optional(),
 });
 
+/** An admin assigns a student to buckets at a chosen time. A full bucket is not required. */
 export const createSlotBody = z
   .object({
-    Task: z.string().min(1, 'Select a task.').max(100),
-    Stand: z.string().min(1, 'Select a stand.').max(50),
+    Task: z.string().trim().min(1, 'Name the task.').max(100),
     Starts_At: isoDateTime,
     Ends_At: isoDateTime,
-    Capacity: z.coerce.number().int().min(1, 'Capacity must be at least 1.').default(2),
+    UserID: z.coerce.number().int().positive({ message: 'Choose a student.' }),
+    BucketIDs: z.array(z.coerce.number().int().positive()).min(1, 'Choose at least one bucket.'),
+    Notes: z.string().max(500).optional().default(''),
+  })
+  .refine((body) => Date.parse(body.Ends_At) > Date.parse(body.Starts_At), {
+    message: 'The shift must end after it starts.',
+    path: ['Ends_At'],
+  });
+
+export const nodeActionBody = z.object({
+  Action: z.enum(['collect', 'maintenance', 'online']),
+  Notes: z.string().max(2000).optional(),
+});
+
+export const claimTimeBody = z
+  .object({
+    Starts_At: isoDateTime,
+    Ends_At: isoDateTime,
   })
   .refine((body) => Date.parse(body.Ends_At) > Date.parse(body.Starts_At), {
     message: 'The shift must end after it starts.',
@@ -146,4 +169,28 @@ export const updateSlotBody = z
 
 export const slotUserBody = z.object({
   userId: z.coerce.number().int().positive().optional(),
+});
+
+export const dailyWeatherQuery = z.object({
+  year: z.coerce.number().int().min(2000).max(2100).optional(),
+  nodeId: z.coerce.number().int().positive().optional(),
+});
+
+export const createJournalBody = z.object({
+  Title: z.string().trim().min(1, 'Give the entry a title.').max(200),
+  Process_Notes: z.string().trim().min(1, 'Describe the collection.').max(8000),
+  NodeID: z.coerce.number().int().positive().nullish(),
+  BucketID: z.coerce.number().int().positive().nullish(),
+  Collected_At: isoDateTime.optional(),
+  Weight: nullableNumber,
+  Sugar_Percent: nullableNumber,
+  Ice_Present: z.boolean().optional().default(false),
+});
+
+export const updateSettingsBody = z.object({
+  Report_Interval_Minutes: z.coerce
+    .number()
+    .int()
+    .min(1, 'Use at least 1 minute.')
+    .max(1440, 'Use a day or less.'),
 });

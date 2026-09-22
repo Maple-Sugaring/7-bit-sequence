@@ -10,10 +10,11 @@ import * as scheduleRepository from '../data/repositories/scheduleRepository';
  */
 
 /** Shift types and stands an admin can publish against. */
-export const SHIFT_TASKS = ['Sap Collection', 'Sensor Calibration', 'Battery Swap', 'Line Cleaning'];
-export const STANDS = ['Hill Bottom', 'Rabbi House', 'Sugar Shack', 'North Ridge'];
+export const SHIFT_TASKS = ['Sap Collection', 'Maintenance', 'Sensor Check', 'Battery Swap'];
+export const STANDS = ['Alumni House', 'Chabad House', 'Red Barn'];
 
 function overlaps(a, b) {
+  if (!a.Starts_At || !b.Starts_At || !a.Ends_At || !b.Ends_At) return false;
   return (
     dayjs(a.Starts_At).isBefore(dayjs(b.Ends_At)) && dayjs(a.Ends_At).isAfter(dayjs(b.Starts_At))
   );
@@ -36,7 +37,8 @@ export async function getSchedule({ from, to, userId } = {}) {
       }));
 
       const isMine = userId ? slot.Assigned_UserIDs.includes(userId) : false;
-      const isPast = dayjs(slot.Ends_At).isBefore(dayjs());
+      const awaiting = Boolean(slot.Awaiting_Time) || !slot.Starts_At;
+      const isPast = !awaiting && dayjs(slot.Ends_At).isBefore(dayjs());
       const remaining = slot.Capacity - slot.Assigned_UserIDs.length;
 
       // Blocked when the student already holds an overlapping shift, so the
@@ -49,15 +51,20 @@ export async function getSchedule({ from, to, userId } = {}) {
         id: slot.SlotID,
         assigned,
         isMine,
+        awaiting,
         isPast,
         remaining,
         isFull: remaining <= 0,
         conflictsWith: conflict ? `${conflict.Task} at ${conflict.Stand}` : null,
-        canClaim: !isMine && !isPast && remaining > 0 && !conflict,
-        day: dayjs(slot.Starts_At).format('YYYY-MM-DD'),
+        canClaim: !awaiting && !isMine && !isPast && remaining > 0 && !conflict,
+        canPickTime: awaiting && !isMine && remaining > 0 && !slot.Is_Complete,
+        day: awaiting ? 'needs-time' : dayjs(slot.Starts_At).format('YYYY-MM-DD'),
       };
     })
-    .sort((a, b) => new Date(a.Starts_At) - new Date(b.Starts_At));
+    .sort((a, b) => {
+      if (a.awaiting !== b.awaiting) return a.awaiting ? -1 : 1;
+      return new Date(a.Starts_At) - new Date(b.Starts_At);
+    });
 
   return {
     slots: rows,
@@ -88,6 +95,18 @@ export function claimShift(slotId, userId) {
 
 export function releaseShift(slotId, userId) {
   return scheduleRepository.withdrawFromSlot(slotId, userId);
+}
+
+export function assignShift(assignment) {
+  return scheduleRepository.createSlot(assignment);
+}
+
+export function claimCollectionTime(slotId, window) {
+  return scheduleRepository.claimTime(slotId, window);
+}
+
+export function getAvailability() {
+  return scheduleRepository.getAvailability();
 }
 
 export function createShift(slot) {

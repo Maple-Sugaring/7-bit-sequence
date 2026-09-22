@@ -27,6 +27,19 @@ export async function deleteSlot(slotId) {
   invalidatePrefix(cacheNamespaces.SCHEDULE);
 }
 
+export function getAvailability() {
+  return apiClient.get('/schedule/availability');
+}
+
+export async function claimTime(slotId, window) {
+  const updated = await apiClient.post(`/schedule/slots/${slotId}/claim-time`, {
+    Starts_At: window.Starts_At,
+    Ends_At: window.Ends_At,
+  });
+  invalidatePrefix(cacheNamespaces.SCHEDULE);
+  return updated;
+}
+
 export async function signUpForSlot(slotId, userId) {
   const updated = await apiClient.post(`/schedule/slots/${slotId}/signup`, { userId });
   invalidatePrefix(cacheNamespaces.SCHEDULE);

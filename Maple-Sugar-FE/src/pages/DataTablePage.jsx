@@ -102,6 +102,13 @@ export function DataTablePage() {
           ),
       },
       {
+        field: 'Ice_Present',
+        headerName: 'Ice',
+        width: 90,
+        renderCell: (params) =>
+          params.value ? <Chip size="small" label="Ice" color="info" /> : '—',
+      },
+      {
         field: 'Sugar_Percent',
         headerName: 'Sugar',
         width: 120,

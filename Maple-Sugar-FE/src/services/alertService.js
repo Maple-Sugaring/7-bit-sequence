@@ -17,6 +17,8 @@ const SEVERITY_BY_TYPE = {
   Tipped: 'error',
   'Node Offline': 'error',
   'Full Bucket': 'warning',
+  'Collection Needed': 'warning',
+  'Sap Run': 'info',
   'Low Battery': 'warning',
   'Signal Loss': 'info',
   Flagged: 'info',
@@ -36,7 +38,7 @@ function enrich(alert, nodeById) {
   return {
     ...alert,
     id: alert.AlertID,
-    nodeName: node?.Node_Name ?? `Node ${alert.NodeID}`,
+    nodeName: alert.NodeID == null ? 'Sugarbush' : (node?.Node_Name ?? `Node ${alert.NodeID}`),
     stand: node?.Stand ?? null,
     severity: severityOf(alert.Alert_Type),
     ageMinutes,

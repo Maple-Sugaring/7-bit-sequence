@@ -1,4 +1,4 @@
-import { queryAll, queryOne } from '../db/pool.js';
+import { query, queryAll, queryOne } from '../db/pool.js';
 import { decryptSecret, encryptSecret } from '../auth/secrets.js';
 import { mapRole, mapUser } from './mappers.js';
 
@@ -16,7 +16,7 @@ const USER_COLUMNS = `
   to_char(created_at, 'YYYY-MM-DD') as created_at,
   last_login,
   is_active,
-  account_expiry::text as account_expiry,
+  account_expiry,
   google_calendar_id,
   (google_refresh_token is not null) as calendar_connected,
   invite_pending
@@ -129,6 +129,20 @@ export async function updateUser(id, changes) {
     values,
   );
   return row ? mapUser(row) : null;
+}
+
+/** Makes the configured bootstrap addresses administrators with no expiry. */
+export async function promoteEmailsToAdmin(emails) {
+  if (!emails?.length) return 0;
+  const result = await query(
+    `update users
+        set role_id = 1,
+            is_active = true,
+            account_expiry = null
+      where lower(email) = any($1::text[])`,
+    [emails],
+  );
+  return result.rowCount ?? 0;
 }
 
 export async function deleteUser(id) {

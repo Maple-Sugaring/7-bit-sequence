@@ -1,12 +1,14 @@
 import { Router } from 'express';
-import { forbidden, invalid, notFound } from '../lib/ApiError.js';
+import { ApiError, forbidden, invalid, notFound } from '../lib/ApiError.js';
 import { Capability, can } from '../business/permissions.js';
 import { requireCapability } from '../middleware/authenticate.js';
 import { cacheKeys, cacheNamespaces, TTL } from '../cache/cacheKeys.js';
 import { invalidateNamespaces, readThrough } from '../cache/redisCache.js';
 import * as scheduleRepository from '../repositories/scheduleRepository.js';
 import * as calendarService from '../services/calendarService.js';
-import { createSlotBody, idParam, scheduleQuery, slotUserBody, updateSlotBody } from './schemas.js';
+import { claimTimeBody, createSlotBody, idParam, scheduleQuery, slotUserBody, updateSlotBody } from './schemas.js';
+import { queryAll } from '../db/pool.js';
+import * as usersRepository from '../repositories/usersRepository.js';
 
 export const scheduleRouter = Router();
 
@@ -23,12 +25,65 @@ scheduleRouter.get('/slots', requireCapability(Capability.VIEW_SCHEDULE), async 
   res.json(slots);
 });
 
+scheduleRouter.get('/availability', requireCapability(Capability.VIEW_SCHEDULE), async (req, res) => {
+  try {
+    const availability = await calendarService.availabilityFor(req.user.UserID);
+    if (!availability) {
+      throw new ApiError('Sign in again to connect Google Calendar, then pick a time.', {
+        status: 409,
+        code: 'CALENDAR_REQUIRED',
+      });
+    }
+    res.json(availability);
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError('Google Calendar did not return your free times.', {
+      status: 502,
+      code: 'OAUTH_FAILED',
+      cause: error,
+    });
+  }
+});
+
 scheduleRouter.post('/slots', requireCapability(Capability.MANAGE_SCHEDULE), async (req, res) => {
   const body = createSlotBody.parse(req.body);
-  const slot = await scheduleRepository.createSlot(body);
+  const assignee = await usersRepository.findUserById(body.UserID);
+  if (!assignee) throw invalid('Choose a student who already has an account.', { UserID: 'missing' });
+
+  const buckets = await queryAll(
+    `select b.id, n.id as node_id, n.stand, n.node_name
+       from buckets b
+       join node n on n.id = b.node_id
+      where b.id = any($1::int[])`,
+    [body.BucketIDs],
+  );
+  if (buckets.length !== body.BucketIDs.length) {
+    throw invalid('One of those buckets is not on a tree.');
+  }
+
+  const stands = [...new Set(buckets.map((bucket) => bucket.stand).filter(Boolean))];
+  const slot = await scheduleRepository.createSlot({
+    Task: body.Task,
+    Stand: stands.join(', ') || 'Sugarbush',
+    Starts_At: body.Starts_At,
+    Ends_At: body.Ends_At,
+    Capacity: 1,
+    Node_ID: buckets[0].node_id,
+    Notes: body.Notes,
+    Bucket_IDs: body.BucketIDs,
+  });
+
+  let assigned;
+  try {
+    assigned = await scheduleRepository.signUp(slot.SlotID, body.UserID);
+  } catch (error) {
+    await scheduleRepository.deleteSlot(slot.SlotID);
+    throw error;
+  }
 
   await invalidateNamespaces([cacheNamespaces.SCHEDULE]);
-  res.status(201).json(slot);
+  res.status(201).json(assigned);
+  void calendarService.syncSignup(body.UserID, assigned);
 });
 
 scheduleRouter.patch('/slots/:id', requireCapability(Capability.MANAGE_SCHEDULE), async (req, res) => {
@@ -85,6 +140,47 @@ function resolveTargetUser(req) {
   }
   return userId;
 }
+
+scheduleRouter.post('/slots/:id/claim-time', requireCapability(Capability.CLAIM_SHIFT), async (req, res) => {
+  const id = idParam.parse(req.params.id);
+  const { Starts_At: startsAt, Ends_At: endsAt } = claimTimeBody.parse(req.body);
+  const userId = req.user.UserID;
+
+  const slot = await scheduleRepository.findSlotById(id);
+  if (!slot) throw notFound('Shift');
+  if (!slot.Awaiting_Time) throw invalid('This collection already has a time.');
+
+  let availability;
+  try {
+    availability = await calendarService.availabilityFor(userId);
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError('Google Calendar did not return your free times.', {
+      status: 502,
+      code: 'OAUTH_FAILED',
+      cause: error,
+    });
+  }
+
+  if (!availability) {
+    throw new ApiError('Sign in again to connect Google Calendar, then pick a time.', {
+      status: 409,
+      code: 'CALENDAR_REQUIRED',
+    });
+  }
+
+  const match = availability.Windows.find(
+    (window) => Math.abs(Date.parse(window.Starts_At) - Date.parse(startsAt)) < 60_000,
+  );
+  if (!match || Math.abs(Date.parse(match.Ends_At) - Date.parse(endsAt)) > 60_000) {
+    throw invalid('That time is not open on your calendar. Pick another window.');
+  }
+
+  const updated = await scheduleRepository.claimTime(id, userId, match.Starts_At, match.Ends_At);
+  await invalidateNamespaces([cacheNamespaces.SCHEDULE, cacheNamespaces.ALERTS]);
+  await calendarService.syncSignup(userId, updated);
+  res.json(updated);
+});
 
 scheduleRouter.post('/slots/:id/signup', requireCapability(Capability.CLAIM_SHIFT), async (req, res) => {
   const id = idParam.parse(req.params.id);

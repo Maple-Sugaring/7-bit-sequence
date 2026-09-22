@@ -38,7 +38,8 @@ Pages (browser routes):
   /input              Record a sap reading (weight, temp, sugar %)
   /table              Filterable readings table with CSV export
   /notifications      Sensor and field alerts (resolve / reopen)
-  /schedule-admin     Create and edit shifts (Admin)
+  /schedule-admin     Open a collection task from a full-bucket alert (Admin)
+  /collection         Write up a sap collection (weight, sugar, ice)
   /admin              Invite users, change roles, lock accounts (Admin)
 
 The UI can run against the live Express API or against an in-memory mock
@@ -144,9 +145,12 @@ Quick start — Docker (production-like)
 
 From this frontend/ directory, with Maple-Sugar-BE/.env filled in:
 
-  # For Docker, PUBLIC_API_URL and PUBLIC_WEB_URL in that .env should be:
+  # Browser URLs. Change the host if you open the app from another machine.
+  # Containers talk to each other as db, cache, and api on the Compose network.
   #   PUBLIC_API_URL=http://localhost:8080/api
   #   PUBLIC_WEB_URL=http://localhost:8080
+  #   OPENWEATHER_API_KEY=your-key
+  #   BOOTSTRAP_ADMIN_EMAILS=you@g.rit.edu
   #
   # Register matching Google redirect URIs:
   #   http://localhost:8080/api/auth/google/callback

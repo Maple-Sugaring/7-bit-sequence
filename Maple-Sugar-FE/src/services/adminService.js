@@ -1,4 +1,3 @@
-import dayjs from 'dayjs';
 import * as usersRepository from '../data/repositories/usersRepository';
 import { capabilitiesFor, expiryStatus, isAccountUsable, roleFromId, ROLE_LABELS } from '../business/permissions';
 
@@ -63,10 +62,10 @@ export function setActive(userId, isActive) {
   return usersRepository.updateUser(userId, { Is_Active: isActive });
 }
 
-/** FR-040: grant an extension rather than letting the account lock out. */
-export function extendAccount(userId, months = 4) {
+/** Sets the exact moment access ends. Null means the account does not expire. */
+export function setAccountExpiry(userId, accountExpiry) {
   return usersRepository.updateUser(userId, {
-    Account_Expiry: dayjs().add(months, 'month').format('YYYY-MM-DD'),
+    Account_Expiry: accountExpiry,
     Is_Active: true,
   });
 }

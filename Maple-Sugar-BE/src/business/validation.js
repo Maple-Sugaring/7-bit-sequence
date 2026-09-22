@@ -11,7 +11,10 @@
  */
 
 import {
+  BUCKET_CAPACITY_GALLONS,
   BUCKET_CAPACITY_LB,
+  ICE_CAPACITY_GALLONS,
+  ICE_CAPACITY_LB,
   MAX_TEMPERATURE_F,
   MIN_TEMPERATURE_F,
   RAW_SAP_MAX_PERCENT,
@@ -62,10 +65,17 @@ export function validateReading(reading) {
       errors.Weight = 'Weight must be a number.';
     } else if (weight < 0) {
       errors.Weight = 'Weight cannot be negative.';
-    } else if (weight > BUCKET_CAPACITY_LB * 3) {
-      // Beyond any physically possible bucket, so this is a unit or decimal
-      // slip rather than a heavy load.
-      errors.Weight = `That is far beyond a full bucket (${BUCKET_CAPACITY_LB} lb). Check the units.`;
+    } else {
+      // Gross weight includes a couple of pounds of bucket. Ice may exceed the
+      // 10 gallon liquid line; a liquid reading that heavy is a unit slip
+      // unless the ice tag is on.
+      const ice = Boolean(reading.Ice_Present);
+      const ceiling = (ice ? ICE_CAPACITY_LB : BUCKET_CAPACITY_LB) + 8;
+      if (weight > ceiling) {
+        errors.Weight = ice
+          ? `Even with ice, readings above about ${ICE_CAPACITY_GALLONS} gallons are rejected. Check the units.`
+          : `A liquid bucket holds ${BUCKET_CAPACITY_GALLONS} gallons. Tag ice if frozen sap is heavier than that.`;
+      }
     }
   }
 

@@ -1,44 +1,51 @@
 import Box from '@mui/material/Box';
-import BottomNavigation from '@mui/material/BottomNavigation';
-import BottomNavigationAction from '@mui/material/BottomNavigationAction';
-import FavoriteIcon from '@mui/icons-material/Favorite';
-import LocationOnIcon from '@mui/icons-material/LocationOn';
-import RestoreIcon from '@mui/icons-material/Restore';
+import Button from '@mui/material/Button';
 import { useLocation, useNavigate } from 'react-router-dom';
-
-const NAV_ITEMS = [
-  { label: 'Home', value: '/dashboard', icon: <RestoreIcon /> },
-  { label: 'Schedule', value: '/schedule', icon: <FavoriteIcon /> },
-  { label: 'Input', value: '/input', icon: <LocationOnIcon /> },
-  { label: 'Table', value: '/table', icon: <LocationOnIcon /> },
-];
+import { useAuth } from '../../context/auth';
+import { navItemsFor } from '../../routes/navigation';
 
 export function MainNav() {
   const navigate = useNavigate();
   const location = useLocation();
-
-  const current = NAV_ITEMS.some((item) => item.value === location.pathname)
-    ? location.pathname
-    : false;
+  const { role } = useAuth();
+  const items = navItemsFor(role);
 
   return (
-    <Box>
-      <BottomNavigation
-        value={current}
-        onChange={(_event, newValue) => navigate(newValue)}
-        className="navbar"
-        showLabels
-      >
-        {NAV_ITEMS.map((item) => (
-          <BottomNavigationAction
-            key={item.value}
-            label={item.label}
-            value={item.value}
-            icon={item.icon}
-            sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1 }}
-          />
-        ))}
-      </BottomNavigation>
+    <Box
+      component="nav"
+      aria-label="Primary"
+      sx={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        gap: 0.5,
+        px: 1,
+      }}
+    >
+      {items.map((item) => {
+        const selected = location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
+        const Icon = item.icon;
+        return (
+          <Button
+            key={item.to}
+            onClick={() => navigate(item.to)}
+            startIcon={<Icon sx={{ fontSize: 18 }} />}
+            aria-current={selected ? 'page' : undefined}
+            sx={{
+              color: selected ? '#FFFFFF' : '#F4F1EE',
+              bgcolor: selected ? '#F76902' : 'transparent',
+              borderRadius: 999,
+              minHeight: 36,
+              px: 1.5,
+              fontWeight: 600,
+              fontSize: 14,
+              '&:hover': { bgcolor: selected ? '#C75300' : 'rgba(255,255,255,0.08)' },
+            }}
+          >
+            {item.label}
+          </Button>
+        );
+      })}
     </Box>
   );
 }

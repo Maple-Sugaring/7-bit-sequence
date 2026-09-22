@@ -12,11 +12,11 @@ import { ProtectedRoute } from './ProtectedRoute';
 const DashboardPage = lazy(() =>
   import('../pages/DashboardPage').then((module) => ({ default: module.DashboardPage })),
 );
-const DataTablePage = lazy(() =>
-  import('../pages/DataTablePage').then((module) => ({ default: module.DataTablePage })),
+const SapDataPage = lazy(() =>
+  import('../pages/SapDataPage').then((module) => ({ default: module.SapDataPage })),
 );
-const RecordDataPage = lazy(() =>
-  import('../pages/RecordDataPage').then((module) => ({ default: module.RecordDataPage })),
+const NodePage = lazy(() =>
+  import('../pages/NodePage').then((module) => ({ default: module.NodePage })),
 );
 const AlertsPage = lazy(() =>
   import('../pages/AlertsPage').then((module) => ({ default: module.AlertsPage })),
@@ -30,11 +30,15 @@ const ScheduleAdminPage = lazy(() =>
 const AdminPage = lazy(() =>
   import('../pages/AdminPage').then((module) => ({ default: module.AdminPage })),
 );
+const CollectionPage = lazy(() =>
+  import('../pages/CollectionPage').then((module) => ({ default: module.CollectionPage })),
+);
 
 const PROTECTED = [
   { path: '/dashboard', element: <DashboardPage />, capability: Capability.VIEW_DASHBOARD },
-  { path: '/table', element: <DataTablePage />, capability: Capability.VIEW_DATA_TABLE },
-  { path: '/input', element: <RecordDataPage />, capability: Capability.RECORD_DATA },
+  { path: '/table', element: <SapDataPage />, capability: Capability.VIEW_DATA_TABLE },
+  { path: '/collection', element: <CollectionPage />, capability: Capability.RECORD_DATA },
+  { path: '/nodes/:nodeId', element: <NodePage />, capability: Capability.VIEW_DASHBOARD },
   { path: '/notifications', element: <AlertsPage />, capability: Capability.VIEW_ALERTS },
   { path: '/schedule', element: <SchedulePage />, capability: Capability.VIEW_SCHEDULE },
   {
@@ -61,7 +65,8 @@ export function AppRoutes() {
       <Route path="/auth/callback" element={<AuthCallbackPage />} />
 
       <Route path="/data" element={<Navigate to="/table" replace />} />
-      <Route path="/record" element={<Navigate to="/input" replace />} />
+      <Route path="/input" element={<Navigate to="/collection" replace />} />
+      <Route path="/record" element={<Navigate to="/collection" replace />} />
       <Route path="/alerts" element={<Navigate to="/notifications" replace />} />
       <Route path="/schedule/manage" element={<Navigate to="/schedule-admin" replace />} />
       <Route path="/guides" element={<Navigate to="/dashboard" replace />} />

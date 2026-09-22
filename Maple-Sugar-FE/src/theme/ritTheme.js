@@ -32,7 +32,7 @@ const theme = createTheme({
       contrastText: white,
     },
     ...semantic,
-    background: { default: white, paper: white },
+    background: { default: '#F6F3F0', paper: white },
     text: { primary: neutral.black, secondary: '#4A4A4A' },
     divider: inputBorder,
   },
@@ -48,7 +48,7 @@ const theme = createTheme({
     MuiCssBaseline: {
       styleOverrides: {
         html: { WebkitFontSmoothing: 'antialiased' },
-        body: { backgroundColor: white, color: neutral.black },
+        body: { backgroundColor: '#F6F3F0', color: neutral.black },
       },
     },
     MuiButton: {
@@ -62,8 +62,12 @@ const theme = createTheme({
         root: {
           backgroundImage: 'none',
           borderRadius: 10,
+          border: '1px solid #D0D3D4',
         },
       },
+    },
+    MuiCard: {
+      defaultProps: { elevation: 0 },
     },
     MuiOutlinedInput: {
       styleOverrides: {

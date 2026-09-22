@@ -3,14 +3,14 @@ import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import EditCalendarIcon from '@mui/icons-material/EditCalendar';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import RestoreIcon from '@mui/icons-material/Restore';
-import TableChartIcon from '@mui/icons-material/TableChart';
-import WaterDropIcon from '@mui/icons-material/WaterDrop';
+import ParkIcon from '@mui/icons-material/Park';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
 import { can, Capability } from '../business/permissions';
 
 export const NAV_ITEMS = [
   {
     to: '/dashboard',
-    label: 'Home',
+    label: 'The Bush',
     icon: RestoreIcon,
     capability: Capability.VIEW_DASHBOARD,
   },
@@ -21,15 +21,15 @@ export const NAV_ITEMS = [
     capability: Capability.VIEW_SCHEDULE,
   },
   {
-    to: '/input',
-    label: 'Input',
-    icon: WaterDropIcon,
+    to: '/collection',
+    label: 'Collection',
+    icon: MenuBookIcon,
     capability: Capability.RECORD_DATA,
   },
   {
     to: '/table',
-    label: 'Table',
-    icon: TableChartIcon,
+    label: 'Sugar Woods',
+    icon: ParkIcon,
     capability: Capability.VIEW_DATA_TABLE,
   },
   {

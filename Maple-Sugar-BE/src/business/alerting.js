@@ -11,9 +11,11 @@
  */
 
 import {
+  BUCKET_CAPACITY_GALLONS,
   BUCKET_CAPACITY_LB,
   CRITICAL_EXPOSURE_HOURS,
   FULL_MARGIN_LB,
+  LB_PER_GALLON,
   SPOILAGE_THRESHOLD_F,
 } from './thresholds.js';
 
@@ -71,14 +73,16 @@ export function deriveAlerts({ reading, history = [], tareWeight = null }) {
   // --- Bucket state, which needs the tare to say anything about net sap. ---
   if (reading.Weight != null && tareWeight != null) {
     const net = reading.Weight - tareWeight;
+    const ice = Boolean(reading.Ice_Present);
+    const gallons = net / LB_PER_GALLON;
 
     if (net >= BUCKET_CAPACITY_LB - FULL_MARGIN_LB) {
       derived.push({
         Alert_Type: 'Full Bucket',
         severity: 'warning',
-        Description:
-          `Net weight ${net.toFixed(1)} lb at ${nodeLabel} is within ` +
-          `${FULL_MARGIN_LB} lb of the ${BUCKET_CAPACITY_LB} lb capacity. Schedule a collection.`,
+        Description: ice
+          ? `Net sap is ${gallons.toFixed(1)} gal at ${nodeLabel}. Ice is tagged, so the bucket can weigh more than the ${BUCKET_CAPACITY_GALLONS} gallon liquid line. Schedule a collection.`
+          : `Net sap is ${gallons.toFixed(1)} gal at ${nodeLabel}, at the ${BUCKET_CAPACITY_GALLONS} gallon bucket capacity. Schedule a collection.`,
       });
     }
 

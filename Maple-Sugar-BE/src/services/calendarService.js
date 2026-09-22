@@ -8,6 +8,7 @@
 import { OAuth2Client } from 'google-auth-library';
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
+import { suggestCollectionWindows, SUGARBUSH_TIME_ZONE } from '../business/availability.js';
 import * as usersRepository from '../repositories/usersRepository.js';
 import * as scheduleRepository from '../repositories/scheduleRepository.js';
 
@@ -34,7 +35,9 @@ function eventBody(slot) {
   return {
     summary: `${slot.Task} — ${slot.Stand}`,
     location: slot.Stand,
-    description: 'RIT Maple Sugaring shift',
+    description: slot.Notes
+      ? `RIT Maple Sugaring\n${slot.Notes}`
+      : 'RIT Maple Sugaring shift',
     start: { dateTime: slot.Starts_At },
     end: { dateTime: slot.Ends_At },
   };
@@ -146,6 +149,45 @@ export async function syncSlotDelete(assignments) {
       syncWithdraw(assignment.userId, assignment.googleEventId),
     ),
   );
+}
+
+/**
+ * Busy ranges on the user's primary calendar, or null when Calendar is not
+ * connected yet. Callers turn null into a prompt to sign in again.
+ */
+export async function listBusy(userId, timeMin, timeMax) {
+  const token = await accessTokenFor(userId);
+  if (!token) return null;
+
+  const payload = await calendarFetch(token, '/freeBusy', {
+    method: 'POST',
+    body: {
+      timeMin,
+      timeMax,
+      timeZone: SUGARBUSH_TIME_ZONE,
+      items: [{ id: 'primary' }],
+    },
+  });
+
+  const calendar = payload?.calendars?.primary;
+  if (calendar?.errors?.length) {
+    throw new Error(calendar.errors[0].reason ?? 'Calendar free/busy failed');
+  }
+  return calendar?.busy ?? [];
+}
+
+/** Free two-hour collection windows for the next week. Null without a token. */
+export async function availabilityFor(userId) {
+  const now = new Date();
+  const timeMax = new Date(now.getTime() + 8 * 24 * 60 * 60 * 1000);
+  const busy = await listBusy(userId, now.toISOString(), timeMax.toISOString());
+  if (!busy) return null;
+
+  return {
+    Time_Zone: SUGARBUSH_TIME_ZONE,
+    Busy: busy.map((item) => ({ Start: item.start, End: item.end })),
+    Windows: suggestCollectionWindows({ now, busy, days: 7 }),
+  };
 }
 
 /** After a user connects Calendar, copy their upcoming claimed shifts over. */

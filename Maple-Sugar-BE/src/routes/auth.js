@@ -79,6 +79,15 @@ authRouter.get('/google/callback', async (req, res) => {
     res.cookie(config.sessionCookieName, signSessionToken(user), sessionCookieOptions());
     logger.info({ userId: user.UserID }, 'Session established');
 
+    // Calendar is connected on login, including the first time an invite is
+    // linked. A missing refresh token sends them through consent before the app.
+    const refreshToken = await usersRepository.getGoogleRefreshToken(user.UserID);
+    if (!refreshToken) {
+      const calendarState = createState();
+      res.cookie(config.stateCookieName, calendarState, stateCookieOptions());
+      return res.redirect(buildCalendarAuthorizationUrl(calendarState));
+    }
+
     // Lands on a route that pulls the session and forwards to the role's home.
     return res.redirect(new URL('/auth/callback', config.publicWebUrl).toString());
   } catch (error) {
@@ -155,8 +164,7 @@ authRouter.get('/google/calendar/callback', requireAuth, async (req, res) => {
     await usersRepository.saveCalendarConnection(req.user.UserID, refreshToken);
     await calendarService.backfillUserCalendar(req.user.UserID);
     logger.info({ userId: req.user.UserID }, 'Google Calendar connected');
-    scheduleUrl.searchParams.set('calendar', 'connected');
-    return res.redirect(scheduleUrl.toString());
+    return res.redirect(new URL('/auth/callback', config.publicWebUrl).toString());
   } catch (error) {
     if (error instanceof ApiError && error.status < 500) {
       return fail(error.message, { code: error.code });

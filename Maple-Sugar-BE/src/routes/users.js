@@ -16,7 +16,7 @@ const DEFAULT_EXPIRY_MONTHS = 4;
 function defaultExpiry() {
   const date = new Date();
   date.setMonth(date.getMonth() + DEFAULT_EXPIRY_MONTHS);
-  return date.toISOString().slice(0, 10);
+  return date.toISOString();
 }
 
 usersRouter.get('/', requireCapability(Capability.MANAGE_USERS), async (req, res) => {

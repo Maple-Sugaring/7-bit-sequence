@@ -116,10 +116,14 @@ export async function invalidatePrefix(prefix) {
       MATCH: `${KEY_PREFIX}${prefix}*`,
       COUNT: 250,
     })) {
-      batch.push(key);
+      const keys = Array.isArray(key) ? key : [key];
+      for (const item of keys) {
+        if (item) batch.push(item);
+      }
       if (batch.length >= 250) {
-        await client.unlink(batch.splice(0));
-        removed += 250;
+        const chunk = batch.splice(0);
+        await client.unlink(chunk);
+        removed += chunk.length;
       }
     }
     if (batch.length) {

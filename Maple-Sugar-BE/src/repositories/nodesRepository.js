@@ -13,7 +13,9 @@ const NODE_COLUMNS = `
   latitude,
   longitude,
   stand,
-  last_seen
+  last_seen,
+  report_interval_seconds,
+  tracked
 `;
 
 export async function listGateways() {
@@ -34,6 +36,57 @@ export async function listNodes() {
      order by stand nulls last, node_name
   `);
   return rows.map(mapNode);
+}
+
+export async function listBoard() {
+  const rows = await queryAll(`
+    select n.id,
+           n.node_name,
+           n.stand,
+           n.status_code,
+           n.battery_level,
+           n.signal_rssi,
+           n.last_seen,
+           b.id as bucket_id,
+           b.barcode_id,
+           b.tare_weight,
+           b.status as bucket_status,
+           m.weight,
+           m.temperature,
+           m.sugar_percent,
+           m.ice_present,
+           m.recorded_at
+      from node n
+      left join buckets b on b.node_id = n.id and b.node_id is not null
+      left join lateral (
+        select weight, temperature, sugar_percent, ice_present, recorded_at
+          from metrics
+         where node_id = n.id
+         order by recorded_at desc
+         limit 1
+      ) m on true
+     where n.tracked
+     order by n.stand, n.id
+  `);
+
+  return rows.map((row) => ({
+    NodeID: row.id,
+    Node_Name: row.node_name,
+    Stand: row.stand,
+    Status_Code: row.status_code,
+    Battery_Percent: row.battery_level == null ? null : Number(row.battery_level),
+    Signal_Rssi: row.signal_rssi,
+    Last_Seen: row.last_seen instanceof Date ? row.last_seen.toISOString() : row.last_seen,
+    BucketID: row.bucket_id,
+    Barcode_ID: row.barcode_id,
+    Tare_Weight: row.tare_weight == null ? null : Number(row.tare_weight),
+    Bucket_Status: row.bucket_status,
+    Weight: row.weight == null ? null : Number(row.weight),
+    Temperature: row.temperature == null ? null : Number(row.temperature),
+    Sugar_Percent: row.sugar_percent == null ? null : Number(row.sugar_percent),
+    Ice_Present: Boolean(row.ice_present),
+    Recorded_At: row.recorded_at instanceof Date ? row.recorded_at.toISOString() : row.recorded_at,
+  }));
 }
 
 export async function findNodeById(id) {

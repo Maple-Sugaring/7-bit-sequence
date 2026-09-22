@@ -4,6 +4,18 @@ import { invalidatePrefix, readThrough } from '../cache/queryCache';
 
 /** Read/write access to the NODE and GATEWAY tables. */
 
+export function listBoard() {
+  return apiClient.get('/nodes/board');
+}
+
+export async function runNodeAction(nodeId, body) {
+  const result = await apiClient.post(`/nodes/${nodeId}/actions`, body);
+  invalidatePrefix(cacheNamespaces.NODES);
+  invalidatePrefix(cacheNamespaces.ALERTS);
+  invalidatePrefix(cacheNamespaces.METRICS);
+  return result;
+}
+
 export function listNodes() {
   return readThrough(cacheKeys.nodesHealth(), TTL.NODE_HEALTH, () => apiClient.get('/nodes'));
 }

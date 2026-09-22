@@ -29,6 +29,7 @@ import {
   RAW_SAP_TYPICAL_MIN,
   sapToSyrupRatio,
 } from '../business/sugarContent';
+import { BUCKET_CAPACITY_GALLONS, gallonsFromWeight, netWeight } from '../business/yieldMetrics';
 import { validateReading } from '../business/validation';
 import { PageHeader } from '../components/common/PageHeader';
 import { ratio } from '../components/common/format';
@@ -50,6 +51,7 @@ function emptyForm() {
     Weight: '',
     Temperature: '',
     Weather_Conditions: '',
+    Ice_Present: false,
     Recorded_At: dayjs(),
   };
 }
@@ -95,6 +97,7 @@ export function RecordDataPage() {
       Weight: form.Weight === '' ? null : Number(form.Weight),
       Temperature: form.Temperature === '' ? null : Number(form.Temperature),
       Weather_Conditions: form.Weather_Conditions || null,
+      Ice_Present: Boolean(form.Ice_Present),
       Recorded_At: form.Recorded_At.toISOString(),
     });
 
@@ -118,7 +121,7 @@ export function RecordDataPage() {
     setForm((prev) =>
       batchMode
         ? // Keep the stand context, clear the per-tree measurements.
-          { ...prev, NodeID: '', Sugar_Percent: '', Weight: '', Recorded_At: dayjs() }
+          { ...prev, NodeID: '', Sugar_Percent: '', Weight: '', Ice_Present: false, Recorded_At: dayjs() }
         : emptyForm(),
     );
     setTouched({});
@@ -230,7 +233,9 @@ export function RecordDataPage() {
                       onChange={fromEvent('Weight')}
                       error={Boolean(showError('Weight'))}
                       helperText={
-                        showError('Weight') ?? warnings.Weight ?? 'Including the bucket itself.'
+                        showError('Weight') ??
+                        warnings.Weight ??
+                        `Gross weight. Liquid capacity is ${BUCKET_CAPACITY_GALLONS} gallons. Ice can weigh more.`
                       }
                       slotProps={{
                         input: { endAdornment: <InputAdornment position="end">lb</InputAdornment> },
@@ -274,6 +279,28 @@ export function RecordDataPage() {
                         </MenuItem>
                       ))}
                     </TextField>
+                  </Grid>
+
+                  <Grid size={12}>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={form.Ice_Present}
+                          onChange={(event) => update('Ice_Present')(event.target.checked)}
+                        />
+                      }
+                      label="Ice in the bucket"
+                    />
+                    {form.Ice_Present ? (
+                      <Chip label="Ice" color="info" size="small" sx={{ ml: 1 }} />
+                    ) : null}
+                    {form.Weight !== '' && selected ? (
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                        About{' '}
+                        {gallonsFromWeight(netWeight(Number(form.Weight), selected.tareWeight ?? 0))?.toFixed(1)}{' '}
+                        gallons of sap.
+                      </Typography>
+                    ) : null}
                   </Grid>
 
                   <Grid size={12}>

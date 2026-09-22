@@ -1,26 +1,49 @@
+import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
+import Typography from '@mui/material/Typography';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import { useNavigate } from 'react-router-dom';
 import { MainNav } from './MainNav';
-import '../../css/header.css';
 
 export function TopBar() {
   const navigate = useNavigate();
 
   return (
-    <header className="header">
-      <div className="webTitle">
-        <h1>Maple Sugaring</h1>
-        <IconButton
-          className="bell"
-          aria-label="Notifications"
-          onClick={() => navigate('/notifications')}
-          sx={{ color: 'white' }}
-        >
-          <NotificationsIcon sx={{ fontSize: 40 }} />
-        </IconButton>
-      </div>
+    <Box
+      component="header"
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: 'auto 1fr auto',
+        alignItems: 'center',
+        gap: 1,
+        px: { xs: 1.5, md: 3 },
+        py: 1,
+        bgcolor: '#000',
+        color: '#fff',
+        borderBottom: '4px solid #F76902',
+      }}
+    >
+      <Typography
+        component="button"
+        onClick={() => navigate('/dashboard')}
+        sx={{
+          border: 0,
+          bgcolor: 'transparent',
+          color: '#fff',
+          font: 'inherit',
+          fontWeight: 650,
+          fontSize: 18,
+          letterSpacing: '-0.02em',
+          cursor: 'pointer',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        Maple Sugaring
+      </Typography>
       <MainNav />
-    </header>
+      <IconButton aria-label="Notifications" onClick={() => navigate('/notifications')} sx={{ color: '#fff' }}>
+        <NotificationsIcon />
+      </IconButton>
+    </Box>
   );
 }

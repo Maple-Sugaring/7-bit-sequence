@@ -348,7 +348,7 @@ section('Users');
   check('malformed email is 422', badEmail.status === 422);
 
   const extended = await call('PATCH', `/users/${invited.payload.UserID}`, { body: { Account_Expiry: '2027-05-14', Is_Active: true } });
-  check('PATCH extends an account', extended.status === 200 && extended.payload?.Account_Expiry === '2027-05-14', JSON.stringify(extended.payload));
+  check('PATCH extends an account', extended.status === 200 && String(extended.payload?.Account_Expiry ?? '').startsWith('2027-05-14'), JSON.stringify(extended.payload));
 
   const selfRole = await call('PATCH', '/users/1', { body: { RoleID: 2 } });
   check('admin cannot change own role', selfRole.status === 403, `got ${selfRole.status}`);

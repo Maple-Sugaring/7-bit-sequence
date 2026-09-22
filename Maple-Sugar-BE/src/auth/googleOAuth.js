@@ -24,7 +24,10 @@ const calendarClient = new OAuth2Client({
 });
 
 const SCOPES = ['openid', 'email', 'profile'];
-const CALENDAR_SCOPES = ['https://www.googleapis.com/auth/calendar.events'];
+const CALENDAR_SCOPES = [
+  'https://www.googleapis.com/auth/calendar.events',
+  'https://www.googleapis.com/auth/calendar.freebusy',
+];
 
 /**
  * Opaque value tying the callback to the request that started it, defeating

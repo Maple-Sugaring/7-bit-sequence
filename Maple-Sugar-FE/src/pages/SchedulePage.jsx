@@ -10,6 +10,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import dayjs from 'dayjs';
+import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Capability } from '../business/permissions';
 import { PageHeader } from '../components/common/PageHeader';
@@ -17,13 +18,14 @@ import { AsyncBlock, EmptyBlock, SkeletonRows } from '../components/common/State
 import { timeOnly } from '../components/common/format';
 import { useAuth } from '../context/auth';
 import { apiMode } from '../data/apiClient';
-import { claimShift, groupByDay, releaseShift } from '../services/scheduleService';
+import { TimePickerDialog } from '../components/schedule/TimePickerDialog';
+import { claimCollectionTime, claimShift, groupByDay, releaseShift } from '../services/scheduleService';
 import { useAction, useSchedule } from '../services/hooks';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? '/api').replace(/\/$/, '');
 const CALENDAR_START = `${API_BASE}/auth/google/calendar`;
 
-function SlotCard({ slot, canClaim, onClaim, onRelease, pending }) {
+function SlotCard({ slot, canClaim, onClaim, onRelease, onPickTime, pending }) {
   const claimDisabled = !slot.canClaim || pending;
 
   // Explains a disabled button rather than leaving the user guessing.
@@ -60,7 +62,10 @@ function SlotCard({ slot, canClaim, onClaim, onRelease, pending }) {
           </Stack>
 
           <Typography variant="body2" color="text.secondary">
-            {slot.Stand} &middot; {timeOnly(slot.Starts_At)} to {timeOnly(slot.Ends_At)}
+            {slot.Stand}
+            {slot.awaiting
+              ? ' · waiting for a time'
+              : ` · ${timeOnly(slot.Starts_At)} to ${timeOnly(slot.Ends_At)}`}
           </Typography>
 
           <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap', gap: 0.75 }}>
@@ -77,7 +82,13 @@ function SlotCard({ slot, canClaim, onClaim, onRelease, pending }) {
             {slot.remaining} of {slot.Capacity} {slot.remaining === 1 ? 'spot' : 'spots'} open
           </Typography>
 
-          {canClaim ? (
+          {canClaim && slot.canPickTime ? (
+            <Button size="small" variant="contained" onClick={() => onPickTime(slot)} disabled={pending} fullWidth>
+              Pick a time
+            </Button>
+          ) : null}
+
+          {canClaim && !slot.awaiting ? (
             slot.isMine ? (
               <Button
                 size="small"
@@ -118,8 +129,14 @@ export function SchedulePage() {
   const calendarError = searchParams.get('calendarError');
   const { data, loading, error, refresh } = useSchedule({ userId: user?.id });
 
+  const [picking, setPicking] = useState(null);
   const claim = useAction(async (slotId) => {
     await claimShift(slotId, user.id);
+    await refresh();
+  });
+  const pick = useAction(async (window) => {
+    await claimCollectionTime(picking.SlotID, window);
+    setPicking(null);
     await refresh();
   });
   const release = useAction(async (slotId) => {
@@ -212,9 +229,9 @@ export function SchedulePage() {
             <Box key={day}>
               <Stack direction="row" spacing={1.5} sx={{ alignItems: 'baseline', mb: 1.5 }}>
                 <Typography variant="h5" component="h2">
-                  {dayjs(day).format('dddd, MMM D')}
+                  {day === 'needs-time' ? 'Needs a time' : dayjs(day).format('dddd, MMM D')}
                 </Typography>
-                {dayjs(day).isSame(dayjs(), 'day') ? (
+                {day !== 'needs-time' && dayjs(day).isSame(dayjs(), 'day') ? (
                   <Chip label="Today" size="small" color="primary" />
                 ) : null}
               </Stack>
@@ -227,7 +244,8 @@ export function SchedulePage() {
                       canClaim={canClaim}
                       onClaim={claim.execute}
                       onRelease={release.execute}
-                      pending={claim.pending || release.pending}
+                      onPickTime={setPicking}
+                      pending={claim.pending || release.pending || pick.pending}
                     />
                   </Grid>
                 ))}
@@ -236,6 +254,15 @@ export function SchedulePage() {
           ))}
         </Stack>
       </AsyncBlock>
+
+      <TimePickerDialog
+        open={Boolean(picking)}
+        slot={picking}
+        pending={pick.pending}
+        error={pick.error}
+        onClose={() => setPicking(null)}
+        onPick={(window) => pick.execute(window)}
+      />
     </>
   );
 }

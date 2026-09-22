@@ -12,7 +12,12 @@ import {
   RAW_SAP_TYPICAL_MAX,
   RAW_SAP_TYPICAL_MIN,
 } from './sugarContent';
-import { BUCKET_CAPACITY_LB } from './yieldMetrics';
+import {
+  BUCKET_CAPACITY_GALLONS,
+  BUCKET_CAPACITY_LB,
+  ICE_CAPACITY_GALLONS,
+  ICE_CAPACITY_LB,
+} from './yieldMetrics';
 
 /** Plausible ambient range for a Rochester sap season, in Fahrenheit. */
 export const MIN_TEMPERATURE_F = -30;
@@ -63,8 +68,16 @@ export function validateReading(form) {
       errors.Weight = 'Weight must be a number.';
     } else if (weight < 0) {
       errors.Weight = 'Weight cannot be negative.';
-    } else if (weight > BUCKET_CAPACITY_LB * 1.5) {
-      warnings.Weight = `That exceeds a full bucket (${BUCKET_CAPACITY_LB} lb). Confirm the load cell reading.`;
+    } else {
+      const ice = Boolean(form.Ice_Present);
+      const ceiling = (ice ? ICE_CAPACITY_LB : BUCKET_CAPACITY_LB) + 8;
+      if (weight > ceiling) {
+        errors.Weight = ice
+          ? `Even with ice, readings above about ${ICE_CAPACITY_GALLONS} gallons are rejected.`
+          : `A liquid bucket holds ${BUCKET_CAPACITY_GALLONS} gallons. Tag ice if frozen sap is heavier than that.`;
+      } else if (!ice && weight > BUCKET_CAPACITY_LB) {
+        warnings.Weight = 'Above the 10 gallon liquid line. Tag ice if the bucket is frozen.';
+      }
     }
   }
 

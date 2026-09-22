@@ -8,10 +8,17 @@ import { createApp } from './app.js';
 import { runMigrations } from './db/migrate.js';
 import { connectCache, disconnectCache } from './cache/redisCache.js';
 import { closePool } from './db/pool.js';
+import { ensureHistoricWeather } from './services/historicWeather.js';
+import * as usersRepository from './repositories/usersRepository.js';
 
 // Migrations run before the server listens, so a container that rolls out ahead
 // of its schema fails to start rather than serving 500s against missing columns.
 await runMigrations();
+
+const promoted = await usersRepository.promoteEmailsToAdmin(config.bootstrapAdminEmails);
+if (promoted) logger.info({ promoted }, 'Promoted bootstrap administrators');
+
+await ensureHistoricWeather();
 
 // Not awaited as a hard requirement: the cache is optional by design, and a
 // Redis outage must not stop the API from coming up.

@@ -10,7 +10,8 @@ const METRIC_COLUMNS = `
   weight,
   temperature,
   sugar_percent,
-  weather_conditions
+  weather_conditions,
+  ice_present
 `;
 
 /**
@@ -76,8 +77,8 @@ export async function listRecentForNode(nodeId, limit = 24) {
 export async function createMetric(reading) {
   const row = await queryOne(
     `insert into metrics (node_id, bucket_id, recorded_by_user_id, recorded_at,
-                          weight, temperature, sugar_percent, weather_conditions)
-     values ($1, $2, $3, coalesce($4, CURRENT_TIMESTAMP), $5, $6, $7, $8)
+                          weight, temperature, sugar_percent, weather_conditions, ice_present)
+     values ($1, $2, $3, coalesce($4, CURRENT_TIMESTAMP), $5, $6, $7, $8, $9)
      returning ${METRIC_COLUMNS}`,
     [
       reading.NodeID,
@@ -88,6 +89,7 @@ export async function createMetric(reading) {
       reading.Temperature ?? null,
       reading.Sugar_Percent ?? null,
       reading.Weather_Conditions ?? null,
+      Boolean(reading.Ice_Present),
     ],
   );
   return mapMetric(row);
@@ -105,6 +107,7 @@ const WRITABLE_METRIC_COLUMNS = {
   Temperature: 'temperature',
   Sugar_Percent: 'sugar_percent',
   Weather_Conditions: 'weather_conditions',
+  Ice_Present: 'ice_present',
 };
 
 export async function updateMetric(id, changes) {

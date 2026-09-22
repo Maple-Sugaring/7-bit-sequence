@@ -15,6 +15,18 @@ const SLOT_SELECT = `
          s.ends_at,
          s.capacity,
          s.is_complete,
+         s.alert_id,
+         s.node_id,
+         s.notes,
+         s.bucket_ids,
+         coalesce(
+           (
+             select jsonb_agg(b.barcode_id order by b.id)
+               from buckets b
+              where b.id = any (s.bucket_ids)
+           ),
+           '[]'::jsonb
+         ) as bucket_labels,
          coalesce(
            array_agg(a.user_id order by a.assigned_at)
              filter (where a.user_id is not null),
@@ -45,7 +57,7 @@ export async function listSlots({ from, to } = {}) {
   // begins on even if it runs past midnight.
   if (from) {
     values.push(from);
-    conditions.push(`s.starts_at >= $${values.length}`);
+    conditions.push(`(s.starts_at is null or s.starts_at >= $${values.length})`);
   }
   if (to) {
     values.push(to);
@@ -55,7 +67,7 @@ export async function listSlots({ from, to } = {}) {
   const where = conditions.length ? `where ${conditions.join(' and ')}` : '';
 
   const rows = await queryAll(
-    `${SLOT_SELECT} ${where} ${SLOT_GROUP_BY} order by s.starts_at, s.id`,
+    `${SLOT_SELECT} ${where} ${SLOT_GROUP_BY} order by s.starts_at nulls first, s.id`,
     values,
   );
   return rows.map(mapScheduleSlot);
@@ -67,14 +79,35 @@ export async function findSlotById(id, client = null) {
   return row ? mapScheduleSlot(row) : null;
 }
 
-export async function createSlot({ Task, Stand, Starts_At, Ends_At, Capacity = 2 }) {
+export async function createSlot({
+  Task,
+  Stand,
+  Starts_At = null,
+  Ends_At = null,
+  Capacity = 1,
+  Alert_ID = null,
+  Node_ID = null,
+  Notes = '',
+  Bucket_IDs = [],
+}) {
   const row = await queryOne(
-    `insert into schedule_slots (task, stand, starts_at, ends_at, capacity)
-     values ($1, $2, $3, $4, $5)
+    `insert into schedule_slots
+       (task, stand, starts_at, ends_at, capacity, alert_id, node_id, notes, bucket_ids)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      returning id`,
-    [Task, Stand, Starts_At, Ends_At, Capacity],
+    [Task, Stand, Starts_At, Ends_At, Capacity, Alert_ID, Node_ID, Notes, Bucket_IDs],
   );
   return findSlotById(row.id);
+}
+
+export async function findOpenTaskForAlert(alertId) {
+  const row = await queryOne(
+    `select id from schedule_slots
+      where alert_id = $1 and is_complete = false
+      limit 1`,
+    [alertId],
+  );
+  return row ? findSlotById(row.id) : null;
 }
 
 const WRITABLE_SLOT_COLUMNS = {
@@ -129,6 +162,9 @@ export async function signUp(slotId, userId) {
     );
     const slot = rows[0];
     if (!slot) throw notFound('Shift');
+    if (!slot.starts_at || !slot.ends_at) {
+      throw invalid('Pick a time on your calendar before claiming this collection.');
+    }
 
     const { rows: existing } = await client.query(
       'select user_id from schedule_assignments where slot_id = $1',
@@ -150,6 +186,7 @@ export async function signUp(slotId, userId) {
          join schedule_slots s on s.id = a.slot_id
         where a.user_id = $1
           and s.id <> $2
+          and s.starts_at is not null
           and tstzrange(s.starts_at, s.ends_at) && tstzrange($3, $4)
         limit 1`,
       [userId, slotId, slot.starts_at, slot.ends_at],
@@ -163,6 +200,61 @@ export async function signUp(slotId, userId) {
       'insert into schedule_assignments (slot_id, user_id) values ($1, $2)',
       [slotId, userId],
     );
+
+    return findSlotById(slotId, client);
+  });
+}
+
+/**
+ * Volunteer chose a free window. The slot row stays locked until the assignment
+ * is written so two people cannot take the same open task.
+ */
+export async function claimTime(slotId, userId, startsAt, endsAt) {
+  return transaction(async (client) => {
+    const { rows } = await client.query(
+      `select id, starts_at, ends_at, capacity, is_complete
+         from schedule_slots
+        where id = $1
+        for update`,
+      [slotId],
+    );
+    const slot = rows[0];
+    if (!slot) throw notFound('Shift');
+    if (slot.is_complete) throw invalid('This collection is already complete.');
+    if (slot.starts_at) throw invalid('Someone already chose a time for this collection.');
+
+    const { rows: existing } = await client.query(
+      'select user_id from schedule_assignments where slot_id = $1',
+      [slotId],
+    );
+    if (existing.some((row) => row.user_id === userId)) {
+      throw invalid('You are already signed up for this shift.');
+    }
+    if (existing.length >= slot.capacity) throw invalid('This shift is already full.');
+
+    const { rows: clashes } = await client.query(
+      `select s.task, s.stand
+         from schedule_assignments a
+         join schedule_slots s on s.id = a.slot_id
+        where a.user_id = $1
+          and s.starts_at is not null
+          and tstzrange(s.starts_at, s.ends_at) && tstzrange($2, $3)
+        limit 1`,
+      [userId, startsAt, endsAt],
+    );
+    if (clashes.length) {
+      throw invalid(`That overlaps your ${clashes[0].task} shift at ${clashes[0].stand}.`);
+    }
+
+    await client.query('update schedule_slots set starts_at = $2, ends_at = $3 where id = $1', [
+      slotId,
+      startsAt,
+      endsAt,
+    ]);
+    await client.query('insert into schedule_assignments (slot_id, user_id) values ($1, $2)', [
+      slotId,
+      userId,
+    ]);
 
     return findSlotById(slotId, client);
   });

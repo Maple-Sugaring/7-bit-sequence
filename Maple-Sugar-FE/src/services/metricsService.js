@@ -86,6 +86,7 @@ export async function getRecordingTargets() {
   ]);
 
   return nodes
+    .filter((node) => node.Tracked)
     .map((node) => {
       const bucket = buckets.find((candidate) => candidate.NodeID === node.NodeID);
       return {

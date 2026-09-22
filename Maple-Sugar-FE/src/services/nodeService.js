@@ -10,6 +10,14 @@ import { NODE_STATUS } from '../data/fixtures/seed';
  * the map view plots.
  */
 
+export function getBoard() {
+  return nodesRepository.listBoard();
+}
+
+export function runNodeAction(nodeId, body) {
+  return nodesRepository.runNodeAction(nodeId, body);
+}
+
 /** RSSI above this is a healthy LoRa link; below the lower bound is failing. */
 export const RSSI_GOOD = -95;
 export const RSSI_POOR = -115;

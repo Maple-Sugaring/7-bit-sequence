@@ -8,12 +8,18 @@
 
 import { FINISHED_SUGAR_PERCENT, sapToSyrupRatio } from './sugarContent';
 
-/** Weight at which a standard bucket overflows, in pounds. */
-export const BUCKET_CAPACITY_LB = 18;
-/** Within this much of capacity, the bucket is treated as full (FR-003). */
-export const FULL_MARGIN_LB = 1.5;
+/** Liquid sap a bucket holds before it overflows. */
+export const BUCKET_CAPACITY_GALLONS = 10;
+/** Frozen sap can stack above the rim, so an iced bucket may weigh more. */
+export const ICE_CAPACITY_GALLONS = 14;
 /** Sap weighs roughly this much per gallon at sap-season temperatures. */
 export const LB_PER_GALLON = 8.6;
+/** Net sap weight at the 10 gallon liquid line. */
+export const BUCKET_CAPACITY_LB = BUCKET_CAPACITY_GALLONS * LB_PER_GALLON;
+/** Net sap weight allowed when the bucket is tagged as icy. */
+export const ICE_CAPACITY_LB = ICE_CAPACITY_GALLONS * LB_PER_GALLON;
+/** Within this much of the liquid line, the bucket is treated as full. */
+export const FULL_MARGIN_LB = 4;
 
 export function netWeight(grossWeight, tareWeight = 0) {
   if (grossWeight == null) return null;
@@ -23,14 +29,13 @@ export function netWeight(grossWeight, tareWeight = 0) {
 export function fillPercent(grossWeight, tareWeight = 0) {
   const net = netWeight(grossWeight, tareWeight);
   if (net == null) return null;
-  const usable = BUCKET_CAPACITY_LB - tareWeight;
-  return Math.min(100, Math.max(0, (net / usable) * 100));
+  return Math.max(0, (net / BUCKET_CAPACITY_LB) * 100);
 }
 
 export function isFull(grossWeight, tareWeight = 0) {
   const net = netWeight(grossWeight, tareWeight);
   if (net == null) return false;
-  return net >= BUCKET_CAPACITY_LB - tareWeight - FULL_MARGIN_LB;
+  return net >= BUCKET_CAPACITY_LB - FULL_MARGIN_LB;
 }
 
 /** A negative net weight means the load cell lost the bucket entirely. */

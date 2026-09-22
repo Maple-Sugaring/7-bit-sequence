@@ -32,6 +32,9 @@ import { alertsRouter } from './routes/alerts.js';
 import { collectionLogsRouter } from './routes/collectionLogs.js';
 import { usersRouter } from './routes/users.js';
 import { scheduleRouter } from './routes/schedule.js';
+import { weatherRouter } from './routes/weather.js';
+import { journalRouter } from './routes/journal.js';
+import { settingsRouter } from './routes/settings.js';
 
 export function createApp() {
   const app = express();
@@ -100,6 +103,9 @@ export function createApp() {
   app.use('/collection-logs', collectionLogsRouter);
   app.use('/users', usersRouter);
   app.use('/schedule', scheduleRouter);
+  app.use('/weather', weatherRouter);
+  app.use('/journal', journalRouter);
+  app.use('/settings', settingsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

@@ -27,14 +27,14 @@ body,
 
 .main-content{
   flex: 1;
-  background: #fff;
-  padding: 0 24px 32px;
+  background: #F6F3F0;
+  padding: 0 24px 48px;
 }
 
 .main-content > h1,
 .page-header > h1{
   font-family: "Helvetica Neue", "Helvetica", "Roboto", "Arial", sans-serif;
-  font-size: 56px;
+  font-size: 40px;
   font-weight: 500;
   letter-spacing: -1.68px;
   text-align: center;

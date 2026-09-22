@@ -5,7 +5,10 @@ import * as dashboardService from '../dashboardService';
 import * as guideService from '../guideService';
 import * as metricsService from '../metricsService';
 import * as nodeService from '../nodeService';
+import * as journalService from '../journalService';
 import * as scheduleService from '../scheduleService';
+import * as settingsService from '../settingsService';
+import * as weatherService from '../weatherService';
 import { useAction, useAsync } from './useAsync';
 
 /**
@@ -53,6 +56,41 @@ export function useDeviceHealth() {
 
 export function useSchedule({ userId } = {}) {
   return useAsync(useCallback(() => scheduleService.getSchedule({ userId }), [userId]));
+}
+
+export function useAvailability(enabled) {
+  return useAsync(useCallback(() => scheduleService.getAvailability(), []), {
+    enabled,
+    initialData: null,
+  });
+}
+
+export function useDailyWeather(year) {
+  return useAsync(useCallback(() => weatherService.getDailySeries({ year }), [year]), {
+    initialData: { Days: [] },
+  });
+}
+
+export function useLiveWeather() {
+  return useAsync(useCallback(() => weatherService.getLiveWeather(), []), { initialData: null });
+}
+
+export function useSapCompare(year) {
+  return useAsync(useCallback(() => weatherService.getCompare(year), [year]), {
+    initialData: { Nodes: [] },
+  });
+}
+
+export function useBush() {
+  return useAsync(useCallback(() => nodeService.getBoard(), []), { initialData: [] });
+}
+
+export function useJournal() {
+  return useAsync(useCallback(() => journalService.getJournal(), []), { initialData: [] });
+}
+
+export function useSettings() {
+  return useAsync(useCallback(() => settingsService.getSettings(), []), { initialData: null });
 }
 
 export function useUsers() {

@@ -17,6 +17,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY package.json package-lock.json ./
 COPY src ./src
 COPY migrations ./migrations
+COPY data ./data
 
 ENV NODE_ENV=production
 ENV PORT=3000

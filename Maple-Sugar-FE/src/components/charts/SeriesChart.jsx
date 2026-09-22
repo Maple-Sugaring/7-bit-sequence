@@ -1,108 +1,167 @@
 import dayjs from 'dayjs';
-import { BarChart } from '@mui/x-charts/BarChart';
-import { LineChart } from '@mui/x-charts/LineChart';
-import { useTheme } from '@mui/material/styles';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ComposedChart,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import { ritOrange, accent } from '../../theme/ritColors';
 
-/**
- * Wrappers over MUI X charts that take the `{ date, value }` points the
- * aggregation layer produces, so pages never reshape data for a chart.
- */
-
-export function DailyLineChart({ points, label, unit, color = 'primary', area = false }) {
-  const theme = useTheme();
-  const stroke = theme.palette[color]?.main ?? theme.palette.primary.main;
-
-  return (
-    <LineChart
-      height={undefined}
-      xAxis={[
-        {
-          data: points.map((point) => new Date(point.date)),
-          scaleType: 'time',
-          valueFormatter: (value) => dayjs(value).format('MMM D'),
-        },
-      ]}
-      yAxis={[{ label: unit, width: 60 }]}
-      series={[
-        {
-          data: points.map((point) => point.value),
-          label,
-          color: stroke,
-          area,
-          showMark: points.length <= 30,
-          valueFormatter: (value) => (value == null ? 'No reading' : `${value.toFixed(2)}${unit ? ` ${unit}` : ''}`),
-        },
-      ]}
-      margin={{ left: 8, right: 16, top: 16, bottom: 8 }}
-      grid={{ horizontal: true }}
-    />
-  );
+function dateTick(value) {
+  return dayjs(value).format('MMM D');
 }
 
-export function DailyBarChart({ points, label, unit, color = 'secondary' }) {
-  const theme = useTheme();
-
-  return (
-    <BarChart
-      xAxis={[
-        {
-          data: points.map((point) => dayjs(point.date).format('MMM D')),
-          scaleType: 'band',
-        },
-      ]}
-      yAxis={[{ label: unit, width: 60 }]}
-      series={[
-        {
-          data: points.map((point) => point.value),
-          label,
-          color: theme.palette[color]?.main ?? theme.palette.secondary.main,
-          valueFormatter: (value) => (value == null ? '—' : `${value.toFixed(2)}${unit ? ` ${unit}` : ''}`),
-        },
-      ]}
-      margin={{ left: 8, right: 16, top: 16, bottom: 8 }}
-      grid={{ horizontal: true }}
-    />
-  );
+function tipLabel(value) {
+  return dayjs(value).format('ddd, MMM D');
 }
 
 /**
- * Year-over-year comparison (FR-013). The x-axis is days into the season
- * rather than calendar dates, so seasons that started on different dates can
- * be read against each other.
+ * Day-by-day charts. `rows` use the weather API shape:
+ * `{ Date, Temp_Min_F, Temp_Max_F, Flow_Gal, Sugar_Percent, Sap_Run }`.
  */
-export function SeasonComparisonChart({ rows, seasons, label, unit }) {
-  const theme = useTheme();
-  const palette = [
-    theme.palette.primary.main,
-    theme.palette.info.main,
-    theme.palette.success.main,
-    theme.palette.secondary.main,
-  ];
 
+export function DailyTemperatureChart({ rows }) {
   return (
-    <LineChart
-      dataset={rows}
-      xAxis={[
-        {
-          dataKey: 'dayOfSeason',
-          label: 'Day of season',
-          valueFormatter: (value) => `Day ${value}`,
-        },
-      ]}
-      yAxis={[{ label: unit, width: 60 }]}
-      series={seasons.map((season, index) => ({
-        dataKey: String(season),
-        label: `${season} season`,
-        color: palette[index % palette.length],
-        showMark: false,
-        connectNulls: true,
-        valueFormatter: (value) =>
-          value == null ? 'No reading' : `${value.toFixed(2)}${unit ? ` ${unit}` : ''}`,
-      }))}
-      margin={{ left: 8, right: 16, top: 16, bottom: 8 }}
-      grid={{ horizontal: true }}
-      slotProps={{ legend: { direction: 'horizontal', position: { vertical: 'bottom', horizontal: 'center' } } }}
-      aria-label={`${label} compared across seasons`}
-    />
+    <ResponsiveContainer width="100%" height="100%">
+      <LineChart data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+        <CartesianGrid stroke="#D0D3D4" vertical={false} />
+        <XAxis dataKey="Date" tickFormatter={dateTick} minTickGap={28} tick={{ fontSize: 12 }} />
+        <YAxis width={48} unit="°" tick={{ fontSize: 12 }} />
+        <Tooltip labelFormatter={tipLabel} />
+        <Legend />
+        <Line type="monotone" dataKey="Temp_Max_F" name="High °F" stroke={ritOrange} dot={false} strokeWidth={2} />
+        <Line type="monotone" dataKey="Temp_Min_F" name="Low °F" stroke={accent.blue} dot={false} strokeWidth={2} />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+export function DailyFlowChart({ rows }) {
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+        <CartesianGrid stroke="#D0D3D4" vertical={false} />
+        <XAxis dataKey="Date" tickFormatter={dateTick} minTickGap={28} tick={{ fontSize: 12 }} />
+        <YAxis width={48} unit=" gal" tick={{ fontSize: 12 }} />
+        <Tooltip labelFormatter={tipLabel} />
+        <Bar dataKey="Flow_Gal" name="Sap flow (gal)" fill={ritOrange} radius={[3, 3, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+export function DailySugarChart({ rows }) {
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <LineChart data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+        <CartesianGrid stroke="#D0D3D4" vertical={false} />
+        <XAxis dataKey="Date" tickFormatter={dateTick} minTickGap={28} tick={{ fontSize: 12 }} />
+        <YAxis width={48} unit="%" domain={[0, 4]} tick={{ fontSize: 12 }} />
+        <Tooltip labelFormatter={tipLabel} />
+        <Line
+          type="monotone"
+          dataKey="Sugar_Percent"
+          name="Sugar %"
+          stroke={accent.green}
+          connectNulls
+          dot={false}
+          strokeWidth={2}
+        />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+export function SiteForecastChart({ rows }) {
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <ComposedChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <CartesianGrid stroke="#D0D3D4" vertical={false} />
+        <XAxis dataKey="Date" tickFormatter={dateTick} tick={{ fontSize: 12 }} />
+        <YAxis yAxisId="temp" width={40} unit="°" tick={{ fontSize: 12 }} />
+        <YAxis yAxisId="flow" orientation="right" width={36} tick={{ fontSize: 12 }} />
+        <Tooltip labelFormatter={tipLabel} />
+        <Legend />
+        <Bar yAxisId="flow" dataKey="Flow_Gal" name="Sap gal" fill={ritOrange} radius={[3, 3, 0, 0]} />
+        <Line yAxisId="temp" type="monotone" dataKey="Temp_Max_F" name="Afternoon high" stroke="#009CBD" dot={false} strokeWidth={2} />
+      </ComposedChart>
+    </ResponsiveContainer>
+  );
+}
+
+const TREE_COLORS = ['#F76902', '#009CBD', '#84BD00', '#000000', '#7D55C7', '#DA291C', '#C75300', '#7C878E'];
+
+export function OverlayChart({ rows, flowSeries, tempSeries }) {
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <ComposedChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <CartesianGrid stroke="#D0D3D4" vertical={false} />
+        <XAxis dataKey="Date" tickFormatter={dateTick} minTickGap={24} tick={{ fontSize: 12 }} />
+        <YAxis yAxisId="flow" width={48} unit=" gal" tick={{ fontSize: 12 }} />
+        <YAxis yAxisId="temp" orientation="right" width={44} unit="°" tick={{ fontSize: 12 }} />
+        <Tooltip labelFormatter={tipLabel} />
+        <Legend />
+        {flowSeries.map((series) => (
+          <Line
+            key={series.key}
+            yAxisId="flow"
+            type="monotone"
+            dataKey={series.key}
+            name={series.name}
+            stroke={series.color}
+            dot={false}
+            strokeWidth={2}
+            connectNulls
+          />
+        ))}
+        {tempSeries.map((series) => (
+          <Line
+            key={series.key}
+            yAxisId="temp"
+            type="monotone"
+            dataKey={series.key}
+            name={series.name}
+            stroke={series.color}
+            strokeDasharray="5 4"
+            dot={false}
+            strokeWidth={2}
+            connectNulls
+          />
+        ))}
+      </ComposedChart>
+    </ResponsiveContainer>
+  );
+}
+
+export function TreeCompareChart({ rows, series }) {
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <LineChart data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+        <CartesianGrid stroke="#D0D3D4" vertical={false} />
+        <XAxis dataKey="Date" tickFormatter={dateTick} minTickGap={28} tick={{ fontSize: 12 }} />
+        <YAxis width={48} tick={{ fontSize: 12 }} />
+        <Tooltip labelFormatter={tipLabel} />
+        <Legend />
+        {series.map((name, index) => (
+          <Line
+            key={name}
+            type="monotone"
+            dataKey={name}
+            name={name}
+            stroke={TREE_COLORS[index % TREE_COLORS.length]}
+            dot={false}
+            strokeWidth={2}
+            connectNulls
+          />
+        ))}
+      </LineChart>
+    </ResponsiveContainer>
   );
 }

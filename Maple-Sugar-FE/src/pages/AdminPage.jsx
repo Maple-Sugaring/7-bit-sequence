@@ -21,23 +21,75 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import MoreTimeIcon from '@mui/icons-material/MoreTime';
 import PersonAddAltIcon from '@mui/icons-material/PersonAddAlt';
 import { DataGrid } from '@mui/x-data-grid';
+import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
+import dayjs from 'dayjs';
 import { ROLE_LABELS } from '../business/permissions';
 import { validateInvite } from '../business/validation';
 import { PageHeader } from '../components/common/PageHeader';
 import { ErrorBlock } from '../components/common/StateBlock';
-import { dateOnly, dateTime } from '../components/common/format';
+import { dateTime } from '../components/common/format';
 import { useAuth } from '../context/auth';
 import {
   changeRole,
-  extendAccount,
   inviteUser,
+  setAccountExpiry,
   removeUser,
   setActive,
 } from '../services/adminService';
 import { useAction, useUsers } from '../services/hooks';
 
+function ExpiryDialog({ user, onClose, onSave, pending, error }) {
+  const [value, setValue] = useState(() =>
+    user?.Account_Expiry ? dayjs(user.Account_Expiry) : dayjs().add(4, 'month').hour(23).minute(59).second(0),
+  );
+
+  return (
+    <Dialog open={Boolean(user)} onClose={onClose} fullWidth maxWidth="xs">
+      <DialogTitle>Set end date</DialogTitle>
+      <DialogContent>
+        <DialogContentText sx={{ mb: 2 }}>
+          {user?.fullName} loses access at the date and time you pick. Eastern time.
+        </DialogContentText>
+        {error ? (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        ) : null}
+        <DateTimePicker
+          label="Access ends"
+          value={value}
+          onChange={(next) => setValue(next)}
+          ampm
+          slotProps={{ textField: { fullWidth: true } }}
+        />
+      </DialogContent>
+      <DialogActions sx={{ justifyContent: 'space-between', px: 3, pb: 2 }}>
+        <Button color="inherit" disabled={pending} onClick={() => onSave(null)}>
+          No end date
+        </Button>
+        <Stack direction="row" spacing={1}>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button
+            variant="contained"
+            disabled={pending || !value?.isValid()}
+            onClick={() => onSave(value.toISOString())}
+          >
+            Save
+          </Button>
+        </Stack>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 function InviteDialog({ open, onClose, roles, onInvite, pending, error }) {
-  const [form, setForm] = useState({ email: '', roleId: 2, firstName: '', lastName: '' });
+  const [form, setForm] = useState({
+    email: '',
+    roleId: 2,
+    firstName: '',
+    lastName: '',
+    accountExpiry: dayjs().add(4, 'month').hour(23).minute(59).second(0),
+  });
   const [touched, setTouched] = useState(false);
   const { errors, isValid } = validateInvite(form);
 
@@ -47,9 +99,19 @@ function InviteDialog({ open, onClose, roles, onInvite, pending, error }) {
     setTouched(true);
     if (!isValid) return;
 
-    const result = await onInvite(form);
+    if (!form.accountExpiry?.isValid()) return;
+    const result = await onInvite({
+      ...form,
+      accountExpiry: form.accountExpiry.toISOString(),
+    });
     if (result?.ok) {
-      setForm({ email: '', roleId: 2, firstName: '', lastName: '' });
+      setForm({
+        email: '',
+        roleId: 2,
+        firstName: '',
+        lastName: '',
+        accountExpiry: dayjs().add(4, 'month').hour(23).minute(59).second(0),
+      });
       setTouched(false);
       onClose();
     }
@@ -60,8 +122,7 @@ function InviteDialog({ open, onClose, roles, onInvite, pending, error }) {
       <DialogTitle>Invite a user</DialogTitle>
       <DialogContent>
         <DialogContentText sx={{ mb: 2 }}>
-          Only administrators create accounts. Student accounts expire at the end of the semester
-          unless an extension is granted.
+          Only administrators create accounts. Pick the exact date and time access should end.
         </DialogContentText>
 
         {error ? (
@@ -88,6 +149,15 @@ function InviteDialog({ open, onClose, roles, onInvite, pending, error }) {
           </Grid>
           <Grid size={{ xs: 12, sm: 6 }}>
             <TextField label="Last name" value={form.lastName} onChange={update('lastName')} fullWidth />
+          </Grid>
+          <Grid size={12}>
+            <DateTimePicker
+              label="Access ends"
+              value={form.accountExpiry}
+              onChange={(next) => setForm((prev) => ({ ...prev, accountExpiry: next }))}
+              ampm
+              slotProps={{ textField: { fullWidth: true, required: true } }}
+            />
           </Grid>
           <Grid size={12}>
             <TextField
@@ -124,6 +194,7 @@ export function AdminPage() {
   const { data, loading, error, refresh } = useUsers();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [pendingRemoval, setPendingRemoval] = useState(null);
+  const [expiryUser, setExpiryUser] = useState(null);
 
   const invite = useAction(async (form) => {
     await inviteUser(form);
@@ -137,8 +208,8 @@ export function AdminPage() {
     await setActive(userId, isActive);
     await refresh();
   });
-  const extend = useAction(async (userId) => {
-    await extendAccount(userId);
+  const saveExpiry = useAction(async (userId, accountExpiry) => {
+    await setAccountExpiry(userId, accountExpiry);
     await refresh();
   });
   const remove = useAction(async (userId) => {
@@ -184,9 +255,9 @@ export function AdminPage() {
     },
     {
       field: 'Account_Expiry',
-      headerName: 'Expires',
-      width: 130,
-      renderCell: (params) => (params.value ? dateOnly(params.value) : 'Never'),
+      headerName: 'Ends',
+      width: 190,
+      renderCell: (params) => (params.value ? dateTime(params.value) : 'No end date'),
     },
     {
       field: 'Last_Login',
@@ -221,12 +292,11 @@ export function AdminPage() {
       filterable: false,
       renderCell: (params) => (
         <Stack direction="row">
-          <Tooltip title="Extend by one semester">
+          <Tooltip title="Set end date">
             <IconButton
               size="small"
-              onClick={() => extend.execute(params.row.UserID)}
-              disabled={extend.pending}
-              aria-label={`Extend account for ${params.row.fullName}`}
+              onClick={() => setExpiryUser(params.row)}
+              aria-label={`Set end date for ${params.row.fullName}`}
             >
               <MoreTimeIcon fontSize="small" />
             </IconButton>
@@ -255,7 +325,7 @@ export function AdminPage() {
     );
   }
 
-  const actionError = updateRole.error ?? toggleActive.error ?? extend.error ?? remove.error;
+  const actionError = updateRole.error ?? toggleActive.error ?? remove.error;
 
   return (
     <>
@@ -278,7 +348,7 @@ export function AdminPage() {
         <Alert severity="warning" sx={{ mb: 3 }}>
           {data.summary.expiringSoon}{' '}
           {data.summary.expiringSoon === 1 ? 'account expires' : 'accounts expire'} within two weeks.
-          Grant an extension to keep them active past the end of the semester.
+          Open the calendar on that row to choose a later end date.
         </Alert>
       ) : null}
 
@@ -314,6 +384,18 @@ export function AdminPage() {
         />
       </Card>
 
+      <ExpiryDialog
+        key={expiryUser?.UserID ?? 'none'}
+        user={expiryUser}
+        onClose={() => setExpiryUser(null)}
+        pending={saveExpiry.pending}
+        error={saveExpiry.error}
+        onSave={async (accountExpiry) => {
+          const result = await saveExpiry.execute(expiryUser.UserID, accountExpiry);
+          if (result?.ok) setExpiryUser(null);
+        }}
+      />
+
       <InviteDialog
         open={inviteOpen}
         onClose={() => setInviteOpen(false)}
@@ -328,7 +410,7 @@ export function AdminPage() {
         <DialogContent>
           <DialogContentText>
             This deletes the account. Readings they recorded stay in the system, but the account will
-            no longer be attributed. Consider deactivating instead if they may return next semester.
+            no longer be attributed. Deactivate the account if they may come back later.
           </DialogContentText>
         </DialogContent>
         <DialogActions>

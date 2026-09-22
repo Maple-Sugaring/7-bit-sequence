@@ -48,7 +48,7 @@ export function mapUser(row) {
     Created_At: dateOnly(row.created_at),
     Last_Login: iso(row.last_login),
     Is_Active: row.is_active,
-    Account_Expiry: dateOnly(row.account_expiry),
+    Account_Expiry: iso(row.account_expiry),
     Google_Calendar_ID: row.google_calendar_id ?? null,
     Calendar_Connected: Boolean(row.calendar_connected),
     Invite_Pending: row.invite_pending ?? false,
@@ -90,6 +90,8 @@ export function mapNode(row) {
     Location: lat == null || lon == null ? null : { lat, lon },
     Stand: row.stand ?? null,
     Last_Seen: iso(row.last_seen),
+    Report_Interval_Seconds: row.report_interval_seconds ?? null,
+    Tracked: Boolean(row.tracked),
   };
 }
 
@@ -114,6 +116,7 @@ export function mapMetric(row) {
     Temperature: num(row.temperature),
     Sugar_Percent: num(row.sugar_percent),
     Weather_Conditions: row.weather_conditions ?? null,
+    Ice_Present: Boolean(row.ice_present),
   };
 }
 
@@ -151,6 +154,12 @@ export function mapScheduleSlot(row) {
     Capacity: row.capacity,
     // Aggregated from schedule_assignments. Coalesced to an empty array so the
     // client can map over it without a null check on every unclaimed shift.
+    Alert_ID: row.alert_id ?? null,
+    Node_ID: row.node_id ?? null,
+    Notes: row.notes ?? '',
+    Bucket_IDs: row.bucket_ids ?? [],
+    Bucket_Labels: row.bucket_labels ?? [],
+    Awaiting_Time: row.starts_at == null,
     Assigned_UserIDs: row.assigned_user_ids ?? [],
     // Same assignments, resolved to display names so the schedule can label a
     // shift without pulling the admin-only user roster. Shape: { userId, name, email }.
