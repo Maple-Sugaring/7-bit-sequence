@@ -29,6 +29,7 @@ A route may call a repository directly when the use case is one query. It calls 
 | [dal.md](dal.md) | Repositories and the JSON field contract |
 | [services.md](services.md) | Service layer |
 | [business.md](business.md) | Domain rules shared with the UI |
+| [testing.md](testing.md) | Edge cases covered by the API and UI test suites |
 
 ## Boot
 
