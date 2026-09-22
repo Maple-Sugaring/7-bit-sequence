@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import Alert from '@mui/material/Alert';
-import Autocomplete from '@mui/material/Autocomplete';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
@@ -21,14 +20,14 @@ import { PageHeader } from '../components/common/PageHeader';
 import { ErrorBlock } from '../components/common/StateBlock';
 import { dateTime } from '../components/common/format';
 import { assignShift, deleteShift, setShiftComplete, SHIFT_TASKS } from '../services/scheduleService';
-import { useAction, useRecordingTargets, useSchedule, useUsers } from '../services/hooks';
+import { useAction, useBush, useSchedule, useUsers } from '../services/hooks';
 
 function emptyForm() {
   const start = dayjs().add(1, 'day').hour(9).minute(0).second(0);
   return {
     Task: SHIFT_TASKS[0],
     UserID: '',
-    buckets: [],
+    bucketIds: [],
     Starts_At: start,
     Ends_At: start.add(2, 'hour'),
     Notes: '',
@@ -38,8 +37,10 @@ function emptyForm() {
 export function ScheduleAdminPage() {
   const { data, loading, error, refresh } = useSchedule();
   const people = useUsers();
-  const targets = useRecordingTargets();
+  const bush = useBush();
+  const bucketOptions = (bush.data ?? []).filter((node) => node.BucketID);
   const [form, setForm] = useState(emptyForm);
+  const [formError, setFormError] = useState('');
 
   const create = useAction(async (assignment) => {
     await assignShift(assignment);
@@ -58,16 +59,31 @@ export function ScheduleAdminPage() {
 
   const submit = async (event) => {
     event.preventDefault();
-    if (!form.UserID || form.buckets.length === 0 || !form.Starts_At || !form.Ends_At) return;
+    if (!form.UserID) {
+      setFormError('Choose a student.');
+      return;
+    }
+    if (form.bucketIds.length === 0) {
+      setFormError('Choose at least one bucket.');
+      return;
+    }
+    if (!form.Starts_At?.isValid() || !form.Ends_At?.isValid()) {
+      setFormError('Pick a start and an end.');
+      return;
+    }
+    setFormError('');
     const result = await create.execute({
       Task: form.Task,
       UserID: form.UserID,
-      BucketIDs: form.buckets.map((bucket) => bucket.bucketId),
+      BucketIDs: form.bucketIds,
       Starts_At: form.Starts_At.toISOString(),
       Ends_At: form.Ends_At.toISOString(),
       Notes: form.Notes,
     });
-    if (result?.ok) setForm(emptyForm());
+    if (result?.ok) {
+      setForm(emptyForm());
+      setFormError('');
+    }
   };
 
   const columns = [
@@ -151,7 +167,7 @@ export function ScheduleAdminPage() {
         Assign a student to any buckets, on any day. A full-bucket alert is not required.
       </Typography>
 
-      <Card component="form" onSubmit={submit} sx={{ mb: 3 }}>
+      <Card component="form" noValidate onSubmit={submit} sx={{ mb: 3 }}>
         <CardContent>
           <Grid container spacing={2}>
             <Grid size={{ xs: 12, md: 4 }}>
@@ -176,7 +192,7 @@ export function ScheduleAdminPage() {
                 value={form.UserID}
                 onChange={(event) => setForm((prev) => ({ ...prev, UserID: event.target.value }))}
                 fullWidth
-                required
+                error={!form.UserID && Boolean(formError)}
               >
                 {students.map((user) => (
                   <MenuItem key={user.UserID} value={user.UserID}>
@@ -186,16 +202,47 @@ export function ScheduleAdminPage() {
               </TextField>
             </Grid>
             <Grid size={{ xs: 12, md: 4 }}>
-              <Autocomplete
-                multiple
-                options={(targets.data ?? []).filter((target) => target.bucketId)}
-                value={form.buckets}
-                onChange={(_event, buckets) => setForm((prev) => ({ ...prev, buckets }))}
-                groupBy={(option) => option.stand}
-                getOptionLabel={(option) => `${option.barcode ?? 'Bucket'} · ${option.label}`}
-                isOptionEqualToValue={(option, value) => option.bucketId === value.bucketId}
-                renderInput={(params) => <TextField {...params} label="Buckets" required />}
-              />
+              <TextField
+                select
+                label="Buckets"
+                value={form.bucketIds}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setForm((prev) => ({
+                    ...prev,
+                    bucketIds: typeof value === 'string' ? value.split(',').map(Number) : value,
+                  }));
+                  setFormError('');
+                }}
+                error={form.bucketIds.length === 0 && Boolean(formError)}
+                helperText={
+                  form.bucketIds.length === 0 && formError
+                    ? formError
+                    : 'Open the list and choose one or more taps.'
+                }
+                fullWidth
+                slotProps={{
+                  select: {
+                    multiple: true,
+                    displayEmpty: true,
+                    renderValue: (selected) => {
+                      if (!selected.length) return 'Choose buckets';
+                      return selected
+                        .map((id) => bucketOptions.find((node) => node.BucketID === id))
+                        .filter(Boolean)
+                        .map((node) => node.Barcode_ID)
+                        .join(', ');
+                    },
+                  },
+                }}
+              >
+                {bucketOptions.map((node) => (
+                  <MenuItem key={node.BucketID} value={node.BucketID}>
+                    <Checkbox checked={form.bucketIds.includes(node.BucketID)} size="small" sx={{ pointerEvents: 'none' }} />
+                    {node.Barcode_ID} · {node.Node_Name}
+                  </MenuItem>
+                ))}
+              </TextField>
             </Grid>
             <Grid size={{ xs: 12, md: 4 }}>
               <DateTimePicker
@@ -208,7 +255,7 @@ export function ScheduleAdminPage() {
                     Ends_At: value ? value.add(2, 'hour') : prev.Ends_At,
                   }))
                 }
-                slotProps={{ textField: { fullWidth: true, required: true } }}
+                slotProps={{ textField: { fullWidth: true } }}
               />
             </Grid>
             <Grid size={{ xs: 12, md: 4 }}>
@@ -217,7 +264,7 @@ export function ScheduleAdminPage() {
                 value={form.Ends_At}
                 onChange={(value) => setForm((prev) => ({ ...prev, Ends_At: value }))}
                 minDateTime={form.Starts_At}
-                slotProps={{ textField: { fullWidth: true, required: true } }}
+                slotProps={{ textField: { fullWidth: true } }}
               />
             </Grid>
             <Grid size={{ xs: 12, md: 4 }}>
@@ -235,6 +282,11 @@ export function ScheduleAdminPage() {
               </Button>
             </Grid>
           </Grid>
+          {formError && form.bucketIds.length > 0 ? (
+            <Alert severity="warning" sx={{ mt: 2 }}>
+              {formError}
+            </Alert>
+          ) : null}
           {create.error ? (
             <Alert severity="error" sx={{ mt: 2 }}>
               {create.error}
