@@ -10,14 +10,16 @@ Session is the `maple_session` JWT cookie. Send cookies (`credentials: 'include'
 
 | HTTP | `code` | When |
 | --- | --- | --- |
+| 200 | `OK` | Action was completed successfully. |
 | 401 | `BAD_CREDENTIALS` | No session, or Google rejected the code. |
-| 403 | `FORBIDDEN` | Role cannot do that. |
+| 403 | `FORBIDDEN` | The user does not have the authority to do this action. |
 | 403 | `NOT_PROVISIONED` | Google account has no invite. |
 | 403 | `ACCOUNT_EXPIRED` | Inactive or past `account_expiry`. |
 | 403 | `EMAIL_UNVERIFIED` | Google email is not verified. |
-| 404 | `NOT_FOUND` | |
+| 404 | `NOT_FOUND` | Requested information or data was not found. |
 | 409 | `CALENDAR_REQUIRED` | Shift time needs a Calendar connection. |
 | 422 | `VALIDATION` | Zod or a domain rule. `details` is keyed by field. |
+| 500 | `INTERNAL_SERVER_ERROR` | The application is down and not able to process the request. |
 | 502 | `OAUTH_FAILED`, `WEATHER_FAILED` | Google or OpenWeather failed. |
 | 503 | | `/health` when Postgres is down. |
 
@@ -27,7 +29,7 @@ Zod runs in `routes/schemas.js` before a handler uses the body.
 
 | Role | Can |
 | --- | --- |
-| Admin | Every capability, including users and shift assignment. |
+| Admin | Every capability, including creating users and shift assignment. |
 | Student | Dashboard, Sugar Woods, export, record, alerts, schedule, claim shifts, flag a node. |
 | MSS | Dashboard, Sugar Woods, export, guides. No recording and no schedule. |
 
