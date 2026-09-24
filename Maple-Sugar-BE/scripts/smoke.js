@@ -22,7 +22,7 @@ const token = (userId, email, roleId) =>
 
 const ADMIN = token(1, 'tpalmer@rit.edu', 1);
 const STUDENT = token(3, 'ir8643@g.rit.edu', 2);
-const MSS = token(7, 'bmm8699@g.rit.edu', 3);
+const MSS = token(8, 'sd9014@g.rit.edu', 3);
 const EXPIRED = token(6, 'pr2288@g.rit.edu', 2);
 
 let passed = 0;
@@ -392,7 +392,7 @@ section('Schedule');
   const again = await call('POST', `/schedule/slots/${slotId}/signup`, { as: STUDENT });
   check('claiming twice is 422', again.status === 422 && /already signed up/i.test(again.payload?.message ?? ''), JSON.stringify(again.payload));
 
-  const full = await call('POST', `/schedule/slots/${slotId}/signup`, { as: token(4, 'nc4417@g.rit.edu', 2) });
+  const full = await call('POST', `/schedule/slots/${slotId}/signup`, { as: token(4, 'nic4340@g.rit.edu', 1) });
   check('capacity enforced', full.status === 422 && /already full/i.test(full.payload?.message ?? ''), JSON.stringify(full.payload));
 
   // An overlapping shift at a different stand must still be refused.

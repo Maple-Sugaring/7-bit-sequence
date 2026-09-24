@@ -36,14 +36,51 @@ insert into users (id, role_id, first_name, last_name, email, created_at, last_l
 values
   (1, 1, 'Tom',        'Palmer',    'tpalmer@rit.edu',    '2024-01-08', '2026-09-11T12:41:00Z', true,  null,         'maple-admin@rit.edu'),
   (2, 1, 'Dana',       'Whitfield', 'dwhitfield@rit.edu', '2024-01-08', '2026-09-10T18:02:00Z', true,  null,         'maple-admin@rit.edu'),
-  (3, 1, 'Innocenzio', 'Rizzuto',   'ir8643@g.rit.edu',   '2026-08-25', '2026-09-11T13:15:00Z', true,  '2026-12-19', null),
-  (4, 2, 'Nolan',      'Cooper',    'nc4417@g.rit.edu',   '2026-08-25', '2026-09-09T15:30:00Z', true,  '2026-12-19', null),
-  (5, 1, 'Oliver',     'Grant',     'odg1896@g.rit.edu',  '2026-08-25', '2026-09-08T09:12:00Z', true,  '2026-12-19', null),
+  (3, 1, 'Innocenzio', 'Rizzuto',   'ir8643@g.rit.edu',   '2026-08-25', '2026-09-11T13:15:00Z', true,  null,         null),
+  (4, 1, 'Nalin',      'Cooper',    'nic4340@g.rit.edu',  '2026-08-25', '2026-09-09T15:30:00Z', true,  null,         null),
+  (5, 1, 'Oliver',     'Gomes',     'odg1896@g.rit.edu',  '2026-08-25', '2026-09-08T09:12:00Z', true,  null,         null),
   -- Deliberately lapsed, so the expired-account lockout has something to hit.
   (6, 2, 'Priya',      'Raman',     'pr2288@g.rit.edu',   '2025-08-26', '2026-05-02T11:00:00Z', false, '2026-05-09', null),
-  (7, 3, 'Ben',        'Marino',    'bmm8699@g.rit.edu',  '2025-02-14', '2026-09-10T16:45:00Z', true,  '2027-05-14', null),
-  (8, 3, 'Sofia',      'Delgado',   'sd9014@g.rit.edu',   '2025-02-14', '2026-08-30T14:20:00Z', true,  '2027-05-14', null)
+  (7, 1, 'Brandon',    'Maier',     'bmm8699@g.rit.edu',  '2025-02-14', '2026-09-10T16:45:00Z', true,  null,         null),
+  (8, 3, 'Sofia',      'Delgado',   'sd9014@g.rit.edu',   '2025-02-14', '2026-08-30T14:20:00Z', true,  '2027-05-14', null),
+  (9, 1, 'Ben',        'Arbelo',    'bda9885@g.rit.edu',  '2026-08-25', '2026-09-11T13:15:00Z', true,  null,         null),
+  (10, 1, 'Nolan',     'Trapp',     'nlt8375@g.rit.edu',  '2026-08-25', '2026-09-11T13:15:00Z', true,  null,         null),
+  (11, 1, 'Darren',    'Yang',      'dy4385@g.rit.edu',   '2026-08-25', '2026-09-11T13:15:00Z', true,  null,         null)
 on conflict (id) do nothing;
+
+-- Placeholder rows (Nolan Cooper, Oliver Grant, Ben Marino) and bootstrap
+-- inserts may already exist. Make the class roster admins with no expiry.
+
+delete from users
+ where lower(email) = 'nic4340@g.rit.edu'
+   and exists (
+     select 1 from users where lower(email) = 'nc4417@g.rit.edu'
+   );
+
+update users
+   set first_name = 'Nalin',
+       last_name = 'Cooper',
+       email = 'nic4340@g.rit.edu',
+       role_id = 1,
+       is_active = true,
+       account_expiry = null
+ where lower(email) = 'nc4417@g.rit.edu';
+
+insert into users (role_id, first_name, last_name, email, is_active, account_expiry)
+values
+  (1, 'Ben',        'Arbelo',  'bda9885@g.rit.edu', true, null),
+  (1, 'Nalin',      'Cooper',  'nic4340@g.rit.edu', true, null),
+  (1, 'Oliver',     'Gomes',   'odg1896@g.rit.edu', true, null),
+  (1, 'Brandon',    'Maier',   'bmm8699@g.rit.edu', true, null),
+  (1, 'Innocenzio', 'Rizzuto', 'ir8643@g.rit.edu',  true, null),
+  (1, 'Nolan',      'Trapp',   'nlt8375@g.rit.edu', true, null),
+  (1, 'Darren',     'Yang',    'dy4385@g.rit.edu',  true, null)
+on conflict (email) do update
+   set role_id = 1,
+       first_name = excluded.first_name,
+       last_name = excluded.last_name,
+       is_active = true,
+       account_expiry = null;
 
 select setval(pg_get_serial_sequence('users', 'id'), (select max(id) from users));
 
