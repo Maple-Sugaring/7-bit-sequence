@@ -4,9 +4,15 @@
 
 ## `permissions.js`
 
-Roles Admin, Student, and MSS, keyed by `roles.id` 1, 2, and 3.
+Roles: Admin, Student, and MSS, keyed by `roles.id` 1, 2, and 3.
 
-`isAccountUsable` is false when `Is_Active` is false or `Account_Expiry` is in the past. Null expiry does not expire.
+Admins are the instructors of the maple sugaring course at RIT. They are allowed to create users and assign shifts. It is the responsibility of admins to ensure that students in the maple sugaring class and MSS have accounts to use. Admin accounts do not expire.
+
+Students are students enrolled in the maple sugaring course at RIT. They can see the dashboard, record data, export data, receive alerts, and view the schedule. They can also claim shifts, but the instructor will have to approve it before it can be added to the schedule. Student accounts will automatically deactivate (120?) days after creation.
+
+MSS members are members of the Maple Sugaring Society at RIT. MSS accounts are designed to be "view only" for the data. They can see the dashboard and export data, but they cannot record data, view the schedule, or take any shifts. MSS accounts will automatically deactivate (1 year?) after creation.
+
+`isAccountUsable` is false when `Is_Active` is false or `Account_Expiry` is in the past. Null expiry does not expire. When an account expires, the account is locked and is no longer listed as an active user. This is to ensure that there is not a huge backlog of unused accounts and that the application will only show active users to the instructor.
 
 Capabilities are listed in [api.md](api.md). `can(role, capability)` is what route guards call.
 
