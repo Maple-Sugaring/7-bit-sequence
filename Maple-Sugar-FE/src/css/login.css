@@ -1,5 +1,6 @@
 /* CSS Stylesheet for login specific components */
 #login-page{
+  flex: 1;
   background-color: #f2f2f7;
 }
 #login-content{
@@ -36,6 +37,21 @@
   width: 33%;
   padding: 2%
 }
+
+.offscreen{
+  position: absolute;
+  left: -9999px;
+}
+
+.errmsg {
+  background-color: lightpink;
+  color: firebrick;
+  font-weight: bold;
+  padding: 0.5rem;
+  margin-bottom: 0.5rem;
+  border-radius: 4px;
+}
+
 #sign-in{
   background-color: #000000;
 }

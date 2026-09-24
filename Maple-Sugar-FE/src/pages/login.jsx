@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useRef, useState, useEffect } from "react";
 import mapleLogo from "../assets/MapleLogo.png";
 import Paper from "@mui/material/Paper";
 import TextField from "@mui/material/TextField";
@@ -18,7 +19,7 @@ import "../css/App.css";
 import "../css/login.css";
 
 export function Login() {
-const outlinedEmailId = React.useId();
+  const outlinedEmailId = React.useId();
   const outlinedPasswordId = React.useId();
   const [showPassword, setShowPassword] = React.useState(false);
   const handleClickShowPassword = () => setShowPassword((show) => !show);
@@ -43,6 +44,25 @@ const outlinedEmailId = React.useId();
     </InputAdornment>
   );
 
+  const userRef = useRef();
+  const errRef = useRef();
+  const [user, setUser] = useState('');
+  const [pwd, setPwd] = useState('');
+  const [errMsg, setErrMsg] = useState('');
+  const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    userRef.current.focus();
+  }, [])
+
+  useEffect(() => {
+    setErrMsg('');
+  }, [user, pwd])
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+  }
+
   return (
     <>
       <header className="login-header">
@@ -57,7 +77,15 @@ const outlinedEmailId = React.useId();
           </div>
           <h1>Login</h1>
           <Paper id="login-paper">
-            <form>
+            <p 
+              ref={errRef} 
+              tabIndex={-1}                                 //Tab Index used for focus, set -1 so only focusable when called
+              className={errMsg ? "errmsg" : "offscreen"} 
+              aria-live="assertive"                         //For screen readers  
+            >
+              {errMsg}
+            </p>
+            <form onSubmit={handleSubmit}>
               {/* <TextField
                 id="outlined-basic"
                 label="Email"
@@ -73,7 +101,10 @@ const outlinedEmailId = React.useId();
                   id={`${outlinedEmailId}-input`}
                   placeholder="Enter your email.."
                   size="small"
-
+                  inputRef={userRef}
+                  onChange={(e) => setUser(e.target.value)}
+                  value={user}
+                  required
                 />
               </FormControl>
               <FormControl fullWidth variant="outlined" className="field-with-label">
@@ -92,9 +123,7 @@ const outlinedEmailId = React.useId();
                     <InputAdornment position="end">
                       <IconButton
                         aria-label={
-                          showPassword
-                            ? "hide the password"
-                            : "display the password"
+                          showPassword ? "hide the password" : "display the password"
                         }
                         onClick={handleClickShowPassword}
                         onMouseDown={handleMouseDownPassword}
@@ -105,11 +134,20 @@ const outlinedEmailId = React.useId();
                       </IconButton>
                     </InputAdornment>
                   }
+                  onChange={(e) => setPwd(e.target.value)}
+                  value={pwd}
+                  required
                 />
               </FormControl>
-              <Button id="sign-in" variant="contained" fullWidth>
+              <Button id="sign-in" type="submit" variant="contained" fullWidth>
                 Sign In
               </Button>
+{/*
+  * Needs:
+  *  onClick={handleForgotPassword}
+  * 
+  *  How do we handle a Password reset request
+  */}
               <Button className="forgot-pswd" size="small">
                 Forgot Password?
               </Button>
@@ -117,7 +155,6 @@ const outlinedEmailId = React.useId();
           </Paper>
         </div>
       </main>
-    
     </>
   );
 }
