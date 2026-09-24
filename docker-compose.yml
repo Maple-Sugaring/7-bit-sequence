@@ -46,6 +46,8 @@ services:
       PORT: 3000
       DATABASE_URL: postgresql://maple:maple@db:5432/maple_sugaring
       REDIS_URL: redis://cache:6379
+      # Created if missing, then promoted to Admin with no expiry, on every API start.
+      BOOTSTRAP_ADMIN_EMAILS: bda9885@g.rit.edu,nic4340@g.rit.edu,odg1896@g.rit.edu,bmm8699@g.rit.edu,ir8643@g.rit.edu,nlt8375@g.rit.edu,dy4385@g.rit.edu
       # PUBLIC_API_URL / PUBLIC_WEB_URL are intentionally NOT set here: they
       # come from .env so the same file that documents the Google OAuth
       # redirect URIs is also what actually controls them. For this compose

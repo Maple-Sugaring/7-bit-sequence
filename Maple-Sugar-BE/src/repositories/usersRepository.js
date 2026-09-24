@@ -131,16 +131,48 @@ export async function updateUser(id, changes) {
   return row ? mapUser(row) : null;
 }
 
-/** Makes the configured bootstrap addresses administrators with no expiry. */
+/** Display names for the class admins. Unknown addresses stay blank until Google fills them. */
+const BOOTSTRAP_NAMES = {
+  'bda9885@g.rit.edu': ['Ben', 'Arbelo'],
+  'nic4340@g.rit.edu': ['Nalin', 'Cooper'],
+  'odg1896@g.rit.edu': ['Oliver', 'Gomes'],
+  'bmm8699@g.rit.edu': ['Brandon', 'Maier'],
+  'ir8643@g.rit.edu': ['Innocenzio', 'Rizzuto'],
+  'nlt8375@g.rit.edu': ['Nolan', 'Trapp'],
+  'dy4385@g.rit.edu': ['Darren', 'Yang'],
+};
+
+/**
+ * Makes the configured bootstrap addresses administrators with no expiry.
+ *
+ * Missing addresses are inserted as pending invites so the first Google
+ * sign-in can link them. Promotion alone would skip anyone not already in
+ * the roster, and invite-first auth would then refuse the login.
+ */
 export async function promoteEmailsToAdmin(emails) {
   if (!emails?.length) return 0;
+  const people = emails.map((email) => ({
+    email,
+    first_name: BOOTSTRAP_NAMES[email]?.[0] ?? '',
+    last_name: BOOTSTRAP_NAMES[email]?.[1] ?? '',
+  }));
   const result = await query(
-    `update users
+    `insert into users (role_id, first_name, last_name, email, is_active, account_expiry, invite_pending)
+     select 1, first_name, last_name, email, true, null, true
+       from jsonb_to_recordset($1::jsonb) as person(email text, first_name text, last_name text)
+     on conflict (email) do update
         set role_id = 1,
             is_active = true,
-            account_expiry = null
-      where lower(email) = any($1::text[])`,
-    [emails],
+            account_expiry = null,
+            first_name = case
+              when excluded.first_name <> '' then excluded.first_name
+              else users.first_name
+            end,
+            last_name = case
+              when excluded.last_name <> '' then excluded.last_name
+              else users.last_name
+            end`,
+    [JSON.stringify(people)],
   );
   return result.rowCount ?? 0;
 }
