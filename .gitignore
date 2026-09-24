@@ -1,5 +1,7 @@
 node_modules
 .vscode
+*.swp
+*.swo
 
 # Google OAuth client secret downloads (e.g. client_secret_*.apps.googleusercontent.com.json)
 client_secret*.json
