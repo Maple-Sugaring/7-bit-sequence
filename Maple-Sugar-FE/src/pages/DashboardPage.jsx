@@ -14,7 +14,6 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { sapToSyrupRatio } from '../business/sugarContent';
 import { fillPercent, gallonsFromWeight, isFull, netWeight } from '../business/yieldMetrics';
-import { ChartCard } from '../components/charts/ChartCard';
 import { SiteForecastChart } from '../components/charts/SeriesChart';
 import { PageHeader } from '../components/common/PageHeader';
 import { dateTime } from '../components/common/format';
