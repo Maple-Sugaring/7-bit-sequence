@@ -11,6 +11,10 @@
 #define TX_OFFSET_MS 0
 #endif
 
+#ifndef FILL_START_STEPS
+#define FILL_START_STEPS 0
+#endif
+
 // Heltec WiFi LoRa 32 V3 pinout (SX1262 + SSD1306).
 static const uint8_t PIN_LORA_NSS = 8;
 static const uint8_t PIN_LORA_SCK = 9;
@@ -173,7 +177,15 @@ void waitWithCountdown(uint32_t durationMs) {
 
 void sendDummyReading() {
   txCount++;
-  const float weight = 8.0f + static_cast<float>(txCount % 9) * 0.5f;
+  // Each packet adds a quarter gallon, so the bucket fills, then empties
+  // (a collection) and fills again. Gross pounds include a 2.5 lb bucket.
+  static const float kSapLbPerGallon = 8.34f;
+  static const float kEmptyBucketLb = 2.5f;
+  static const float kStepGallons = 0.25f;
+  static const int kStepsToFull = 40;  // 40 * 0.25 = 10 gallons
+  const int step = (FILL_START_STEPS + static_cast<int>(txCount)) % (kStepsToFull + 1);
+  const float gallons = kStepGallons * static_cast<float>(step);
+  const float weight = kEmptyBucketLb + gallons * kSapLbPerGallon;
   const int battery = 80 + static_cast<int>(txCount % 16);
 
   char json[160];
@@ -189,7 +201,7 @@ void sendDummyReading() {
   char action[28];
   char detail[28];
   snprintf(action, sizeof(action), "TX sap #%lu", static_cast<unsigned long>(txCount));
-  snprintf(detail, sizeof(detail), "%s %.1flb %d%%", NODE_CODE, weight, battery);
+  snprintf(detail, sizeof(detail), "%s %.1fgal %.0flb", NODE_CODE, gallons, weight);
   announce(action, detail, "On air to gateway...");
 
   digitalWrite(PIN_LED, HIGH);
