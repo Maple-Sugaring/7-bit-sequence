@@ -6,8 +6,9 @@
  * GET /auth/session report "no session" as a 200 with null rather than a 401.
  */
 
+import crypto from 'node:crypto';
 import { config } from '../config.js';
-import { unauthorized, forbidden } from '../lib/ApiError.js';
+import { unauthorized, forbidden, unavailable } from '../lib/ApiError.js';
 import { verifySessionToken } from '../auth/jwt.js';
 import { loadSessionUser } from '../services/authService.js';
 import { can, roleFromId } from '../business/permissions.js';
@@ -74,6 +75,47 @@ export function requireAnyCapability(...capabilities) {
     if (capabilities.some((capability) => can(req.role, capability))) return next();
     next(forbidden('Your role does not allow that.'));
   };
+}
+
+/**
+ * Compares two secrets without leaking the expected value through timing.
+ *
+ * Both sides are hashed first so a shorter guess cannot bail out on length
+ * before the comparison, and so `timingSafeEqual` always sees equal buffers.
+ */
+function secretsMatch(presented, expected) {
+  if (!presented || !expected) return false;
+  const a = crypto.createHash('sha256').update(String(presented)).digest();
+  const b = crypto.createHash('sha256').update(String(expected)).digest();
+  return crypto.timingSafeEqual(a, b);
+}
+
+/** `X-Gateway-Token`, or `Authorization: Bearer` / `Gateway` for a curl from the Pi. */
+function presentedGatewayToken(req) {
+  const dedicated = req.get('x-gateway-token');
+  if (dedicated) return dedicated.trim();
+
+  const header = req.get('authorization') ?? '';
+  if (header.startsWith('Bearer ')) return header.slice(7).trim();
+  if (header.startsWith('Gateway ')) return header.slice(8).trim();
+  return '';
+}
+
+/**
+ * Gate for the Raspberry Pi ingest route.
+ *
+ * A user session is not enough: a signed-in browser must not be able to file
+ * a sensor row that looks like the hardware reported it. The shared token is
+ * the credential, and an unset token closes the route instead of opening it.
+ */
+export function requireGateway(req, res, next) {
+  if (!config.gatewayIngestToken) {
+    return next(unavailable('Sensor ingest is not configured.'));
+  }
+  if (!secretsMatch(presentedGatewayToken(req), config.gatewayIngestToken)) {
+    return next(unauthorized('Gateway token was rejected.'));
+  }
+  next();
 }
 
 /** Lets a user act on their own record while admins act on anyone's. */

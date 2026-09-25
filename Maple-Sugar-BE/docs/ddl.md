@@ -35,7 +35,7 @@ Deleting a user sets `metrics.recorded_by_user_id` and `collection_logs.user_id`
 
 ### `gateway`
 
-`gateway_code` unique, `gateway_name`, `ip_address`, `status`, `last_ping`.
+`gateway_code` unique, `gateway_name`, `ip_address`, `status`, `last_ping`. `POST /ingest` sets `last_ping` and `status` to Online.
 
 Campus gateways: Alumni House Pi, Chabad House Pi, Red Barn Pi.
 
@@ -73,7 +73,7 @@ A sensor or manual reading.
 | `recorded_by_user_id` | Null when the node reported it. Set for a manual reading. |
 | `recorded_at` | |
 | `weight` | Gross pounds, including the bucket. |
-| `temperature` | °F. |
+| `temperature` | °F. Null on a Pi ingest. Air temperature comes from OpenWeather. |
 | `sugar_percent` | Brix. |
 | `weather_conditions` | Short label. |
 | `ice_present` | Frozen sap may weigh more than 10 gallons. |

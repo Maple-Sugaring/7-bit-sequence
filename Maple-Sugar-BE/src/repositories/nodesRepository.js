@@ -1,4 +1,4 @@
-import { queryAll, queryOne } from '../db/pool.js';
+import { query, queryAll, queryOne } from '../db/pool.js';
 import { mapGateway, mapNode } from './mappers.js';
 
 const NODE_COLUMNS = `
@@ -92,6 +92,78 @@ export async function listBoard() {
 export async function findNodeById(id) {
   const row = await queryOne(`select ${NODE_COLUMNS} from node where id = $1`, [id]);
   return row ? mapNode(row) : null;
+}
+
+/** The Pi names itself with gateway_code, not the database id. */
+export async function findGatewayByCode(code) {
+  const row = await queryOne(
+    `select id, gateway_code
+       from gateway
+      where upper(gateway_code) = upper($1)`,
+    [code],
+  );
+  if (!row) return null;
+  return { GatewayID: row.id, Gateway_Code: row.gateway_code };
+}
+
+/**
+ * Resolves the node a sensor reading belongs to.
+ *
+ * Hardware ids win over a guessed database id only by the order the Pi sends:
+ * an explicit NodeID is trusted first, then the node code, then the LoRa id.
+ */
+export async function findNodeForIngest({ NodeID, Node_Code, LoRa_Device_ID }) {
+  if (NodeID != null) return findNodeById(NodeID);
+  if (Node_Code) {
+    const row = await queryOne(`select ${NODE_COLUMNS} from node where node_code = $1`, [Node_Code]);
+    return row ? mapNode(row) : null;
+  }
+  if (LoRa_Device_ID) {
+    const row = await queryOne(
+      `select ${NODE_COLUMNS} from node where lora_device_id = $1`,
+      [LoRa_Device_ID],
+    );
+    return row ? mapNode(row) : null;
+  }
+  return null;
+}
+
+/** The bucket currently hung on a tree, when one is on record. */
+export async function findBucketIdForNode(nodeId) {
+  const row = await queryOne(
+    'select id from buckets where node_id = $1 order by id limit 1',
+    [nodeId],
+  );
+  return row?.id ?? null;
+}
+
+/**
+ * Marks a node heard from. Maintenance stays maintenance; anything else is
+ * online, because a reading just arrived.
+ */
+export async function recordNodeHeartbeat(id, { batteryPercent = null, signalRssi = null } = {}) {
+  await query(
+    `update node
+        set last_seen = CURRENT_TIMESTAMP,
+            battery_level = coalesce($2, battery_level),
+            signal_rssi = coalesce($3, signal_rssi),
+            status_code = case when status_code = 3 then status_code else 1 end
+      where id = $1`,
+    [id, batteryPercent, signalRssi],
+  );
+}
+
+/** A successful push means this Pi is on the network. */
+export async function touchGateway(id, ipAddress) {
+  const ip = ipAddress ? String(ipAddress).slice(0, 45) : null;
+  await query(
+    `update gateway
+        set last_ping = CURRENT_TIMESTAMP,
+            status = 'Online',
+            ip_address = coalesce($2, ip_address)
+      where id = $1`,
+    [id, ip],
+  );
 }
 
 /**
