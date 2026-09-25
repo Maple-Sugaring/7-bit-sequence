@@ -2,81 +2,83 @@
 
 **A field-to-dashboard system for the RIT Maple Sugaring program.** Track sap collection, sensor readings, alerts, and volunteer shifts in one place.
 
-| App | Stack | Purpose |
+| Service | Stack | Purpose |
 | --- | --- | --- |
-| [Frontend](Maple-Sugar-FE/) | React, Vite, Material UI | Dashboards, data entry, schedules, and administration |
-| [Backend](Maple-Sugar-BE/) | Express, PostgreSQL, Redis | API, authentication, persistence, and integrations |
+| `web` | React, Vite, Material UI, nginx | Dashboard and field workflows |
+| `api` | Express | Authentication and application API |
+| `db` | PostgreSQL 17 | Persistent data |
+| `cache` | Redis 7 | Optional read-through cache |
 
-The root [Compose file](docker-compose.yml) runs both apps behind nginx at **<http://localhost:8080>**.
+The root [Compose file](docker-compose.yml) builds and runs the full stack at **<http://localhost:8080>**.
 
-## ✨ Features
+## ✨ What you can do
 
-- **Live field view:** node health, sap weight, temperature, sugar content, and weather.
-- **Collection workflow:** record readings and collection logs, review alerts, and manage shifts.
-- **Role-based access:** Admin, Student, and MSS views, with invited Google accounts.
-- **Data review:** filter readings and export them as CSV.
-- **Mock mode:** explore and develop the UI without a database, API, or Google credentials.
+- Monitor node health, sap weight, temperature, sugar content, and weather.
+- Record sap readings and collection logs, review alerts, and manage volunteer shifts.
+- Filter readings and export CSV files.
+- Control access with invited Google accounts and Admin, Student, and MSS roles.
 
-## 🚀 Get started
+## 🚀 Run the full stack
 
-You need **Node.js 22+** and npm. The full stack also needs Docker Desktop. For a local API, use PostgreSQL; Redis is optional.
+You need Docker Desktop (or Docker Engine with the Compose plugin) and a Google OAuth web client. Run the following commands from the repository root.
 
-### Frontend with mock data
+### 1. Configure the API
 
-```sh
-cd Maple-Sugar-FE
-cp .env.example .env.local
-# In .env.local, set VITE_API_MODE=mock
-npm install
-npm run dev
-```
-
-Open **<http://localhost:5173>**. Mock fixtures live in [`mockTransport.js`](Maple-Sugar-FE/src/data/transports/mockTransport.js).
-
-### Frontend and API locally
-
-1. Create a PostgreSQL database named `maple_sugaring`.
-2. Copy [`Maple-Sugar-BE/.env.example`](Maple-Sugar-BE/.env.example) to `Maple-Sugar-BE/.env`. Set `DATABASE_URL` to your local database, generate `JWT_SECRET` with `openssl rand -base64 48`, and supply a Google OAuth web client ID and secret. Set `PUBLIC_API_URL=http://localhost:5173/api` and `PUBLIC_WEB_URL=http://localhost:5173`.
-3. Register `http://localhost:5173/api/auth/google/callback` and `http://localhost:5173/api/auth/google/calendar/callback` as Google OAuth redirect URIs. Calendar sync also requires the Google Calendar API and `https://www.googleapis.com/auth/calendar.events` scope.
-4. Start the API:
-
-   ```sh
-   cd Maple-Sugar-BE
-   npm install
-   npm run dev
-   ```
-
-5. In another terminal, start the UI:
-
-   ```sh
-   cd Maple-Sugar-FE
-   cp .env.example .env.local
-   # In .env.local, set VITE_API_MODE=http
-   npm install
-   npm run dev
-   ```
-
-The UI runs at **<http://localhost:5173>**; the API runs at **<http://localhost:3000>**. Vite forwards `/api` requests to the API. An admin must invite an account before its first Google sign-in.
-
-### Full stack with Docker
-
-From the repository root, copy `Maple-Sugar-BE/.env.example` to `Maple-Sugar-BE/.env`. Set the Google OAuth credentials and `JWT_SECRET`, then use:
-
-```dotenv
-PUBLIC_API_URL=http://localhost:8080/api
-PUBLIC_WEB_URL=http://localhost:8080
-```
-
-Register the matching `/auth/google/callback` and `/auth/google/calendar/callback` redirect URIs under `http://localhost:8080/api`, then run:
+Copy the [backend environment template](Maple-Sugar-BE/.env.example) to `Maple-Sugar-BE/.env`:
 
 ```sh
-docker compose up --build
+cp Maple-Sugar-BE/.env.example Maple-Sugar-BE/.env
 ```
 
-Open **<http://localhost:8080>**. Compose starts PostgreSQL, Redis, the Express API, and the nginx-served frontend. The web image builds with `VITE_API_MODE=http` and `VITE_API_BASE_URL=/api`.
+Set these values in `Maple-Sugar-BE/.env`:
 
-> [!NOTE]
-> `VITE_*` values are embedded at build time. Rebuild the web image after changing them. Keep real `.env` files and secrets out of Git.
+| Setting | Docker value or action |
+| --- | --- |
+| `JWT_SECRET` | Generate a random secret of at least 32 characters, for example with `openssl rand -base64 48`. |
+| `GOOGLE_CLIENT_ID` | Your Google OAuth web client ID. |
+| `GOOGLE_CLIENT_SECRET` | The matching client secret. |
+| `PUBLIC_API_URL` | `http://localhost:8080/api` |
+| `PUBLIC_WEB_URL` | `http://localhost:8080` |
+
+Use the browser-facing host instead of `localhost` in both URLs if teammates open the site from another machine. Keep the URL and Google OAuth redirect settings in sync.
+
+Register these **authorized redirect URIs** on the Google OAuth client:
+
+```text
+http://localhost:8080/api/auth/google/callback
+http://localhost:8080/api/auth/google/calendar/callback
+```
+
+If you use a different host, replace `localhost` in both URIs. Calendar sync also needs the Google Calendar API and the `https://www.googleapis.com/auth/calendar.events` scope.
+
+> [!IMPORTANT]
+> Keep `Maple-Sugar-BE/.env` out of Git. Compose supplies `NODE_ENV`, `PORT`, `DATABASE_URL`, `REDIS_URL`, and bootstrap admin addresses; you do not need to set them in the env file.
+
+### 2. Build and start
+
+```sh
+docker compose up --build -d
+docker compose ps
+```
+
+Open **<http://localhost:8080>**. On first start, the API applies migrations and seeds data; the web service waits for the API health check. The addresses in `BOOTSTRAP_ADMIN_EMAILS` in [`docker-compose.yml`](docker-compose.yml) are promoted to Admin on API startup. Other accounts must be invited before they can sign in.
+
+### 3. Check the stack
+
+```sh
+docker compose ps
+docker compose logs --tail=100 api web
+```
+
+The public health endpoint is **<http://localhost:8080/api/health>**. PostgreSQL must be healthy; Redis can be unavailable while the API serves data directly from PostgreSQL.
+
+To stop the stack:
+
+```sh
+docker compose down
+```
+
+Compose stores PostgreSQL data in the `postgres_data` volume, which `docker compose down` preserves.
 
 ## 🧭 App routes
 
@@ -93,44 +95,12 @@ Open **<http://localhost:8080>**. Compose starts PostgreSQL, Redis, the Express 
 
 Access depends on role and capability. `/input` redirects to `/collection` for older links.
 
-## 🛠️ Common commands
+## ⚙️ Docker configuration
 
-Run these inside the relevant app directory.
+- The browser calls `/api/...`; nginx forwards those requests to the Express service and removes the `/api` prefix.
+- Compose fixes the frontend build to HTTP API mode and `/api`. No frontend `.env` file is needed for the Docker stack.
+- The backend env template restricts `ALLOWED_EMAIL_DOMAINS` to `g.rit.edu,rit.edu`.
+- `OPENWEATHER_API_KEY` enables live weather when provided. `GATEWAY_INGEST_TOKEN` enables authenticated sensor uploads. Leave either blank if that integration is not part of your test.
+- `SUGARBUSH_LATITUDE`, `SUGARBUSH_LONGITUDE`, and `SESSION_TTL_DAYS` have application defaults; change them only when your deployment needs different values.
 
-| Frontend | Backend |
-| --- | --- |
-| `npm run dev` — Vite server | `npm run dev` — API with watch mode |
-| `npm run build` — production bundle | `npm start` — API without watch mode |
-| `npm run lint` — ESLint | `npm run migrate` — apply migrations |
-| `npm test` — Vitest | `npm test` — Node tests |
-| `npm run preview` — preview bundle | `npm run smoke` — smoke checks |
-
-## 📚 Project map
-
-```text
-Maple-Sugar-FE/src/
-  pages/       Screens and routes
-  components/  Shared UI and charts
-  services/    Page-facing API hooks
-  data/        HTTP and mock transports
-  business/    Domain rules and validation
-
-Maple-Sugar-BE/
-  src/routes/        HTTP handlers
-  src/services/      Application workflows
-  src/repositories/  Database access
-  src/business/      Domain rules
-  src/auth/          Google OAuth and sessions
-  migrations/        Ordered SQL migrations
-  docs/              API, schema, and architecture guides
-```
-
-For more detail, see the [backend documentation](Maple-Sugar-BE/docs/README.md), [API guide](Maple-Sugar-BE/docs/api.md), and [frontend notes](Maple-Sugar-FE/README.md).
-
-## 🔐 Configuration notes
-
-- Browser requests use `/api/...`; Vite and nginx proxy that prefix to Express routes at `/`.
-- Sessions use signed JWT cookies. The browser must send credentials with API requests.
-- Allowed sign-in domains default to `g.rit.edu` and `rit.edu`; accounts must also be invited and active.
-- Redis improves caching, but the API can use PostgreSQL directly when Redis is unavailable.
-- The API health endpoint is `GET /health` on port 3000 locally, or `/api/health` through the frontend proxy.
+For the architecture and API, see the [backend documentation](Maple-Sugar-BE/docs/README.md) and [API guide](Maple-Sugar-BE/docs/api.md).
