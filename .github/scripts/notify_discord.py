@@ -24,8 +24,7 @@ def main():
     payload = {
         "content": (
             f"**Push to `main`** in **{repository}** by **{actor}**\n"
-            f"[`{sha[:7]}`]({base_url}/{repository}/commit/{sha}) · "
-            f"[View changes]({compare_url})"
+            f"[`{sha[:7]}`]({base_url}/{repository}/commit/{sha})"
         ),
         "allowed_mentions": {"parse": []},
     }
