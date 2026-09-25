@@ -82,6 +82,16 @@ void drawScreen() {
   u8g2.sendBuffer();
 }
 
+// USB CDC takes the name Serial on this board. The Pi's CP2102 is on UART0
+// (GPIO43 TX / GPIO44 RX), the same pins esptool uses.
+static HardwareSerial PiUart(0);
+
+void logLine(const char *text) {
+  USBSerial.println(text);
+  PiUart.println(text);
+  PiUart.flush();
+}
+
 void announce(const char *action, const char *detail, const char *extra) {
   strncpy(lineAction, action, sizeof(lineAction) - 1);
   lineAction[sizeof(lineAction) - 1] = '\0';
@@ -89,7 +99,9 @@ void announce(const char *action, const char *detail, const char *extra) {
   lineDetail[sizeof(lineDetail) - 1] = '\0';
   strncpy(lineExtra, extra, sizeof(lineExtra) - 1);
   lineExtra[sizeof(lineExtra) - 1] = '\0';
-  USBSerial.printf("[status] %s | %s | %s\n", lineAction, lineDetail, lineExtra);
+  char line[96];
+  snprintf(line, sizeof(line), "[status] %s | %s | %s", lineAction, lineDetail, lineExtra);
+  logLine(line);
   drawScreen();
 }
 
@@ -120,7 +132,7 @@ bool initRadio() {
       false);
 
   if (state == RADIOLIB_ERR_SPI_CMD_FAILED) {
-    USBSerial.println("[radio] TCXO 1.8V failed, retrying as XTAL (0V)");
+    logLine("[radio] TCXO 1.8V failed, retrying as XTAL (0V)");
     announce("Radio retry", "TCXO failed, try XTAL", "err -707");
     state = radio.begin(
         LORA_FREQ_MHZ,
@@ -198,7 +210,9 @@ void publishReading(const char *payload, int rssi) {
   if (!extractString(payload, "Node_Code", nodeCode, sizeof(nodeCode)) ||
       !extractNumber(payload, "Weight", &weight) ||
       !extractNumber(payload, "Battery_Percent", &battery)) {
-    USBSerial.printf("[rx] bad payload: %s\n", payload);
+    char bad[160];
+    snprintf(bad, sizeof(bad), "[rx] bad payload: %s", payload);
+    logLine(bad);
     announce("RX parse FAIL", "need node/wt/batt", "Pi ignores this line");
     return;
   }
@@ -214,7 +228,7 @@ void publishReading(const char *payload, int rssi) {
       batteryPercent,
       rssi);
 
-  USBSerial.println(line);
+  logLine(line);
   USBSerial.flush();
 
   rxCount++;
@@ -235,6 +249,10 @@ void handlePacket(const char *payload) {
 }
 
 void setup() {
+  PiUart.begin(115200, SERIAL_8N1, 44, 43);
+  USBSerial.begin(115200);
+  USBSerial.setTxTimeoutMs(100);
+
   pinMode(PIN_LED, OUTPUT);
   for (int i = 0; i < 3; i++) {
     digitalWrite(PIN_LED, HIGH);
@@ -248,11 +266,8 @@ void setup() {
   u8g2.setContrast(180);
   announce("Booting...", "OLED is up", "Starting USB + radio");
 
-  USBSerial.begin(115200);
-  // Wait briefly so a JSON line is delivered to the Pi instead of being dropped.
-  USBSerial.setTxTimeoutMs(100);
-  USBSerial.println();
-  USBSerial.println("Maple sap LoRa gateway  Heltec WiFi LoRa 32 V3");
+  logLine("");
+  logLine("Maple sap LoRa gateway  Heltec WiFi LoRa 32 V3");
 
   radioReady = initRadio();
 }
