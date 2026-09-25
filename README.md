@@ -26,10 +26,10 @@ pio device monitor
 
 The OLED and serial port show radio init, each dummy reading, success, or a plain-language error.
 
-Dummy payload (gross pounds, no air temperature):
+Dummy payload (gross pounds). Each packet adds a quarter gallon of sap at 8.34 lb per gallon, on top of a 2.5 lb empty bucket. The bucket fills to 10 gallons (about 85.9 lb), then the next packet is an empty bucket and it fills again. Node 002 starts a few gallons ahead. No air temperature:
 
 ```json
-{"Node_Code":"NODE-001","Weight":9.5,"Battery_Percent":88}
+{"Node_Code":"NODE-001","Weight":35.9,"Battery_Percent":88}
 ```
 
 ## 2. Flash the gateway Heltec
@@ -44,7 +44,7 @@ pio run -e gateway -t upload
 Each good packet prints one JSON line on USB, then a plain-text status line. The Pi posts the JSON line and ignores the status line.
 
 ```json
-{"Node_Code":"NODE-001","Weight":9.5,"Battery_Percent":88,"Signal_Rssi":-74}
+{"Node_Code":"NODE-001","Weight":35.9,"Battery_Percent":88,"Signal_Rssi":-74}
 ```
 
 ## 3. Pi app
