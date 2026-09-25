@@ -7,6 +7,7 @@ import { assessSpoilage, hoursAboveThreshold, riskFromTemperature, SpoilageRisk 
 import { classifyGrade, classifyReading, isFinished, sapToSyrupRatio } from '../src/business/sugarContent';
 import { validateInvite, validateLogin, validateReading, validateSlot } from '../src/business/validation';
 import {
+  BUCKET_CAPACITY_LB,
   fillPercent,
   flowRate,
   isFull,
@@ -91,8 +92,8 @@ describe('spoilage, sugar, and yield', () => {
     expect(netWeight(12, 2)).toBe(10);
     expect(netWeight(1, 2)).toBe(0);
     expect(isTipped(0.4, 2)).toBe(true);
-    expect(isFull(2 + 86, 2)).toBe(true);
-    expect(fillPercent(2 + 43, 2)).toBeCloseTo(50, 5);
+    expect(isFull(2 + BUCKET_CAPACITY_LB, 2)).toBe(true);
+    expect(fillPercent(2 + BUCKET_CAPACITY_LB / 2, 2)).toBeCloseTo(50, 5);
     expect(waterRemovalFraction(2)).toBeCloseTo(1 - 2 / 66.9, 5);
     expect(yieldEfficiency(2)).toBeCloseTo(100 / 43, 5);
     expect(totalCollected([{ Volume_Collected: 1.5 }, { Volume_Collected: null }, {}])).toBe(1.5);

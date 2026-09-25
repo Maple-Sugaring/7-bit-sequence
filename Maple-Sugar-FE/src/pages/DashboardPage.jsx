@@ -8,16 +8,16 @@ import CardActionArea from '@mui/material/CardActionArea';
 import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import Grid from '@mui/material/Grid';
-import LinearProgress from '@mui/material/LinearProgress';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { sapToSyrupRatio } from '../business/sugarContent';
-import { fillPercent, gallonsFromWeight, isFull, netWeight } from '../business/yieldMetrics';
+import { isFull } from '../business/yieldMetrics';
+import { LIVE_FROM, LIVE_NODE_IDS, LIVE_TO, bucketGallons, bucketPercent, recordedSugar } from '../business/liveWeight';
 import { SiteForecastChart } from '../components/charts/SeriesChart';
+import { MeterBar } from '../components/common/MeterBar';
 import { PageHeader } from '../components/common/PageHeader';
 import { dateTime } from '../components/common/format';
-import { useBush, useLiveWeather, useSapCompare } from '../services/hooks';
+import { useBush, useJournal, useLiveWeather, useReadings } from '../services/hooks';
 
 const STATUS = {
   0: { label: 'Offline', color: 'error' },
@@ -26,7 +26,7 @@ const STATUS = {
   3: { label: 'Maintenance', color: 'info' },
 };
 
-function Meter({ label, value, detail, color = 'primary' }) {
+function Meter({ label, value, percent, detail, color }) {
   return (
     <Box sx={{ mt: 1.5 }}>
       <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
@@ -35,12 +35,7 @@ function Meter({ label, value, detail, color = 'primary' }) {
         </Typography>
         <Typography variant="caption">{value}</Typography>
       </Stack>
-      <LinearProgress
-        variant="determinate"
-        value={Math.min(100, Number.parseFloat(value) || 0)}
-        color={color}
-        sx={{ mt: 0.5, height: 8, borderRadius: 4 }}
-      />
+      <MeterBar percent={percent} color={color} />
       <Typography variant="caption" color="text.secondary">
         {detail}
       </Typography>
@@ -52,35 +47,22 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const bush = useBush();
   const live = useLiveWeather();
-  const season = useSapCompare(2024);
+  const readings = useReadings({ from: LIVE_FROM, to: LIVE_TO });
+  const journal = useJournal();
   const weather = live.data?.Sites?.[0] ?? (live.data?.Configured ? live.data : null);
   const totals = useMemo(() => {
-    let gallons = 0;
-    let sugarSum = 0;
-    let sugarCount = 0;
-    for (const node of season.data?.Nodes ?? []) {
-      for (const point of node.Points) {
-        gallons += point.Flow_Gal ?? 0;
-        if (point.Sugar_Percent) {
-          sugarSum += point.Sugar_Percent;
-          sugarCount += 1;
-        }
-      }
-    }
-    const sugar = sugarCount ? sugarSum / sugarCount : null;
-    const ratio = sapToSyrupRatio(sugar);
-    return {
-      gallons,
-      sugar,
-      syrup: ratio ? gallons / ratio : null,
-    };
-  }, [season.data]);
+    const tracked = new Set(LIVE_NODE_IDS);
+    const weights = (readings.data ?? []).filter((row) => tracked.has(row.NodeID) && row.Weight != null);
+    const sugars = recordedSugar([...(readings.data ?? []), ...(journal.data ?? [])]);
+    const sugar = sugars.length ? sugars.reduce((sum, value) => sum + value, 0) / sugars.length : null;
+    return { readings: weights.length, sugar };
+  }, [readings.data, journal.data]);
 
   return (
     <>
       <PageHeader title="The Bush" />
       <Typography color="text.secondary" sx={{ mt: -2, mb: 2, textAlign: 'center' }}>
-        One tap at Alumni House, Chabad House, and the Red Barn.{' '}
+        Alumni House trees 1 and 2, nodes 001 and 002.{' '}
         <Button size="small" onClick={() => navigate('/placement')}>
           Where the gear lives
         </Button>
@@ -117,10 +99,10 @@ export function DashboardPage() {
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ justifyContent: 'space-between' }}>
             <Box>
               <Typography variant="h5" component="h2">
-                2024 sap year
+                2026 weight
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Simple totals. The day-by-day chart is one step deeper.
+                Gallons of sap in each 10 gallon bucket. Sugar is filled in at collection.
               </Typography>
             </Box>
             <Button variant="outlined" onClick={() => navigate('/table')}>
@@ -131,13 +113,13 @@ export function DashboardPage() {
             <Grid size={{ xs: 12, sm: 4 }}>
               <Typography variant="overline">In the buckets now</Typography>
               {(bush.data ?? []).map((node) => {
-                const gallons = gallonsFromWeight(netWeight(node.Weight, node.Tare_Weight ?? 0));
+                const gallons = bucketGallons(node.Weight, node.Tare_Weight ?? 0);
                 const full = isFull(node.Weight, node.Tare_Weight ?? 0);
                 return (
                   <Stack key={node.NodeID} direction="row" sx={{ justifyContent: 'space-between', py: 0.5 }}>
-                    <Typography>{node.Stand}</Typography>
+                    <Typography>{node.Node_Name}</Typography>
                     <Typography fontWeight={700}>
-                      {gallons == null ? '—' : `${gallons.toFixed(1)} gal`}
+                      {gallons == null ? '—' : `${gallons.toFixed(1)} / 10 gal`}
                       {full ? ' · full' : ''}
                     </Typography>
                   </Stack>
@@ -145,19 +127,19 @@ export function DashboardPage() {
               })}
             </Grid>
             <Grid size={{ xs: 6, sm: 4 }}>
-              <Typography variant="overline">Sap run</Typography>
-              <Typography variant="h4">{totals.gallons.toFixed(0)} gal</Typography>
+              <Typography variant="overline">Weight readings</Typography>
+              <Typography variant="h4">{totals.readings}</Typography>
               <Typography variant="body2" color="text.secondary">
-                Modeled across the three taps
+                Nodes 001 and 002 in 2026
               </Typography>
             </Grid>
             <Grid size={{ xs: 6, sm: 4 }}>
               <Typography variant="overline">Estimated syrup</Typography>
-              <Typography variant="h4">{totals.syrup == null ? '—' : `${totals.syrup.toFixed(1)} gal`}</Typography>
+              <Typography variant="h4">—</Typography>
               <Typography variant="body2" color="text.secondary">
                 {totals.sugar == null
-                  ? 'Needs sugar readings'
-                  : `From an average ${totals.sugar.toFixed(1)}% sugar, rule of 86`}
+                  ? 'Needs a student sugar reading'
+                  : `Average ${totals.sugar.toFixed(1)}% from collection`}
               </Typography>
             </Grid>
           </Grid>
@@ -172,8 +154,8 @@ export function DashboardPage() {
       <Grid container spacing={2}>
         {(bush.data ?? []).map((node) => {
           const status = STATUS[node.Status_Code] ?? STATUS[1];
-          const gallons = gallonsFromWeight(netWeight(node.Weight, node.Tare_Weight ?? 0));
-          const fill = fillPercent(node.Weight, node.Tare_Weight ?? 0);
+          const gallons = bucketGallons(node.Weight, node.Tare_Weight ?? 0);
+          const fill = bucketPercent(node.Weight, node.Tare_Weight ?? 0);
           const tip = [
             node.Node_Name,
             `Status ${status.label}`,
@@ -201,15 +183,17 @@ export function DashboardPage() {
                       </Typography>
                       <Meter
                         label="Battery"
-                        value={node.Battery_Percent == null ? '0' : `${Math.round(node.Battery_Percent)}%`}
+                        value={node.Battery_Percent == null ? '—' : `${Math.round(node.Battery_Percent)}%`}
+                        percent={node.Battery_Percent ?? 0}
                         detail={node.Battery_Percent == null ? 'No report' : 'Charge on the node pack'}
-                        color={node.Battery_Percent < 20 ? 'error' : 'success'}
+                        color={node.Battery_Percent < 20 ? '#c62828' : '#2e7d32'}
                       />
                       <Meter
                         label="Bucket"
-                        value={fill == null ? '0' : `${Math.min(100, Math.round(fill))}%`}
-                        detail={gallons == null ? 'Empty or unread' : `${gallons.toFixed(1)} gal of 10`}
-                        color={(fill ?? 0) >= 90 ? 'warning' : 'primary'}
+                        value={gallons == null ? '—' : `${gallons.toFixed(1)} gal`}
+                        percent={fill}
+                        detail={gallons == null ? 'No weight yet' : `${gallons.toFixed(1)} of 10 gal`}
+                        color={(fill ?? 0) >= 90 ? '#ed6c02' : '#F76902'}
                       />
                     </CardContent>
                   </CardActionArea>

@@ -10,6 +10,9 @@
 /** First month (1-based) that belongs to the following year's season. */
 const NEXT_SEASON_FROM_MONTH = 7;
 
+/** Screens ask for this calendar year when a compare year is omitted. */
+export const DEFAULT_COMPARE_YEAR = 2026;
+
 export function seasonOf(date) {
   const value = date instanceof Date ? date : new Date(date);
   if (Number.isNaN(value.getTime())) return null;

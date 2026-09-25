@@ -8,33 +8,29 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import dayjs from 'dayjs';
+import { LIVE_FROM, LIVE_NODE_IDS, LIVE_TO, dailyWeightRows, presetRange } from '../business/liveWeight';
 import { Capability } from '../business/permissions';
 import { ChartCard } from '../components/charts/ChartCard';
-import { OverlayChart } from '../components/charts/SeriesChart';
+import { WeightChart } from '../components/charts/SeriesChart';
 import { PageHeader } from '../components/common/PageHeader';
 import { useAuth } from '../context/auth';
-import { useSapCompare } from '../services/hooks';
+import { useReadings } from '../services/hooks';
 
-const COLORS = ['#F76902', '#009CBD', '#84BD00'];
-
-function exportSeason(nodes, from, to) {
-  const lines = ['date,site,tree,flow_gal,afternoon_high_f,sugar_percent,weight_lb'];
-  for (const node of nodes) {
-    for (const point of node.Points) {
-      if (from && point.Date < from) continue;
-      if (to && point.Date > to) continue;
-      lines.push(
-        [
-          point.Date,
-          node.Stand,
-          `"${node.Node_Name}"`,
-          point.Flow_Gal ?? '',
-          point.Temp_Max_F ?? '',
-          point.Sugar_Percent ?? '',
-          point.Weight_Lb ?? '',
-        ].join(','),
-      );
-    }
+function exportWeights(readings, from, to) {
+  const lines = ['date,node,tree,weight_lb,sugar_percent'];
+  for (const row of readings) {
+    const date = String(row.Recorded_At).slice(0, 10);
+    if (from && date < from) continue;
+    if (to && date > to) continue;
+    lines.push(
+      [
+        date,
+        row.NodeID,
+        `"${row.nodeName ?? ''}"`,
+        row.Weight ?? '',
+        row.Sugar_Percent ?? '',
+      ].join(','),
+    );
   }
   const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
@@ -45,67 +41,102 @@ function exportSeason(nodes, from, to) {
   URL.revokeObjectURL(url);
 }
 
+const PRESETS = [
+  ['today', 'Today'],
+  ['7d', '7 days'],
+  ['30d', '30 days'],
+  ['2026', '2026'],
+];
+
 export function SapDataPage() {
   const { can } = useAuth();
-  const [from, setFrom] = useState(dayjs('2024-02-01'));
-  const [to, setTo] = useState(dayjs('2024-04-15'));
+  const initial = presetRange('7d');
+  const [from, setFrom] = useState(dayjs(initial.from));
+  const [to, setTo] = useState(dayjs(initial.to));
+  const [preset, setPreset] = useState('7d');
+  const [daily, setDaily] = useState(true);
   const [picked, setPicked] = useState([]);
-  const year = from?.year() ?? 2024;
-  const compare = useSapCompare(year);
-  const nodes = compare.data?.Nodes ?? [];
-  const selected = nodes.filter((node) => (picked.length ? picked.includes(node.NodeID) : true));
-
-  const rows = useMemo(() => {
-    const start = from?.format('YYYY-MM-DD');
-    const end = to?.format('YYYY-MM-DD');
-    const byDate = new Map();
-    for (const node of selected) {
-      for (const point of node.Points) {
-        if (start && point.Date < start) continue;
-        if (end && point.Date > end) continue;
-        const row = byDate.get(point.Date) ?? { Date: point.Date };
-        row[`${node.NodeID}-flow`] = point.Flow_Gal;
-        row[`${node.NodeID}-temp`] = point.Temp_Max_F;
-        byDate.set(point.Date, row);
+  const readings = useReadings({ from: LIVE_FROM, to: LIVE_TO });
+  const tracked = useMemo(
+    () => (readings.data ?? []).filter((row) => LIVE_NODE_IDS.includes(row.NodeID)),
+    [readings.data],
+  );
+  const nodes = useMemo(() => {
+    const byId = new Map();
+    for (const row of tracked) {
+      if (!byId.has(row.NodeID)) {
+        byId.set(row.NodeID, { NodeID: row.NodeID, label: row.nodeName ?? `Node ${row.NodeID}` });
       }
     }
-    return [...byDate.values()];
-  }, [selected, from, to]);
-
-  const flowSeries = selected.map((node, index) => ({
-    key: `${node.NodeID}-flow`,
-    name: `${node.Stand} sap`,
-    color: COLORS[index % COLORS.length],
-  }));
-  const tempSeries = selected.map((node, index) => ({
-    key: `${node.NodeID}-temp`,
-    name: `${node.Stand} afternoon high`,
-    color: COLORS[index % COLORS.length],
-  }));
+    return [...byId.values()];
+  }, [tracked]);
+  const selectedIds = picked.length ? picked : nodes.map((node) => node.NodeID);
+  const weights = useMemo(() => {
+    const start = from?.format('YYYY-MM-DD');
+    const end = to?.format('YYYY-MM-DD');
+    const ranged = tracked.filter((row) => {
+      if (selectedIds.length && !selectedIds.includes(row.NodeID)) return false;
+      const date = String(row.Recorded_At).slice(0, 10);
+      if (start && date < start) return false;
+      if (end && date > end) return false;
+      return true;
+    });
+    return {
+      ranged,
+      ...dailyWeightRows(ranged, {
+        nodeIds: selectedIds.length ? selectedIds : LIVE_NODE_IDS,
+        daily,
+      }),
+    };
+  }, [tracked, selectedIds, from, to, daily]);
 
   return (
     <>
       <PageHeader
         title="Sugar Woods"
         actions={
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'center' } }}>
+            {PRESETS.map(([id, label]) => (
+              <Button
+                key={id}
+                size="small"
+                variant={preset === id ? 'contained' : 'outlined'}
+                onClick={() => {
+                  const range = presetRange(id);
+                  setPreset(id);
+                  setFrom(dayjs(range.from));
+                  setTo(dayjs(range.to));
+                }}
+              >
+                {label}
+              </Button>
+            ))}
+            <Button size="small" variant={daily ? 'contained' : 'outlined'} onClick={() => setDaily((value) => !value)}>
+              {daily ? 'Daily' : 'Each reading'}
+            </Button>
             <DatePicker
               label="From"
               value={from}
-              onChange={(value) => setFrom(value)}
+              onChange={(value) => {
+                setPreset('');
+                setFrom(value);
+              }}
               slotProps={{ textField: { size: 'small' } }}
             />
             <DatePicker
               label="To"
               value={to}
               minDate={from ?? undefined}
-              onChange={(value) => setTo(value)}
+              onChange={(value) => {
+                setPreset('');
+                setTo(value);
+              }}
               slotProps={{ textField: { size: 'small' } }}
             />
             {can(Capability.EXPORT_DATA) ? (
               <Button
                 variant="outlined"
-                onClick={() => exportSeason(selected, from?.format('YYYY-MM-DD'), to?.format('YYYY-MM-DD'))}
+                onClick={() => exportWeights(weights.ranged, from?.format('YYYY-MM-DD'), to?.format('YYYY-MM-DD'))}
               >
                 Export CSV
               </Button>
@@ -114,7 +145,7 @@ export function SapDataPage() {
         }
       />
       <Typography color="text.secondary" sx={{ mt: -1, mb: 2, textAlign: 'center' }}>
-        Solid lines are sap flow. Dashed lines are the afternoon high, over the same days.
+        Gallons of sap, from 0 to a full 10 gallon bucket. Daily keeps the last report of each day.
       </Typography>
 
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
@@ -136,19 +167,19 @@ export function SapDataPage() {
                   }
                 />
               }
-              label={node.Stand}
+              label={node.label}
             />
           ))}
         </FormGroup>
         <Box sx={{ flex: 1 }}>
           <ChartCard
-            title="Flow over the afternoon high"
-            description="Pick any stretch of the sap year. All three taps start selected."
+            title="2026 weight"
+            description="Nodes 001 and 002. Both start selected."
             height={420}
-            loading={compare.loading}
-            isEmpty={rows.length === 0}
+            loading={readings.loading}
+            isEmpty={weights.rows.length === 0}
           >
-            <OverlayChart rows={rows} flowSeries={flowSeries} tempSeries={tempSeries} />
+            <WeightChart rows={weights.rows} series={weights.series} />
           </ChartCard>
         </Box>
       </Stack>

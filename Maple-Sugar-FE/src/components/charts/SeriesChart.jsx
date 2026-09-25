@@ -43,6 +43,32 @@ export function DailyTemperatureChart({ rows }) {
   );
 }
 
+export function WeightChart({ rows, series }) {
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <LineChart data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+        <CartesianGrid stroke="#D0D3D4" vertical={false} />
+        <XAxis dataKey="Date" tickFormatter={dateTick} minTickGap={28} tick={{ fontSize: 12 }} />
+        <YAxis width={56} unit=" gal" domain={[0, 10]} tick={{ fontSize: 12 }} />
+        <Tooltip labelFormatter={tipLabel} />
+        <Legend />
+        {series.map((item, index) => (
+          <Line
+            key={item.key}
+            type="monotone"
+            dataKey={item.key}
+            name={item.name}
+            stroke={TREE_COLORS[index % TREE_COLORS.length]}
+            dot={false}
+            strokeWidth={2}
+            connectNulls
+          />
+        ))}
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
 export function DailyFlowChart({ rows }) {
   return (
     <ResponsiveContainer width="100%" height="100%">

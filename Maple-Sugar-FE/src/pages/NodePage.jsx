@@ -7,7 +7,7 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import Grid from '@mui/material/Grid';
-import LinearProgress from '@mui/material/LinearProgress';
+import { MeterBar } from '../components/common/MeterBar';
 import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
@@ -15,19 +15,18 @@ import Typography from '@mui/material/Typography';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import dayjs from 'dayjs';
 import { Capability } from '../business/permissions';
-import { fillPercent, gallonsFromWeight, netWeight } from '../business/yieldMetrics';
+import { LIVE_FROM, LIVE_TO, bucketGallons, bucketPercent, dailyWeightRows } from '../business/liveWeight';
 import { ChartCard } from '../components/charts/ChartCard';
-import { OverlayChart } from '../components/charts/SeriesChart';
+import { WeightChart } from '../components/charts/SeriesChart';
 import { PageHeader } from '../components/common/PageHeader';
 import { dateTime } from '../components/common/format';
 import { useAuth } from '../context/auth';
-import { useBush } from '../services/hooks';
+import { useBush, useReadings } from '../services/hooks';
 import { useAction, useAsync } from '../services/hooks/useAsync';
 import { getUsers } from '../services/adminService';
 import { flagNode } from '../services/alertService';
 import { runNodeAction } from '../services/nodeService';
 import { assignShift, SHIFT_TASKS } from '../services/scheduleService';
-import { getDailySeries } from '../services/weatherService';
 
 const STATUS = {
   0: { label: 'Offline', color: 'error' },
@@ -44,17 +43,17 @@ export function NodePage() {
   const canSchedule = can(Capability.MANAGE_SCHEDULE);
   const people = useAsync(useCallback(() => getUsers(), []), { enabled: canSchedule, initialData: null });
   const node = (bush.data ?? []).find((item) => item.NodeID === Number(nodeId));
-  const [year, setYear] = useState(2024);
   const [notes, setNotes] = useState('');
   const [shift, setShift] = useState(() => {
     const start = dayjs().add(1, 'day').hour(9).minute(0).second(0);
     return { Task: SHIFT_TASKS[0], UserID: '', Starts_At: start, Ends_At: start.add(2, 'hour'), Notes: '' };
   });
 
-  const history = useAsync(
-    useCallback(() => getDailySeries({ year, nodeId: Number(nodeId) }), [year, nodeId]),
-    { enabled: Boolean(nodeId), initialData: { Days: [] } },
-  );
+  const history = useReadings({
+    nodeId: Number(nodeId),
+    from: LIVE_FROM,
+    to: LIVE_TO,
+  });
   const action = useAction(async (name) => {
     await runNodeAction(Number(nodeId), { Action: name, Notes: notes });
     await bush.refresh();
@@ -77,19 +76,15 @@ export function NodePage() {
   });
 
   const status = STATUS[node?.Status_Code] ?? STATUS[1];
-  const gallons = node ? gallonsFromWeight(netWeight(node.Weight, node.Tare_Weight ?? 0)) : null;
-  const fill = node ? fillPercent(node.Weight, node.Tare_Weight ?? 0) : null;
-  const days = (history.data?.Days ?? []).map((day) => ({
-    Date: day.Date,
-    Flow: day.Flow_Gal,
-    Afternoon: day.Temp_Max_F,
-  }));
+  const gallons = node ? bucketGallons(node.Weight, node.Tare_Weight ?? 0) : null;
+  const fill = node ? bucketPercent(node.Weight, node.Tare_Weight ?? 0) : null;
+  const weights = dailyWeightRows(history.data ?? [], { nodeIds: [Number(nodeId)] });
 
   if (!bush.loading && !node) {
     return (
       <>
         <PageHeader title="Tree" />
-        <Alert severity="warning">That tree is not one of the three taps we are watching.</Alert>
+        <Alert severity="warning">That tree is not one of the taps we are watching.</Alert>
         <Button sx={{ mt: 2 }} onClick={() => navigate('/dashboard')}>
           Back to the bush
         </Button>
@@ -113,12 +108,7 @@ export function NodePage() {
             <CardContent>
               <Typography variant="overline">Battery</Typography>
               <Typography variant="h4">{node?.Battery_Percent == null ? '—' : `${Math.round(node.Battery_Percent)}%`}</Typography>
-              <LinearProgress
-                variant="determinate"
-                value={Math.min(100, node?.Battery_Percent ?? 0)}
-                color={node?.Battery_Percent < 20 ? 'error' : 'success'}
-                sx={{ mt: 1, height: 10, borderRadius: 5 }}
-              />
+              <MeterBar percent={node?.Battery_Percent ?? 0} color={node?.Battery_Percent < 20 ? '#c62828' : '#2e7d32'} />
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                 Signal {node?.Signal_Rssi ?? '—'} dBm · last seen {dateTime(node?.Last_Seen)}
               </Typography>
@@ -130,14 +120,9 @@ export function NodePage() {
             <CardContent>
               <Typography variant="overline">Bucket</Typography>
               <Typography variant="h4">{gallons == null ? '—' : `${gallons.toFixed(1)} gal`}</Typography>
-              <LinearProgress
-                variant="determinate"
-                value={Math.min(100, fill ?? 0)}
-                color={(fill ?? 0) >= 90 ? 'warning' : 'primary'}
-                sx={{ mt: 1, height: 10, borderRadius: 5 }}
-              />
+              <MeterBar percent={fill ?? 0} color={(fill ?? 0) >= 90 ? '#ed6c02' : '#F76902'} />
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                {fill == null ? 'No weight yet' : `${Math.round(fill)}% of the 10 gallon liquid line`}
+                {gallons == null ? 'No weight yet' : `${gallons.toFixed(1)} of 10 gal`}
                 {node?.Sugar_Percent != null ? ` · ${node.Sugar_Percent}% sugar` : ''}
                 {node?.Recorded_At ? ` · ${dateTime(node.Recorded_At)}` : ''}
               </Typography>
@@ -148,26 +133,13 @@ export function NodePage() {
 
       <Box sx={{ mb: 2 }}>
         <ChartCard
-          title={`${year} sap and afternoon high`}
-          description="Solid line is gallons per day. Dashed line is the afternoon high, in degrees."
+          title="2026 weight"
+          description="Gallons of sap in the bucket. The scale stops at 10 gallons."
           height={320}
           loading={history.loading}
-          isEmpty={days.length === 0}
-          action={
-            <Stack direction="row" spacing={1}>
-              {[2024, 2023].map((option) => (
-                <Button key={option} size="small" variant={year === option ? 'contained' : 'text'} onClick={() => setYear(option)}>
-                  {option}
-                </Button>
-              ))}
-            </Stack>
-          }
+          isEmpty={weights.rows.length === 0}
         >
-          <OverlayChart
-            rows={days}
-            flowSeries={[{ key: 'Flow', name: 'Sap flow', color: '#F76902' }]}
-            tempSeries={[{ key: 'Afternoon', name: 'Afternoon high', color: '#009CBD' }]}
-          />
+          <WeightChart rows={weights.rows} series={weights.series} />
         </ChartCard>
       </Box>
 
