@@ -2,16 +2,10 @@
 #include <SPI.h>
 #include <RadioLib.h>
 #include <U8g2lib.h>
-
-#ifndef NODE_CODE
-#define NODE_CODE "NODE-001"
-#endif
-
-#ifndef TX_OFFSET_MS
-#define TX_OFFSET_MS 0
-#endif
+#include <math.h>
 
 // Heltec WiFi LoRa 32 V3 pinout (SX1262 + SSD1306).
+// This board stays on the Pi USB port and prints one JSON line per packet.
 static const uint8_t PIN_LORA_NSS = 8;
 static const uint8_t PIN_LORA_SCK = 9;
 static const uint8_t PIN_LORA_MOSI = 10;
@@ -25,7 +19,7 @@ static const uint8_t PIN_OLED_RST = 21;
 static const uint8_t PIN_LED = 35;
 static const uint8_t PIN_VEXT = 36;
 
-// Must match firmware/heltec-v3-gateway (915.125 MHz).
+// Must match firmware/heltec-v3-node (915.125 MHz).
 static const float LORA_FREQ_MHZ = 915.125;
 static const float LORA_BW_KHZ = 125.0;
 static const uint8_t LORA_SF = 9;
@@ -33,18 +27,16 @@ static const uint8_t LORA_CR = 5;  // 4/5
 static const uint8_t LORA_SYNC = 0x12;
 static const int8_t LORA_POWER_DBM = 22;
 static const uint16_t LORA_PREAMBLE = 8;
-
-static const uint32_t TX_INTERVAL_MS = 20000;
+static const uint32_t RX_TIMEOUT_MS = 1000;
 
 SX1262 radio = new Module(PIN_LORA_NSS, PIN_LORA_DIO1, PIN_LORA_RST, PIN_LORA_BUSY);
 U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, PIN_OLED_SCL, PIN_OLED_SDA, PIN_OLED_RST);
 
 char lineAction[28] = "Booting...";
 char lineDetail[28] = "";
-char lineExtra[28] = "Do not TX without antenna";
-uint32_t txCount = 0;
+char lineExtra[28] = "USB serial to the Pi";
+uint32_t rxCount = 0;
 bool radioReady = false;
-bool offsetDone = (TX_OFFSET_MS == 0);
 
 const char *radioLibMeaning(int16_t code) {
   switch (code) {
@@ -56,8 +48,10 @@ const char *radioLibMeaning(int16_t code) {
       return "SX1262 not found (SPI/wiring)";
     case RADIOLIB_ERR_PACKET_TOO_LONG:
       return "packet too long";
-    case RADIOLIB_ERR_TX_TIMEOUT:
-      return "TX timed out";
+    case RADIOLIB_ERR_RX_TIMEOUT:
+      return "RX timed out";
+    case RADIOLIB_ERR_CRC_MISMATCH:
+      return "CRC mismatch";
     case RADIOLIB_ERR_SPI_CMD_TIMEOUT:
       return "SPI timeout (BUSY pin?)";
     case RADIOLIB_ERR_SPI_CMD_FAILED:
@@ -80,7 +74,7 @@ const char *radioLibMeaning(int16_t code) {
 void drawScreen() {
   u8g2.clearBuffer();
   u8g2.setFont(u8g2_font_6x12_tf);
-  u8g2.drawStr(0, 10, "MAPLE SAP NODE");
+  u8g2.drawStr(0, 10, "MAPLE SAP GATEWAY");
   u8g2.drawHLine(0, 12, 128);
   u8g2.drawStr(0, 26, lineAction);
   u8g2.drawStr(0, 40, lineDetail);
@@ -111,7 +105,7 @@ void powerOled(bool on) {
 }
 
 bool initRadio() {
-  announce("Booting radio...", "SPI SX1262 @ 915.1", NODE_CODE);
+  announce("Booting radio...", "SPI SX1262 @ 915.1", "Antenna must be fitted");
   SPI.begin(PIN_LORA_SCK, PIN_LORA_MISO, PIN_LORA_MOSI, PIN_LORA_NSS);
 
   int16_t state = radio.begin(
@@ -151,62 +145,93 @@ bool initRadio() {
   radio.setCRC(true);
 
   char extra[28];
-  snprintf(extra, sizeof(extra), "SF%d BW125  %s", LORA_SF, NODE_CODE);
-  announce("Radio ready 915.1", extra, "Dummy weight to gateway");
+  snprintf(extra, sizeof(extra), "SF%d BW125 listen", LORA_SF);
+  announce("Radio ready 915.1", extra, "Waiting for nodes");
   return true;
 }
 
-void waitWithCountdown(uint32_t durationMs) {
-  const uint32_t started = millis();
-  while (millis() - started < durationMs) {
-    const uint32_t remaining = (durationMs - (millis() - started) + 999) / 1000;
-    char extra[28];
-    snprintf(extra, sizeof(extra), "Next TX in %lus", static_cast<unsigned long>(remaining));
-    if (strcmp(lineExtra, extra) != 0) {
-      strncpy(lineExtra, extra, sizeof(lineExtra) - 1);
-      lineExtra[sizeof(lineExtra) - 1] = '\0';
-      drawScreen();
-    }
-    delay(250);
+bool extractString(const char *json, const char *key, char *out, size_t outLen) {
+  char pattern[40];
+  snprintf(pattern, sizeof(pattern), "\"%s\":\"", key);
+  const char *start = strstr(json, pattern);
+  if (start == nullptr) {
+    return false;
   }
+  start += strlen(pattern);
+  const char *end = strchr(start, '"');
+  if (end == nullptr) {
+    return false;
+  }
+  const size_t length = static_cast<size_t>(end - start);
+  if (length == 0 || length >= outLen) {
+    return false;
+  }
+  memcpy(out, start, length);
+  out[length] = '\0';
+  return true;
 }
 
-void sendDummyReading() {
-  txCount++;
-  const float weight = 8.0f + static_cast<float>(txCount % 9) * 0.5f;
-  const int battery = 80 + static_cast<int>(txCount % 16);
+bool extractNumber(const char *json, const char *key, float *out) {
+  char pattern[40];
+  snprintf(pattern, sizeof(pattern), "\"%s\":", key);
+  const char *start = strstr(json, pattern);
+  if (start == nullptr) {
+    return false;
+  }
+  start += strlen(pattern);
+  while (*start == ' ') {
+    start++;
+  }
+  char *end = nullptr;
+  const float value = strtof(start, &end);
+  if (end == start) {
+    return false;
+  }
+  *out = value;
+  return true;
+}
 
-  char json[160];
-  snprintf(
-      json,
-      sizeof(json),
-      "{\"Node_Code\":\"%s\",\"Weight\":%.1f,\"Battery_Percent\":%d}",
-      NODE_CODE,
-      weight,
-      battery);
-
-  const size_t jsonLen = strlen(json);
-  char action[28];
-  char detail[28];
-  snprintf(action, sizeof(action), "TX sap #%lu", static_cast<unsigned long>(txCount));
-  snprintf(detail, sizeof(detail), "%s %.1flb %d%%", NODE_CODE, weight, battery);
-  announce(action, detail, "On air to gateway...");
-
-  digitalWrite(PIN_LED, HIGH);
-  const int16_t state = radio.transmit(reinterpret_cast<uint8_t *>(json), jsonLen);
-  digitalWrite(PIN_LED, LOW);
-
-  if (state == RADIOLIB_ERR_NONE) {
-    snprintf(action, sizeof(action), "Sent OK %.1flb %d%%", weight, battery);
-    snprintf(detail, sizeof(detail), "%u bytes  sap #%lu", static_cast<unsigned>(jsonLen),
-             static_cast<unsigned long>(txCount));
-    announce(action, detail, "Next TX in 20s");
-    USBSerial.printf("[tx] %s\n", json);
+void publishReading(const char *payload, int rssi) {
+  char nodeCode[16];
+  float weight = 0.0f;
+  float battery = 0.0f;
+  if (!extractString(payload, "Node_Code", nodeCode, sizeof(nodeCode)) ||
+      !extractNumber(payload, "Weight", &weight) ||
+      !extractNumber(payload, "Battery_Percent", &battery)) {
+    USBSerial.printf("[rx] bad payload: %s\n", payload);
+    announce("RX parse FAIL", "need node/wt/batt", "Pi ignores this line");
     return;
   }
 
-  snprintf(action, sizeof(action), "TX FAIL err %d", state);
-  announce(action, radioLibMeaning(state), "Check antenna / radio");
+  const int batteryPercent = static_cast<int>(lroundf(battery));
+  char line[180];
+  snprintf(
+      line,
+      sizeof(line),
+      "{\"Node_Code\":\"%s\",\"Weight\":%.1f,\"Battery_Percent\":%d,\"Signal_Rssi\":%d}",
+      nodeCode,
+      weight,
+      batteryPercent,
+      rssi);
+
+  USBSerial.println(line);
+  USBSerial.flush();
+
+  rxCount++;
+  char action[28];
+  char detail[28];
+  char extra[28];
+  snprintf(action, sizeof(action), "RX #%lu", static_cast<unsigned long>(rxCount));
+  snprintf(detail, sizeof(detail), "%s %.1flb %d%%", nodeCode, weight, batteryPercent);
+  snprintf(extra, sizeof(extra), "RSSI %d dBm", rssi);
+  announce(action, detail, extra);
+}
+
+void handlePacket(const char *payload) {
+  const int rssi = static_cast<int>(lroundf(radio.getRSSI()));
+  digitalWrite(PIN_LED, HIGH);
+  publishReading(payload, rssi);
+  digitalWrite(PIN_LED, LOW);
 }
 
 void setup() {
@@ -221,12 +246,13 @@ void setup() {
   powerOled(true);
   u8g2.begin();
   u8g2.setContrast(180);
-  announce("Booting...", NODE_CODE, "Starting USB + radio");
+  announce("Booting...", "OLED is up", "Starting USB + radio");
 
   USBSerial.begin(115200);
-  USBSerial.setTxTimeoutMs(0);
+  // Wait briefly so a JSON line is delivered to the Pi instead of being dropped.
+  USBSerial.setTxTimeoutMs(100);
   USBSerial.println();
-  USBSerial.printf("Maple sap LoRa node  %s  Heltec WiFi LoRa 32 V3\n", NODE_CODE);
+  USBSerial.println("Maple sap LoRa gateway  Heltec WiFi LoRa 32 V3");
 
   radioReady = initRadio();
 }
@@ -238,14 +264,24 @@ void loop() {
     return;
   }
 
-  if (!offsetDone) {
+  String payload;
+  const int16_t state = radio.receive(payload, 0, RX_TIMEOUT_MS);
+  if (state == RADIOLIB_ERR_RX_TIMEOUT) {
+    if (strcmp(lineExtra, "Waiting for nodes") != 0 && rxCount == 0) {
+      announce("Listening 915.1", "SF9 BW125", "Waiting for nodes");
+    }
+    return;
+  }
+  if (state == RADIOLIB_ERR_CRC_MISMATCH) {
+    announce("RX CRC FAIL", "packet dropped", radioLibMeaning(state));
+    return;
+  }
+  if (state != RADIOLIB_ERR_NONE) {
     char detail[28];
-    snprintf(detail, sizeof(detail), "%s offset", NODE_CODE);
-    announce("Holding TX", detail, "Next TX in 10s");
-    waitWithCountdown(TX_OFFSET_MS);
-    offsetDone = true;
+    snprintf(detail, sizeof(detail), "err %d", state);
+    announce("RX FAIL", detail, radioLibMeaning(state));
+    return;
   }
 
-  sendDummyReading();
-  waitWithCountdown(TX_INTERVAL_MS);
+  handlePacket(payload.c_str());
 }

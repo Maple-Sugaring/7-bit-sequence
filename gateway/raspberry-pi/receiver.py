@@ -1,4 +1,4 @@
-"""Receive dummy sap packets from the Heltec node and optionally POST them."""
+"""Read gateway Heltec USB lines and optionally POST them to /ingest."""
 
 from __future__ import annotations
 
@@ -11,11 +11,11 @@ from datetime import datetime, timezone
 from typing import Any
 
 import requests
-
-from sx126x import Sx126x
+import serial
 
 
 HISTORY_LIMIT = 20
+POST_ATTEMPTS = 3
 
 
 def load_env(path: str = ".env") -> None:
@@ -37,96 +37,117 @@ def env_bool(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def parse_packet(raw: bytes, start_freq: int, rssi_enabled: bool) -> dict[str, Any]:
-    """Strip the Waveshare 3-byte header and optional trailing RSSI byte."""
-    packet: dict[str, Any] = {
-        "received_at": datetime.now(timezone.utc).isoformat(),
-        "raw_hex": raw.hex(" "),
-        "raw_text": "",
-        "rssi_dbm": None,
-        "src_addr": None,
-        "channel_mhz": None,
-        "payload": None,
-        "parse_error": None,
-        "forward": {"status": "skipped", "detail": "radio only"},
-    }
+def utc_millis(moment: datetime | None = None) -> str:
+    moment = moment or datetime.now(timezone.utc)
+    millis = moment.microsecond // 1000
+    return moment.strftime("%Y-%m-%dT%H:%M:%S.") + f"{millis:03d}Z"
 
-    if len(raw) < 4:
-        packet["parse_error"] = f"short frame ({len(raw)} bytes)"
-        packet["raw_text"] = raw.decode("utf-8", errors="replace")
-        return packet
 
-    packet["src_addr"] = (raw[0] << 8) + raw[1]
-    packet["channel_mhz"] = raw[2] + start_freq + 0.125
-
-    body = raw[3:]
-
-    def as_text(blob: bytes) -> str:
-        return blob.decode("utf-8", errors="replace").strip("\x00").strip()
-
-    text = as_text(body)
-    parsed = None
-    json_error = None
-    try:
-        parsed = json.loads(text)
-    except json.JSONDecodeError as exc:
-        json_error = exc.msg
-        # Waveshare can append an RSSI byte; Heltec does not. Try both.
-        if rssi_enabled and len(body) >= 2:
-            try:
-                parsed = json.loads(as_text(body[:-1]))
-                packet["rssi_dbm"] = body[-1] - 256
-                text = as_text(body[:-1])
-                json_error = None
-            except json.JSONDecodeError:
-                pass
-
-    packet["raw_text"] = text
-    if parsed is None:
-        packet["parse_error"] = f"JSON: {json_error}" if json_error else "JSON parse failed"
-        return packet
-
+def parse_reading(text: str) -> dict[str, Any]:
+    """Accept one gateway JSON object. Non-objects and bad fields raise."""
+    parsed = json.loads(text)
     if not isinstance(parsed, dict):
-        packet["parse_error"] = "JSON was not an object"
-        return packet
+        raise ValueError("JSON was not an object")
 
-    packet["payload"] = parsed
-    return packet
+    node = parsed.get("Node_Code")
+    weight = parsed.get("Weight")
+    if not isinstance(node, str) or not node.strip():
+        raise ValueError("missing Node_Code")
+    if isinstance(weight, bool) or not isinstance(weight, (int, float)):
+        raise ValueError("missing Weight")
 
-
-def forward_reading(packet: dict[str, Any], api_url: str, token: str) -> None:
-    payload = packet.get("payload") or {}
-    body = {
-        "NodeID": payload.get("NodeID"),
-        "Weight": payload.get("Weight"),
-        "Temperature": payload.get("Temperature"),
-        "Sugar_Percent": payload.get("Sugar_Percent"),
-        "Weather_Conditions": payload.get("Weather_Conditions", "LoRa dummy"),
-        "Recorded_At": packet["received_at"],
+    reading: dict[str, Any] = {
+        "Node_Code": node.strip(),
+        "Weight": float(weight),
     }
+
+    if parsed.get("Battery_Percent") is not None:
+        battery = parsed["Battery_Percent"]
+        if isinstance(battery, bool) or not isinstance(battery, (int, float)):
+            raise ValueError("Battery_Percent is not a number")
+        reading["Battery_Percent"] = int(battery)
+
+    if parsed.get("Signal_Rssi") is not None:
+        rssi = parsed["Signal_Rssi"]
+        if isinstance(rssi, bool) or not isinstance(rssi, (int, float)):
+            raise ValueError("Signal_Rssi is not a number")
+        reading["Signal_Rssi"] = int(rssi)
+
+    return reading
+
+
+def build_ingest_body(
+    reading: dict[str, Any],
+    gateway_code: str,
+    recorded_at: str,
+) -> dict[str, Any]:
+    item: dict[str, Any] = {
+        "Node_Code": reading["Node_Code"],
+        "Recorded_At": recorded_at,
+        "Weight": reading["Weight"],
+    }
+    if "Battery_Percent" in reading:
+        item["Battery_Percent"] = reading["Battery_Percent"]
+    if "Signal_Rssi" in reading:
+        item["Signal_Rssi"] = reading["Signal_Rssi"]
+    return {"Gateway_Code": gateway_code, "Readings": [item]}
+
+
+def post_ingest(body: dict[str, Any], api_url: str, token: str) -> requests.Response:
+    """POST the same body on a dropped connection so the timestamp stays put."""
+    last_error: requests.RequestException | None = None
+    for attempt in range(POST_ATTEMPTS):
+        try:
+            return requests.post(
+                api_url,
+                json=body,
+                headers={
+                    "X-Gateway-Token": token,
+                    "Content-Type": "application/json",
+                },
+                timeout=12,
+            )
+        except requests.RequestException as exc:
+            last_error = exc
+            if attempt + 1 < POST_ATTEMPTS:
+                time.sleep(1)
+    assert last_error is not None
+    raise last_error
+
+
+def forward_status(response: requests.Response) -> dict[str, str]:
+    snippet = (response.text or "")[:180]
+    if response.status_code == 201:
+        return {"status": "201", "detail": "saved on maple server"}
+    if response.status_code == 200:
+        detail = "duplicate reading" if "Duplicate" in (response.text or "") else "accepted"
+        return {"status": "200", "detail": detail}
+    if response.status_code == 401:
+        return {"status": "401", "detail": "gateway token rejected"}
+    if response.status_code == 422:
+        return {"status": "422", "detail": snippet or "reading rejected"}
+    if response.status_code == 503:
+        return {
+            "status": "503",
+            "detail": "server has no GATEWAY_INGEST_TOKEN",
+        }
+    return {"status": str(response.status_code), "detail": snippet or response.reason}
+
+
+def forward_reading(
+    packet: dict[str, Any],
+    api_url: str,
+    token: str,
+    gateway_code: str,
+) -> None:
+    reading = packet.get("reading")
+    if not reading:
+        return
+    body = build_ingest_body(reading, gateway_code, packet["received_at"])
+    packet["ingest"] = body
     try:
-        response = requests.post(
-            api_url,
-            json=body,
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json",
-            },
-            timeout=12,
-        )
-        snippet = (response.text or "")[:180]
-        if response.status_code == 201:
-            packet["forward"] = {"status": "201", "detail": "saved on maple server"}
-        elif response.status_code == 401:
-            packet["forward"] = {
-                "status": "401",
-                "detail": "JWT rejected — paste a fresh session token",
-            }
-        else:
-            packet["forward"] = {
-                "status": str(response.status_code),
-                "detail": snippet or response.reason,
-            }
+        response = post_ingest(body, api_url, token)
+        packet["forward"] = forward_status(response)
     except requests.RequestException as exc:
         packet["forward"] = {"status": "error", "detail": str(exc)}
 
@@ -136,9 +157,9 @@ class PacketStore:
         self._lock = threading.Lock()
         self.packets: deque[dict[str, Any]] = deque(maxlen=HISTORY_LIMIT)
         self.rx_count = 0
-        self.started_at = datetime.now(timezone.utc).isoformat()
+        self.started_at = utc_millis()
         self.radio_status = "starting"
-        self.radio_detail = "Opening LoRa HAT UART"
+        self.radio_detail = "Opening gateway USB serial"
         self.last_error: str | None = None
 
     def set_radio(self, status: str, detail: str) -> None:
@@ -152,7 +173,7 @@ class PacketStore:
             packet["seq"] = self.rx_count
             self.packets.appendleft(packet)
             self.radio_status = "up"
-            self.radio_detail = "Receiving dummy sap packets"
+            self.radio_detail = "Receiving gateway USB lines"
             self.last_error = packet.get("parse_error")
 
     def snapshot(self) -> dict[str, Any]:
@@ -171,61 +192,82 @@ class PacketStore:
             }
 
 
+def line_packet(text: str) -> dict[str, Any] | None:
+    """Return a packet for a JSON line. Plain-text logs are ignored."""
+    if not text.startswith("{"):
+        return None
+
+    packet: dict[str, Any] = {
+        "received_at": utc_millis(),
+        "raw_text": text,
+        "rssi_dbm": None,
+        "reading": None,
+        "payload": None,
+        "parse_error": None,
+        "forward": {"status": "skipped", "detail": "serial only"},
+    }
+    try:
+        reading = parse_reading(text)
+    except (json.JSONDecodeError, ValueError) as exc:
+        packet["parse_error"] = str(exc)
+        return packet
+
+    packet["reading"] = reading
+    packet["payload"] = reading
+    packet["rssi_dbm"] = reading.get("Signal_Rssi")
+    return packet
+
+
 def run_receiver(store: PacketStore) -> None:
-    serial_dev = os.getenv("LORA_SERIAL", "/dev/serial0")
-    freq = int(os.getenv("LORA_FREQ", "915"))
-    air_speed = int(os.getenv("LORA_AIR_SPEED", "9600"))
-    rssi = env_bool("LORA_RSSI", True)
+    serial_dev = os.getenv("GATEWAY_SERIAL", "/dev/ttyACM0")
+    baud = int(os.getenv("GATEWAY_BAUD", "115200"))
     forward = env_bool("FORWARD_TO_SERVER", False)
+    gateway_code = os.getenv("GATEWAY_CODE", "GW-ALUMNI").strip() or "GW-ALUMNI"
     api_url = os.getenv(
         "MAPLE_API_URL",
-        "https://maplesugaring01.webdev.gccis.rit.edu/api/metrics",
+        "https://maplesugaring01.webdev.gccis.rit.edu/api/ingest",
     )
-    token = os.getenv("MAPLE_BEARER_TOKEN", "").strip()
+    token = os.getenv("GATEWAY_INGEST_TOKEN", "").strip()
 
     try:
-        store.set_radio("configuring", f"Opening {serial_dev} @ 9600")
-        radio = Sx126x(
-            serial_num=serial_dev,
-            freq=freq,
-            addr=0,
-            power=22,
-            rssi=rssi,
-            air_speed=air_speed,
-        )
-        store.set_radio(
-            "waiting",
-            f"Listening {freq}.125 MHz — waiting for Heltec packets",
-        )
+        store.set_radio("configuring", f"Opening {serial_dev} @ {baud}")
+        port = serial.Serial(serial_dev, baud, timeout=1)
+        store.set_radio("waiting", f"Listening on {serial_dev} for gateway JSON lines")
     except Exception as exc:
         store.set_radio("error", str(exc))
         return
 
     try:
         while True:
-            raw = radio.receive_bytes()
+            try:
+                raw = port.readline()
+            except serial.SerialException as exc:
+                store.set_radio("error", str(exc))
+                return
             if not raw:
-                time.sleep(0.05)
                 continue
-            packet = parse_packet(raw, radio.start_freq, rssi)
-            if forward and packet.get("payload") and token:
-                forward_reading(packet, api_url, token)
-            elif forward and not token:
+            text = raw.decode("utf-8", errors="replace").strip()
+            packet = line_packet(text)
+            if packet is None:
+                continue
+            if forward and packet.get("reading") and token:
+                forward_reading(packet, api_url, token, gateway_code)
+            elif forward and packet.get("reading") and not token:
                 packet["forward"] = {
                     "status": "skipped",
-                    "detail": "FORWARD_TO_SERVER=1 but MAPLE_BEARER_TOKEN is empty",
+                    "detail": "FORWARD_TO_SERVER=1 but GATEWAY_INGEST_TOKEN is empty",
                 }
-            elif not forward:
+            elif packet.get("reading") and not forward:
                 packet["forward"] = {
                     "status": "skipped",
-                    "detail": "local dummy app only (FORWARD_TO_SERVER=0)",
+                    "detail": "local app only (FORWARD_TO_SERVER=0)",
                 }
             store.add(packet)
             print(
                 f"[rx #{store.rx_count}] rssi={packet['rssi_dbm']} "
-                f"err={packet['parse_error']} payload={packet['payload']} "
+                f"err={packet['parse_error']} reading={packet['reading']} "
                 f"fwd={packet['forward']['status']}",
                 flush=True,
             )
     finally:
-        radio.close()
+        port.close()

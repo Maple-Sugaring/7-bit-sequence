@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Maple LoRa link test</title>
+    <title>Maple gateway link test</title>
     <style>
       :root {
         --bg: #1c1410;
@@ -71,23 +71,23 @@
   </head>
   <body>
     <header>
-      <h1>Maple LoRa link test</h1>
-      <p>Heltec ESP32 → Raspberry Pi SX1262. This page is local to the Pi and does not need the maple server.</p>
+      <h1>Maple gateway link test</h1>
+      <p>Two Heltec nodes → gateway Heltec → this Pi over USB. This page is local and does not need the maple server.</p>
     </header>
     <main>
       <section id="banner" class="banner wait">
         <h2 id="banner-title">Waiting for packets</h2>
-        <p id="banner-detail">Opening the LoRa hat…</p>
+        <p id="banner-detail">Opening the gateway USB port…</p>
       </section>
       <section class="grid">
         <div class="card"><span>Packets received</span><strong id="rx-count">0</strong></div>
         <div class="card"><span>Seconds since last RX</span><strong id="age">—</strong></div>
         <div class="card"><span>Last RSSI</span><strong id="rssi">—</strong></div>
-        <div class="card"><span>Server forward</span><strong id="forward">skipped</strong></div>
+        <div class="card"><span>Ingest POST</span><strong id="forward">skipped</strong></div>
       </section>
       <section class="card" style="margin-bottom: 1.25rem">
         <span>Last sap reading</span>
-        <p id="last-reading" class="empty">Nothing yet. Watch the Heltec OLED for “Sent OK”.</p>
+        <p id="last-reading" class="empty">Nothing yet. Watch a node OLED for “Sent OK” and the gateway for “RX”.</p>
       </section>
       <section>
         <h2>Recent packets</h2>
@@ -111,7 +111,7 @@
         let title = "Waiting for packets";
         if (data.radio_status === "error") {
           kind = "error";
-          title = "Radio error";
+          title = "Serial error";
         } else if (data.rx_count > 0 && age !== null && age < 45) {
           kind = "up";
           title = "Link up";
@@ -130,7 +130,7 @@
         const reading = document.getElementById("last-reading");
         if (!last) {
           reading.className = "empty";
-          reading.textContent = "Nothing yet. Watch the Heltec OLED for “Sent OK”.";
+          reading.textContent = "Nothing yet. Watch a node OLED for “Sent OK” and the gateway for “RX”.";
         } else if (last.parse_error) {
           reading.className = "";
           reading.textContent = "Parse issue: " + last.parse_error + "  raw: " + last.raw_text;
@@ -138,11 +138,10 @@
           const p = last.payload;
           reading.className = "";
           reading.textContent =
-            "Node " + p.NodeID +
-            "   " + p.Weight + " lb   " +
-            p.Temperature + " °F   " +
-            p.Sugar_Percent + "% sugar   " +
-            (p.Weather_Conditions || "");
+            p.Node_Code +
+            "   " + p.Weight + " lb   battery " +
+            (p.Battery_Percent ?? "—") + "%   RSSI " +
+            (p.Signal_Rssi ?? "—") + " dBm";
         }
 
         if (!data.packets.length) return;
@@ -153,10 +152,9 @@
           return `<tr>
             <td>${pkt.seq}</td>
             <td>${pkt.received_at.replace("T", " ").replace("Z", " UTC")}</td>
-            <td>${p.NodeID ?? "—"}</td>
+            <td>${p.Node_Code ?? "—"}</td>
             <td>${p.Weight ?? "—"}</td>
-            <td>${p.Temperature ?? "—"}</td>
-            <td>${p.Sugar_Percent ?? "—"}</td>
+            <td>${p.Battery_Percent ?? "—"}</td>
             <td>${pkt.rssi_dbm ?? "—"}</td>
             <td><span class="pill ${pillClass}">${pill}</span></td>
             <td><span class="pill">${pkt.forward.status}</span></td>
@@ -167,7 +165,7 @@
             <thead>
               <tr>
                 <th>#</th><th>Received</th><th>Node</th><th>lb</th>
-                <th>°F</th><th>%</th><th>RSSI</th><th>Parse</th><th>POST</th>
+                <th>Battery</th><th>RSSI</th><th>Parse</th><th>POST</th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>

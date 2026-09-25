@@ -1,31 +1,14 @@
-# Raspberry Pi LoRa gateway (dummy app)
+# Raspberry Pi gateway (USB serial)
 
-Copy this folder onto the Ubuntu Pi. One process listens on the SX1262 hat and serves a local page so you can see Heltec packets without the maple server.
+Copy this folder onto the Pi. One process reads JSON lines from the gateway Heltec on USB and serves a local page. It does not use the SX1262 hat.
 
-## Hat jumpers
-
-- Upper UART jumpers on **B** (Pi controls the module).
-- **M0** and **M1** jumpered to GND for normal RX/TX after boot (the script also drives BCM 22 / 27).
-- SMA antenna attached.
-
-## Ubuntu Server serial
-
-Ubuntu does not ship `raspi-config` by default. Enable UART, disable the serial console:
-
-```bash
-sudo sed -i 's/console=serial0,115200 //' /boot/firmware/cmdline.txt
-echo 'enable_uart=1' | sudo tee -a /boot/firmware/config.txt
-sudo reboot
-ls -l /dev/serial0 /dev/ttyS0 /dev/ttyAMA0
-```
-
-If `/dev/serial0` is missing, set `LORA_SERIAL` in `.env` to whichever tty the listing shows.
+The gateway Heltec stays plugged into a USB port. On the Pi it shows up as `/dev/ttyACM0`.
 
 ## Run
 
 ```bash
 sudo apt update
-sudo apt install -y python3-pip python3-venv python3-rpi.gpio
+sudo apt install -y python3-pip python3-venv
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -33,17 +16,43 @@ cp config.example.env .env
 python3 app.py
 ```
 
+If opening the port fails with a permission error, add the user to `dialout` and sign in again:
+
+```bash
+sudo usermod -aG dialout "$USER"
+ls -l /dev/ttyACM0
+```
+
+If the board is not `/dev/ttyACM0`, set `GATEWAY_SERIAL` in `.env` to the tty from that listing.
+
 Open `http://<pi-ip>:8080` on a laptop on the same network.
 
-The banner should move from **Waiting for packets** to **Link up** about every 20 seconds once the Heltec OLED shows `Sent OK`.
+The banner should move from **Waiting for packets** to **Link up** once a node OLED shows `Sent OK` and the gateway OLED shows `RX`. With both nodes powered, lines arrive about every 10 seconds.
 
-## Optional maple server POST
+## Ingest POST
 
-After the dummy app shows packets:
+After the page shows both `NODE-001` and `NODE-002`:
 
-1. Sign in to the maple site, copy your session JWT.
-2. Put it in `.env` as `MAPLE_BEARER_TOKEN`.
-3. Set `FORWARD_TO_SERVER=1`.
+1. Put the server ingest secret in `.env` as `GATEWAY_INGEST_TOKEN`. Do not commit that file.
+2. Set `FORWARD_TO_SERVER=1`.
+3. Leave `GATEWAY_CODE=GW-ALUMNI` unless these nodes were registered on another Pi.
 4. Restart `python3 app.py`.
 
-A 401 on the dashboard means the JWT expired. Radio status is independent of that.
+Each line is posted once as:
+
+```json
+{
+  "Gateway_Code": "GW-ALUMNI",
+  "Readings": [
+    {
+      "Node_Code": "NODE-001",
+      "Recorded_At": "2026-03-02T14:00:00.000Z",
+      "Weight": 9.5,
+      "Battery_Percent": 88,
+      "Signal_Rssi": -74
+    }
+  ]
+}
+```
+
+`Recorded_At` is set on the Pi. A dropped connection retries that same JSON. HTTP 201 means a new row. HTTP 200 with `Duplicate: true` means that node and timestamp were already stored. HTTP 401 is a bad token. HTTP 422 is a rejected reading. HTTP 503 means the API process has no `GATEWAY_INGEST_TOKEN` set.

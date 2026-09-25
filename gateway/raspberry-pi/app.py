@@ -1,4 +1,4 @@
-"""Dummy LoRa dashboard for proving Heltec ESP32 → Raspberry Pi."""
+"""Local page for Heltec gateway USB lines, plus optional /ingest POST."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ def main() -> None:
     worker.start()
     host = os.getenv("DASHBOARD_HOST", "0.0.0.0")
     port = int(os.getenv("DASHBOARD_PORT", "8080"))
-    print(f"Dummy LoRa app  http://{host}:{port}", flush=True)
+    print(f"Gateway USB ingest  http://{host}:{port}", flush=True)
     app.run(host=host, port=port, debug=False, use_reloader=False)
 
 
