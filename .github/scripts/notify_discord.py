@@ -32,7 +32,10 @@ def main():
     request = Request(
         webhook_url,
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "7-bit-sequence-discord-notifier/1.0",
+        },
         method="POST",
     )
     try:
