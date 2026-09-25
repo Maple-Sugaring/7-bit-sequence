@@ -187,6 +187,44 @@ export const createJournalBody = z.object({
   Ice_Present: z.boolean().optional().default(false),
 });
 
+const gatewayCode = z.string().trim().min(1, 'Name the gateway.').max(50);
+
+/**
+ * One sample from a load cell. Weight is gross pounds (bucket included).
+ * The node is named the way the Pi knows it: a node code, a LoRa id, or the
+ * database id.
+ */
+const ingestReadingObject = z.object({
+  NodeID: z.coerce.number().int().positive().optional(),
+  Node_Code: z.string().trim().min(1).max(50).optional(),
+  LoRa_Device_ID: z.string().trim().min(1).max(64).optional(),
+  Recorded_At: isoDateTime,
+  Weight: z.coerce.number(),
+  Sugar_Percent: nullableNumber,
+  Weather_Conditions: z.string().max(50).nullish(),
+  Ice_Present: z.boolean().optional().default(false),
+  Battery_Percent: z.union([z.coerce.number().min(0).max(100), z.null()]).optional(),
+  Signal_Rssi: z.union([z.coerce.number().int(), z.null()]).optional(),
+});
+
+function withNodeIdentity(schema) {
+  return schema.refine(
+    (reading) => reading.NodeID != null || Boolean(reading.Node_Code) || Boolean(reading.LoRa_Device_ID),
+    { message: 'Name the node with Node_Code, LoRa_Device_ID, or NodeID.', path: ['Node_Code'] },
+  );
+}
+
+export const ingestReadingBody = withNodeIdentity(ingestReadingObject);
+
+/** A single reading, or a batch the gateway collected from several nodes. */
+export const ingestBody = z.union([
+  z.object({
+    Gateway_Code: gatewayCode,
+    Readings: z.array(ingestReadingBody).min(1).max(32),
+  }),
+  withNodeIdentity(ingestReadingObject.extend({ Gateway_Code: gatewayCode })),
+]);
+
 export const updateSettingsBody = z.object({
   Report_Interval_Minutes: z.coerce
     .number()

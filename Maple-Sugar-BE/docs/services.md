@@ -22,6 +22,10 @@
 
 `updateMetric` re-validates the merged row. `NodeID` is not writable.
 
+## `ingestService`
+
+`ingestReadings` is the Raspberry Pi path. It resolves `Gateway_Code`, stamps `gateway.last_ping`, then stores each sample through `createMetric` with a null user id. The node's bucket is filled in from `buckets`. The same node and `Recorded_At` returns the existing metric instead of inserting. Battery, RSSI, and `last_seen` update on the node; status becomes online unless the node is in maintenance. A sample for an unknown node, or a node on another gateway, is listed in `Rejected` and does not fail the rest of the batch. Domain checks are the same `validateReading` rules as a manual entry, except temperature is forced null. Air temperature comes from OpenWeather, not the node.
+
 ## `weatherService`
 
 `getDaily` returns historic `sap_daily` rows and the station note.

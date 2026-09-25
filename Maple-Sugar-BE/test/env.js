@@ -18,3 +18,4 @@ process.env.PUBLIC_API_URL = 'http://127.0.0.1:3999';
 process.env.PUBLIC_WEB_URL = 'http://127.0.0.1:5173';
 process.env.ALLOWED_EMAIL_DOMAINS = 'g.rit.edu,rit.edu';
 process.env.CORS_ORIGINS = '';
+process.env.GATEWAY_INGEST_TOKEN = 'test-gateway-token';

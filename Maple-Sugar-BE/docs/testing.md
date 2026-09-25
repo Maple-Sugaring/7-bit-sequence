@@ -7,6 +7,8 @@ cd Maple-Sugar-BE && npm test
 cd Maple-Sugar-FE && npm test
 ```
 
+`npm run check-ingest` posts one sample to a running API and reads it back. The stack has to be up, and `GATEWAY_INGEST_TOKEN` in `.env` has to be the value that API process loaded. Pass a base URL when nginx is not on port 8080: `npm run check-ingest -- http://localhost:3000`.
+
 Backend tests use Node's built-in runner (`Maple-Sugar-BE/test`). Frontend tests use Vitest (`Maple-Sugar-FE/test`). `test/env.js` forces a fake database URL and JWT secret before `config.js` loads, so a developer's `.env` cannot point the suite at a live database.
 
 ## Sap season
@@ -220,6 +222,13 @@ Every failure the client sees is `{ message, code, details }`.
 | Report interval 0 or 1441 minutes | Rejected. 15 is accepted |
 | Invite `firstName` of `x'; drop table users;--` | 201. The text is a bound parameter. The SQL text does not contain `drop table` |
 | 40 parallel `/health` and `/auth/session` calls | All 200 |
+| `POST /ingest` with no token, a wrong token, or a user JWT | 401 `BAD_CREDENTIALS` |
+| `POST /ingest` while `GATEWAY_INGEST_TOKEN` is empty | 503 `UNAVAILABLE`. Nothing is stored |
+| `POST /ingest` for an unknown `Gateway_Code` | 404 `Gateway` |
+| One Pi reading with weight and `Recorded_At` | 201. `Recorded_By_UserID` is null. The node heartbeat and gateway ping run |
+| The same node and timestamp posted again | 200, `Duplicate: true`. No second insert |
+| A batch with one good reading and one unknown node | 201. The good row is stored. The unknown node is in `Rejected` |
+| A batch whose only reading is above the liquid weight ceiling | 422. `details.Rejected` names the weight |
 
 Percent change from 10 to 15 is 50. A zero or missing baseline is `null`, not an infinity. Missing display values render as `—`. Zero minutes ago is "just now". Ninety minutes is "2 hr ago". A positive change is prefixed with `+`.
 

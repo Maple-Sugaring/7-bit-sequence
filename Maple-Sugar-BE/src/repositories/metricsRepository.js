@@ -74,6 +74,21 @@ export async function listRecentForNode(nodeId, limit = 24) {
   return rows.map(mapMetric);
 }
 
+/**
+ * A Pi retry sends the same node and timestamp. Matching that pair returns the
+ * row already stored so the retry does not become a second reading.
+ */
+export async function findMetricByNodeAndTime(nodeId, recordedAt) {
+  const row = await queryOne(
+    `select ${METRIC_COLUMNS}
+       from metrics
+      where node_id = $1
+        and recorded_at = $2::timestamptz`,
+    [nodeId, recordedAt],
+  );
+  return row ? mapMetric(row) : null;
+}
+
 export async function createMetric(reading) {
   const row = await queryOne(
     `insert into metrics (node_id, bucket_id, recorded_by_user_id, recorded_at,

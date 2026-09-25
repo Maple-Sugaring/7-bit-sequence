@@ -31,9 +31,9 @@ Dates that must stay calendar dates (`users.created_at`) are formatted in SQL wi
 | Module | Tables | Responsibility |
 | --- | --- | --- |
 | `usersRepository` | `users`, `roles` | Invites, Google link, last login, role and expiry updates, encrypted Calendar token, bootstrap admin promotion. |
-| `nodesRepository` | `node`, `gateway` | List, board (tracked nodes plus latest metric and bucket), update, tare lookup. |
+| `nodesRepository` | `node`, `gateway` | List, board (tracked nodes plus latest metric and bucket), update, tare lookup. Ingest lookup by gateway code, node code, or LoRa id, plus heartbeat and gateway ping. |
 | `bucketsRepository` | `buckets` | List and find. |
-| `metricsRepository` | `metrics` | Filter by node, season (`sap_season`), and time range. Create and update. Recent history for spoilage. |
+| `metricsRepository` | `metrics` | Filter by node, season (`sap_season`), and time range. Create and update. Recent history for spoilage. Lookup by node and timestamp for Pi retries. |
 | `alertsRepository` | `alerts` | List, create, resolve. `hasOpenAlertOfType` treats null `node_id` as bush-wide (`IS NOT DISTINCT FROM`). |
 | `collectionLogsRepository` | `collection_logs` | List and insert empties. |
 | `journalRepository` | `collection_journal` | List (optional user filter) and insert, joined to author and node name. |

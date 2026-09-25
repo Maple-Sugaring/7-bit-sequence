@@ -107,6 +107,9 @@ export const config = {
   sugarbushLatitude: Number(optional('SUGARBUSH_LATITUDE', '43.084')),
   sugarbushLongitude: Number(optional('SUGARBUSH_LONGITUDE', '-77.680')),
   openWeatherApiKey: optional('OPENWEATHER_API_KEY') || null,
+  // Shared by the Raspberry Pi gateways. Empty disables POST /ingest rather
+  // than leaving the route open.
+  gatewayIngestToken: optional('GATEWAY_INGEST_TOKEN') || null,
   // Comma-separated. Promoted to Admin on boot so the role is not baked into SQL.
   bootstrapAdminEmails: list('BOOTSTRAP_ADMIN_EMAILS'),
 };

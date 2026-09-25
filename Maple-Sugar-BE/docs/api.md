@@ -22,6 +22,7 @@ Session is the `maple_session` JWT cookie. Send cookies (`credentials: 'include'
 | 500 | `INTERNAL_SERVER_ERROR` | The application is down and not able to process the request. |
 | 502 | `OAUTH_FAILED`, `WEATHER_FAILED` | Google or OpenWeather failed. |
 | 503 | | `/health` when Postgres is down. |
+| 503 | `UNAVAILABLE` | `POST /ingest` when `GATEWAY_INGEST_TOKEN` is unset. |
 
 Zod runs in `routes/schemas.js` before a handler uses the body.
 
@@ -90,7 +91,40 @@ Redirect URIs must match `PUBLIC_API_URL`:
 
 Body fields: `NodeID`, `BucketID`, `Recorded_At`, `Weight`, `Temperature`, `Sugar_Percent`, `Weather_Conditions`, `Ice_Present`.
 
-Liquid buckets reject gross weight above about 10 gallons plus tare slack. Ice may go to about 14 gallons. A full net weight raises a Full Bucket alert. Sustained heat above 40°F raises Spoilage. Weight far below tare raises Tipped.
+## Sensor ingest
+
+| Method | Path | Auth | |
+| --- | --- | --- | --- |
+| POST | `/ingest` | Gateway token | Raspberry Pi push. Not a user session. |
+
+Send `X-Gateway-Token: <GATEWAY_INGEST_TOKEN>`. `Authorization: Bearer` or `Authorization: Gateway` with the same secret also works. A session cookie is ignored. A missing or wrong token is 401 `BAD_CREDENTIALS`. If the env var is unset the route answers 503 and stores nothing.
+
+`Weight` is gross pounds, bucket included. `Recorded_At` is the sample time on the Pi. Posting the same node and timestamp again returns the existing row (`Duplicate: true`, HTTP 200) so a retry does not insert a second reading. `recorded_by_user_id` stays null.
+
+Name the gateway with `Gateway_Code` (`GW-ALUMNI`, `GW-CHABAD`, `GW-BARN`). Name each node with `Node_Code`, `LoRa_Device_ID`, or `NodeID`. A node that belongs to a different Pi is rejected. Optional fields: `Sugar_Percent`, `Weather_Conditions`, `Ice_Present`, `Battery_Percent` (0–100), `Signal_Rssi`.
+
+Air temperature is not accepted here. It comes from OpenWeather. A `Temperature` field on the body is ignored, and the stored row leaves temperature null.
+
+One reading may be the body itself, or several may sit in `Readings` (at most 32). A body that fails shape checks (no node, no weight, no time) is 422 and stores nothing. A reading that names an unknown node, a node on another Pi, or a weight the bucket rules reject is listed in `Rejected` and does not drop the rest of the batch. HTTP 201 when at least one new row was stored, 200 when every success was a duplicate, 422 when nothing was stored. Success bodies include `Accepted` and `Rejected`. The bucket on that tree is attached server-side.
+
+A stored reading updates the node's `last_seen`, battery, and RSSI, and marks the node online unless it is in maintenance. The gateway's `last_ping` is set and its status becomes Online. The same alert rules as `POST /metrics` run for a new row.
+
+```json
+{
+  "Gateway_Code": "GW-ALUMNI",
+  "Readings": [
+    {
+      "Node_Code": "NODE-001",
+      "Recorded_At": "2026-03-02T14:00:00.000Z",
+      "Weight": 14.2,
+      "Battery_Percent": 88,
+      "Signal_Rssi": -74
+    }
+  ]
+}
+```
+
+Liquid buckets reject gross weight above about 10 gallons plus tare slack. Ice may go to about 14 gallons. A full net weight raises a Full Bucket alert. Weight far below tare raises Tipped. Spoilage still requires a temperature on the reading, which an ingest row does not have.
 
 ## Alerts
 

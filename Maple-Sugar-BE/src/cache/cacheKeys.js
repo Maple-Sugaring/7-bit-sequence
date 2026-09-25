@@ -50,6 +50,7 @@ export const cacheNamespaces = {
   METRICS: 'metrics:',
   DASHBOARD: 'dashboard:',
   NODES: 'nodes:',
+  GATEWAYS: 'gateways:',
   ALERTS: 'alerts:',
   USERS: 'users:',
   SCHEDULE: 'schedule:',

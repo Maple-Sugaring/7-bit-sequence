@@ -30,6 +30,9 @@ export const unauthorized = (message = 'Sign in to continue.') =>
 export const forbidden = (message = 'You do not have access to that.') =>
   new ApiError(message, { status: 403, code: 'FORBIDDEN' });
 
+export const unavailable = (message, code = 'UNAVAILABLE') =>
+  new ApiError(message, { status: 503, code });
+
 export const accountExpired = (
   message = 'This account has expired. Ask an administrator to grant an extension.',
 ) => new ApiError(message, { status: 403, code: 'ACCOUNT_EXPIRED' });
