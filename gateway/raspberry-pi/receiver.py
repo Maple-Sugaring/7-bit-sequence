@@ -13,8 +13,6 @@ from typing import Any
 import requests
 import serial
 
-from sugar_sheet import SheetCursor, apply_row, load_rows
-
 
 HISTORY_LIMIT = 20
 POST_ATTEMPTS = 3
@@ -136,9 +134,6 @@ def forward_status(response: requests.Response) -> dict[str, str]:
     return {"status": str(response.status_code), "detail": snippet or response.reason}
 
 
-SHEET = SheetCursor(load_rows())
-
-
 def forward_reading(
     packet: dict[str, Any],
     api_url: str,
@@ -148,20 +143,11 @@ def forward_reading(
     reading = packet.get("reading")
     if not reading:
         return
-    row = SHEET.peek()
-    recorded_at = packet["received_at"]
-    if row is not None:
-        reading = apply_row(reading, row)
-        packet["reading"] = reading
-        packet["payload"] = reading
-        gateway_code = row["gateway"]
-    body = build_ingest_body(reading, gateway_code, recorded_at)
+    body = build_ingest_body(reading, gateway_code, packet["received_at"])
     packet["ingest"] = body
     try:
         response = post_ingest(body, api_url, token)
         packet["forward"] = forward_status(response)
-        if row is not None and response.status_code in {200, 201}:
-            SHEET.commit()
     except requests.RequestException as exc:
         packet["forward"] = {"status": "error", "detail": str(exc)}
 
