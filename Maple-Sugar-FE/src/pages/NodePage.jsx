@@ -14,8 +14,9 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import dayjs from 'dayjs';
+import { estimatedSyrupGallons } from '../business/sugarContent';
 import { Capability } from '../business/permissions';
-import { LIVE_FROM, LIVE_TO, bucketGallons, bucketPercent, dailyWeightRows } from '../business/liveWeight';
+import { LIVE_FROM, LIVE_TO, TIME_UNITS, bucketGallons, bucketPercent, dailyWeightRows } from '../business/liveWeight';
 import { ChartCard } from '../components/charts/ChartCard';
 import { WeightChart } from '../components/charts/SeriesChart';
 import { PageHeader } from '../components/common/PageHeader';
@@ -44,6 +45,7 @@ export function NodePage() {
   const people = useAsync(useCallback(() => getUsers(), []), { enabled: canSchedule, initialData: null });
   const node = (bush.data ?? []).find((item) => item.NodeID === Number(nodeId));
   const [notes, setNotes] = useState('');
+  const [unit, setUnit] = useState('day');
   const [shift, setShift] = useState(() => {
     const start = dayjs().add(1, 'day').hour(9).minute(0).second(0);
     return { Task: SHIFT_TASKS[0], UserID: '', Starts_At: start, Ends_At: start.add(2, 'hour'), Notes: '' };
@@ -78,7 +80,7 @@ export function NodePage() {
   const status = STATUS[node?.Status_Code] ?? STATUS[1];
   const gallons = node ? bucketGallons(node.Weight, node.Tare_Weight ?? 0) : null;
   const fill = node ? bucketPercent(node.Weight, node.Tare_Weight ?? 0) : null;
-  const weights = dailyWeightRows(history.data ?? [], { nodeIds: [Number(nodeId)] });
+  const weights = dailyWeightRows(history.data ?? [], { nodeIds: [Number(nodeId)], unit });
 
   if (!bush.loading && !node) {
     return (
@@ -119,11 +121,20 @@ export function NodePage() {
           <Card>
             <CardContent>
               <Typography variant="overline">Bucket</Typography>
-              <Typography variant="h4">{gallons == null ? '—' : `${gallons.toFixed(1)} gal`}</Typography>
+              <Typography variant="h4">
+                {gallons == null ? '—' : `${gallons.toFixed(1)} gal · ${Number(node.Weight).toFixed(1)} lb`}
+              </Typography>
               <MeterBar percent={fill ?? 0} color={(fill ?? 0) >= 90 ? '#ed6c02' : '#F76902'} />
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                {gallons == null ? 'No weight yet' : `${gallons.toFixed(1)} of 10 gal`}
-                {node?.Sugar_Percent != null ? ` · ${node.Sugar_Percent}% sugar` : ''}
+                {gallons == null
+                  ? 'No weight yet'
+                  : gallons > 10
+                    ? `${gallons.toFixed(1)} gal · past 10 gal because the sap froze`
+                    : `${gallons.toFixed(1)} of 10 gal`}
+                {gallons == null
+                  ? ''
+                  : ` · ${estimatedSyrupGallons(gallons, node?.Sugar_Percent).toFixed(2)} gal syrup`}
+                {gallons == null ? '' : node?.Sugar_Percent != null ? ` · ${node.Sugar_Percent}% sugar` : ' · 40:1'}
                 {node?.Recorded_At ? ` · ${dateTime(node.Recorded_At)}` : ''}
               </Typography>
             </CardContent>
@@ -134,12 +145,21 @@ export function NodePage() {
       <Box sx={{ mb: 2 }}>
         <ChartCard
           title="2026 weight"
-          description="Gallons of sap in the bucket. The scale stops at 10 gallons."
+          description="Gallons and pounds. The axis starts at 0 and grows past 10 gallons if the sap freezes."
           height={320}
           loading={history.loading}
           isEmpty={weights.rows.length === 0}
+          action={
+            <Stack direction="row" spacing={1}>
+              {TIME_UNITS.map(([id, label]) => (
+                <Button key={id} size="small" variant={unit === id ? 'contained' : 'text'} onClick={() => setUnit(id)}>
+                  {label}
+                </Button>
+              ))}
+            </Stack>
+          }
         >
-          <WeightChart rows={weights.rows} series={weights.series} />
+          <WeightChart rows={weights.rows} series={weights.series} unit={unit} />
         </ChartCard>
       </Box>
 

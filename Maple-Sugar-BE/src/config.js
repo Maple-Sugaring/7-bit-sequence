@@ -92,7 +92,10 @@ export const config = {
     get redirectUri() {
       return `${publicApiUrl}/auth/google/callback`;
     },
-    /** Separate callback so login identity and Calendar consent stay distinct. */
+    /**
+     * Older deployments registered this URI. Sign-in now requests Calendar on
+     * the login callback, so new handshakes do not use it.
+     */
     get calendarRedirectUri() {
       return `${publicApiUrl}/auth/google/calendar/callback`;
     },

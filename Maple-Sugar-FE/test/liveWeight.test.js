@@ -17,10 +17,21 @@ describe('2026 node weight', () => {
 
     expect(LIVE_NODE_IDS).toEqual([1, 2]);
     expect(rows[0].Date).toBe('2026-09-25');
-    expect(rows[0][1]).toBeCloseTo(9.5 / LB_PER_GALLON);
-    expect(rows[0][2]).toBeCloseTo(11 / LB_PER_GALLON);
+    expect(rows[0][1]).toBe(Math.round((9.5 / LB_PER_GALLON) * 10) / 10);
+    expect(rows[0]['1-lb']).toBe(9.5);
+    expect(rows[0][2]).toBe(Math.round((11 / LB_PER_GALLON) * 10) / 10);
+    expect(rows[0]['2-lb']).toBe(11);
     expect(bucketPercent(10.5, 2.17)).toBeCloseTo(((10.5 - 2.17) / LB_PER_GALLON / 10) * 100);
     expect(series.map((item) => item.key).sort()).toEqual(['1', '2']);
+    const byMinute = dailyWeightRows(
+      [
+        { ...sensor, NodeID: 1, nodeName: 'Alumni House - Tree 1', Weight: 8, Recorded_At: '2026-09-25T22:30:09.000Z' },
+        { ...sensor, NodeID: 1, nodeName: 'Alumni House - Tree 1', Weight: 20, Recorded_At: '2026-09-25T22:30:40.000Z' },
+        { ...sensor, NodeID: 1, nodeName: 'Alumni House - Tree 1', Weight: 30, Recorded_At: '2026-09-25T22:31:01.000Z' },
+      ],
+      { unit: 'minute' },
+    );
+    expect(byMinute.rows.map((row) => row.Date)).toEqual(['2026-09-25T22:30', '2026-09-25T22:31']);
     expect(isNodeReading({ Weight: 8, Temperature: 40, Recorded_By_UserID: null })).toBe(false);
     expect(isNodeReading({ Weight: 8, Temperature: null, Recorded_By_UserID: 4 })).toBe(false);
   });

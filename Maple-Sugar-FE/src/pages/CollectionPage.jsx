@@ -13,6 +13,8 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import dayjs from 'dayjs';
+import { estimatedSyrupGallons, sugarPercentForSyrup } from '../business/sugarContent';
+import { gallonsFromWeight } from '../business/yieldMetrics';
 import { PageHeader } from '../components/common/PageHeader';
 import { dateTime } from '../components/common/format';
 import { useJournal, useRecordingTargets } from '../services/hooks';
@@ -27,6 +29,7 @@ function emptyForm() {
     NodeID: '',
     Weight: '',
     Sugar_Percent: '',
+    Syrup_Gallons: '',
     Ice_Present: false,
     Collected_At: dayjs(),
   };
@@ -57,6 +60,38 @@ export function CollectionPage() {
   );
 
   const update = (field) => (value) => setForm((prev) => ({ ...prev, [field]: value }));
+
+  const sapGallons = form.Weight === '' ? null : gallonsFromWeight(Number(form.Weight));
+
+  const changeWeight = (value) => {
+    setForm((prev) => {
+      const sap = value === '' ? null : gallonsFromWeight(Number(value));
+      const sugar = prev.Sugar_Percent === '' ? null : Number(prev.Sugar_Percent);
+      const syrup = sap == null ? '' : estimatedSyrupGallons(sap, sugar).toFixed(2);
+      return { ...prev, Weight: value, Syrup_Gallons: syrup };
+    });
+  };
+
+  const changeSugar = (value) => {
+    setForm((prev) => {
+      const sap = prev.Weight === '' ? null : gallonsFromWeight(Number(prev.Weight));
+      const sugar = value === '' ? null : Number(value);
+      const syrup = sap == null ? prev.Syrup_Gallons : estimatedSyrupGallons(sap, sugar).toFixed(2);
+      return { ...prev, Sugar_Percent: value, Syrup_Gallons: syrup };
+    });
+  };
+
+  const changeSyrup = (value) => {
+    setForm((prev) => {
+      const sap = prev.Weight === '' ? null : gallonsFromWeight(Number(prev.Weight));
+      const implied = sap == null || value === '' ? null : sugarPercentForSyrup(sap, Number(value));
+      return {
+        ...prev,
+        Syrup_Gallons: value,
+        Sugar_Percent: implied == null ? prev.Sugar_Percent : implied.toFixed(2),
+      };
+    });
+  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -122,7 +157,7 @@ export function CollectionPage() {
                       label="Sap weight"
                       type="number"
                       value={form.Weight}
-                      onChange={(event) => update('Weight')(event.target.value)}
+                      onChange={(event) => changeWeight(event.target.value)}
                       fullWidth
                       slotProps={{ htmlInput: { min: 0, step: 0.1 } }}
                     />
@@ -132,9 +167,27 @@ export function CollectionPage() {
                       label="Sugar content"
                       type="number"
                       value={form.Sugar_Percent}
-                      onChange={(event) => update('Sugar_Percent')(event.target.value)}
+                      onChange={(event) => changeSugar(event.target.value)}
+                      helperText="A reading replaces the 40:1 estimate."
                       fullWidth
                       slotProps={{ htmlInput: { min: 0, step: 0.1 } }}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12 }}>
+                    <TextField
+                      label="Estimated syrup (gal)"
+                      type="number"
+                      value={form.Syrup_Gallons}
+                      onChange={(event) => changeSyrup(event.target.value)}
+                      helperText={
+                        sapGallons == null
+                          ? 'Enter the sap weight. The estimate starts at 40:1.'
+                          : form.Sugar_Percent === ''
+                            ? `${sapGallons.toFixed(1)} gal of sap at 40:1.`
+                            : `${sapGallons.toFixed(1)} gal of sap at ${form.Sugar_Percent}% sugar.`
+                      }
+                      fullWidth
+                      slotProps={{ htmlInput: { min: 0, step: 0.01 } }}
                     />
                   </Grid>
                 </Grid>

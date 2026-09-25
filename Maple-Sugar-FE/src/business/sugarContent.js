@@ -43,6 +43,25 @@ export function sapToSyrupRatio(sugarPercent) {
   return 86 / sugarPercent;
 }
 
+/** Used until a student records a sugar reading at collection. */
+export const DEFAULT_SAP_TO_SYRUP = 40;
+
+/** Gallons of finished syrup from gallons of sap. A sugar reading replaces 40:1. */
+export function estimatedSyrupGallons(sapGallons, sugarPercent = null) {
+  const sap = Number(sapGallons);
+  if (!Number.isFinite(sap) || sap < 0) return null;
+  const ratio = sapToSyrupRatio(sugarPercent) ?? DEFAULT_SAP_TO_SYRUP;
+  return sap / ratio;
+}
+
+/** Sugar percent that would produce this syrup yield from this much sap. */
+export function sugarPercentForSyrup(sapGallons, syrupGallons) {
+  const sap = Number(sapGallons);
+  const syrup = Number(syrupGallons);
+  if (!Number.isFinite(sap) || !Number.isFinite(syrup) || sap <= 0 || syrup <= 0) return null;
+  return 86 / (sap / syrup);
+}
+
 export function isFinished(sugarPercent) {
   return sugarPercent != null && sugarPercent >= FINISHED_SUGAR_PERCENT;
 }

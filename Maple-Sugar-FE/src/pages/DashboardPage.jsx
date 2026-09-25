@@ -11,6 +11,7 @@ import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { estimatedSyrupGallons } from '../business/sugarContent';
 import { isFull } from '../business/yieldMetrics';
 import { LIVE_FROM, LIVE_NODE_IDS, LIVE_TO, bucketGallons, bucketPercent, recordedSugar } from '../business/liveWeight';
 import { SiteForecastChart } from '../components/charts/SeriesChart';
@@ -55,8 +56,13 @@ export function DashboardPage() {
     const weights = (readings.data ?? []).filter((row) => tracked.has(row.NodeID) && row.Weight != null);
     const sugars = recordedSugar([...(readings.data ?? []), ...(journal.data ?? [])]);
     const sugar = sugars.length ? sugars.reduce((sum, value) => sum + value, 0) / sugars.length : null;
-    return { readings: weights.length, sugar };
-  }, [readings.data, journal.data]);
+    const syrup = (bush.data ?? []).reduce((sum, node) => {
+      const gallons = bucketGallons(node.Weight, node.Tare_Weight ?? 0);
+      return sum + (estimatedSyrupGallons(gallons, node.Sugar_Percent) ?? 0);
+    }, 0);
+    const measured = (bush.data ?? []).some((node) => node.Sugar_Percent != null);
+    return { readings: weights.length, sugar, syrup, measured };
+  }, [readings.data, journal.data, bush.data]);
 
   return (
     <>
@@ -119,7 +125,7 @@ export function DashboardPage() {
                   <Stack key={node.NodeID} direction="row" sx={{ justifyContent: 'space-between', py: 0.5 }}>
                     <Typography>{node.Node_Name}</Typography>
                     <Typography fontWeight={700}>
-                      {gallons == null ? '—' : `${gallons.toFixed(1)} / 10 gal`}
+                      {gallons == null ? '—' : `${gallons.toFixed(1)} gal · ${Number(node.Weight).toFixed(1)} lb`}
                       {full ? ' · full' : ''}
                     </Typography>
                   </Stack>
@@ -135,11 +141,11 @@ export function DashboardPage() {
             </Grid>
             <Grid size={{ xs: 6, sm: 4 }}>
               <Typography variant="overline">Estimated syrup</Typography>
-              <Typography variant="h4">—</Typography>
+              <Typography variant="h4">{totals.syrup.toFixed(2)} gal</Typography>
               <Typography variant="body2" color="text.secondary">
-                {totals.sugar == null
-                  ? 'Needs a student sugar reading'
-                  : `Average ${totals.sugar.toFixed(1)}% from collection`}
+                {totals.measured
+                  ? '40:1, replaced where a student recorded sugar'
+                  : '40 gallons of sap per gallon of syrup'}
               </Typography>
             </Grid>
           </Grid>
@@ -190,9 +196,15 @@ export function DashboardPage() {
                       />
                       <Meter
                         label="Bucket"
-                        value={gallons == null ? '—' : `${gallons.toFixed(1)} gal`}
+                        value={gallons == null ? '—' : `${gallons.toFixed(1)} gal · ${Number(node.Weight).toFixed(1)} lb`}
                         percent={fill}
-                        detail={gallons == null ? 'No weight yet' : `${gallons.toFixed(1)} of 10 gal`}
+                        detail={
+                          gallons == null
+                            ? 'No weight yet'
+                            : gallons > 10
+                              ? `${gallons.toFixed(1)} gal · past 10 gal because the sap froze`
+                              : `${gallons.toFixed(1)} of 10 gal`
+                        }
                         color={(fill ?? 0) >= 90 ? '#ed6c02' : '#F76902'}
                       />
                     </CardContent>

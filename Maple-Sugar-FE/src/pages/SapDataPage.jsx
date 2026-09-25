@@ -8,7 +8,7 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import dayjs from 'dayjs';
-import { LIVE_FROM, LIVE_NODE_IDS, LIVE_TO, dailyWeightRows, presetRange } from '../business/liveWeight';
+import { LIVE_FROM, LIVE_NODE_IDS, LIVE_TO, TIME_UNITS, dailyWeightRows, presetRange } from '../business/liveWeight';
 import { Capability } from '../business/permissions';
 import { ChartCard } from '../components/charts/ChartCard';
 import { WeightChart } from '../components/charts/SeriesChart';
@@ -54,7 +54,7 @@ export function SapDataPage() {
   const [from, setFrom] = useState(dayjs(initial.from));
   const [to, setTo] = useState(dayjs(initial.to));
   const [preset, setPreset] = useState('7d');
-  const [daily, setDaily] = useState(true);
+  const [unit, setUnit] = useState('day');
   const [picked, setPicked] = useState([]);
   const readings = useReadings({ from: LIVE_FROM, to: LIVE_TO });
   const tracked = useMemo(
@@ -85,10 +85,10 @@ export function SapDataPage() {
       ranged,
       ...dailyWeightRows(ranged, {
         nodeIds: selectedIds.length ? selectedIds : LIVE_NODE_IDS,
-        daily,
+        unit,
       }),
     };
-  }, [tracked, selectedIds, from, to, daily]);
+  }, [tracked, selectedIds, from, to, unit]);
 
   return (
     <>
@@ -111,9 +111,11 @@ export function SapDataPage() {
                 {label}
               </Button>
             ))}
-            <Button size="small" variant={daily ? 'contained' : 'outlined'} onClick={() => setDaily((value) => !value)}>
-              {daily ? 'Daily' : 'Each reading'}
-            </Button>
+            {TIME_UNITS.map(([id, label]) => (
+              <Button key={id} size="small" variant={unit === id ? 'contained' : 'outlined'} onClick={() => setUnit(id)}>
+                {label}
+              </Button>
+            ))}
             <DatePicker
               label="From"
               value={from}
@@ -145,7 +147,7 @@ export function SapDataPage() {
         }
       />
       <Typography color="text.secondary" sx={{ mt: -1, mb: 2, textAlign: 'center' }}>
-        Gallons of sap, from 0 to a full 10 gallon bucket. Daily keeps the last report of each day.
+        Gallons of sap, from 0 to a full 10 gallon bucket. Pick how fine the time axis is.
       </Typography>
 
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
@@ -179,7 +181,7 @@ export function SapDataPage() {
             loading={readings.loading}
             isEmpty={weights.rows.length === 0}
           >
-            <WeightChart rows={weights.rows} series={weights.series} />
+            <WeightChart rows={weights.rows} series={weights.series} unit={unit} />
           </ChartCard>
         </Box>
       </Stack>

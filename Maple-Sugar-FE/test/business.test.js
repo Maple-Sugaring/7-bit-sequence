@@ -4,7 +4,7 @@ import { percentChange, seasonOf, semesterOf } from '../src/business/aggregation
 import { daysUntilExpiry, expiryStatus, isAccountUsable, Role } from '../src/business/permissions';
 import { shelfLifeHours, shelfLifeSeverity, formatShelfLife } from '../src/business/shelfLife';
 import { assessSpoilage, hoursAboveThreshold, riskFromTemperature, SpoilageRisk } from '../src/business/spoilage';
-import { classifyGrade, classifyReading, isFinished, sapToSyrupRatio } from '../src/business/sugarContent';
+import { classifyGrade, classifyReading, estimatedSyrupGallons, isFinished, sapToSyrupRatio, sugarPercentForSyrup } from '../src/business/sugarContent';
 import { validateInvite, validateLogin, validateReading, validateSlot } from '../src/business/validation';
 import {
   BUCKET_CAPACITY_LB,
@@ -79,6 +79,9 @@ describe('spoilage, sugar, and yield', () => {
   test('grades syrup and applies the rule of 86', () => {
     expect(sapToSyrupRatio(2)).toBe(43);
     expect(sapToSyrupRatio(0)).toBeNull();
+    expect(estimatedSyrupGallons(10)).toBeCloseTo(0.25, 5);
+    expect(estimatedSyrupGallons(10, 2)).toBeCloseTo(10 / 43, 5);
+    expect(sugarPercentForSyrup(10, 0.25)).toBeCloseTo(2.15, 5);
     expect(isFinished(66.9)).toBe(true);
     expect(isFinished(2)).toBe(false);
     expect(classifyGrade(80)).toMatch(/Golden/);

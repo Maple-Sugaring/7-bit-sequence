@@ -101,6 +101,7 @@ section('Google OAuth entry point');
   check('GET /auth/google redirects', start.status === 302, `got ${start.status}`);
   check('redirects to Google', location.startsWith('https://accounts.google.com/'), location.slice(0, 60));
   check('requests openid email profile scopes', location.includes('openid') && location.includes('email') && location.includes('profile'));
+  check('requests calendar on the same sign-in', location.includes('calendar.events') && location.includes('access_type=offline'));
   check('includes a state parameter', /[?&]state=/.test(location));
   check('sets the state cookie', (start.headers.get('set-cookie') ?? '').includes('maple_oauth_state'));
   check('state cookie is httpOnly', (start.headers.get('set-cookie') ?? '').toLowerCase().includes('httponly'));
@@ -122,7 +123,7 @@ section('Google Calendar OAuth entry point');
   check('calendar redirect goes to Google', location.startsWith('https://accounts.google.com/'), location.slice(0, 80));
   check('requests calendar.events scope', location.includes('calendar.events'), location.slice(0, 200));
   check('asks for a refresh token', location.includes('access_type=offline') && location.includes('prompt=consent'));
-  check('uses the calendar callback URI', location.includes('auth%2Fgoogle%2Fcalendar%2Fcallback') || location.includes('/auth/google/calendar/callback'));
+  check('uses the sign-in callback', location.includes('auth%2Fgoogle%2Fcallback') && !location.includes('calendar%2Fcallback'));
 }
 
 // --- Reference data ---------------------------------------------------------

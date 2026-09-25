@@ -29,8 +29,8 @@ export function TimePickerDialog({ open, slot, pending, error, onClose, onPick }
             <Alert
               severity="warning"
               action={
-                <Button color="inherit" size="small" href={`${API_BASE}/auth/google/calendar`}>
-                  Connect
+                <Button color="inherit" size="small" href={`${API_BASE}/auth/google`}>
+                  Sign in again
                 </Button>
               }
             >

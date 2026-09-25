@@ -17,13 +17,9 @@ import { PageHeader } from '../components/common/PageHeader';
 import { AsyncBlock, EmptyBlock, SkeletonRows } from '../components/common/StateBlock';
 import { timeOnly } from '../components/common/format';
 import { useAuth } from '../context/auth';
-import { apiMode } from '../data/apiClient';
 import { TimePickerDialog } from '../components/schedule/TimePickerDialog';
 import { claimCollectionTime, claimShift, groupByDay, releaseShift } from '../services/scheduleService';
 import { useAction, useSchedule } from '../services/hooks';
-
-const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? '/api').replace(/\/$/, '');
-const CALENDAR_START = `${API_BASE}/auth/google/calendar`;
 
 function SlotCard({ slot, canClaim, onClaim, onRelease, onPickTime, pending }) {
   const claimDisabled = !slot.canClaim || pending;
@@ -148,25 +144,7 @@ export function SchedulePage() {
 
   return (
     <>
-      <PageHeader
-        title="Schedule"
-        actions={
-          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', justifyContent: 'center' }}>
-            {apiMode === 'http' && canClaim ? (
-              user?.calendarConnected || calendarConnected ? (
-                <Chip label="Google Calendar connected" color="success" variant="outlined" />
-              ) : (
-                <Button variant="contained" href={CALENDAR_START}>
-                  Add shifts to Google Calendar
-                </Button>
-              )
-            ) : null}
-            <Button variant="outlined" onClick={refresh} disabled={loading}>
-              Refresh
-            </Button>
-          </Stack>
-        }
-      />
+      <PageHeader title="Schedule" />
 
       {calendarError ? (
         <Alert

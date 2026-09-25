@@ -32,13 +32,28 @@ function nodeName(row) {
   return row.nodeName ?? row.Node_Name ?? `Node ${row.NodeID}`;
 }
 
+function round1(value) {
+  return Math.round(Number(value) * 10) / 10;
+}
+
 /** Hardware ingest leaves temperature empty. The seeded series always set one. */
 export function isNodeReading(row) {
   return row?.Weight != null && row.Temperature == null && row.Recorded_By_UserID == null;
 }
 
-function stamp(iso, daily) {
-  return daily ? String(iso).slice(0, 10) : iso;
+export const TIME_UNITS = [
+  ['day', 'Days'],
+  ['hour', 'Hours'],
+  ['minute', 'Minutes'],
+  ['second', 'Seconds'],
+];
+
+function stamp(iso, unit) {
+  const value = String(iso);
+  if (unit === 'hour') return value.slice(0, 13);
+  if (unit === 'minute') return value.slice(0, 16);
+  if (unit === 'second') return value.slice(0, 19);
+  return value.slice(0, 10);
 }
 
 /**
@@ -60,15 +75,15 @@ export function presetRange(preset, now = new Date()) {
  * Last weight each node reported on each UTC day. Sugar is ignored here;
  * a student records that at collection.
  */
-export function dailyWeightRows(readings, { nodeIds = LIVE_NODE_IDS, year = LIVE_YEAR, daily = true } = {}) {
+export function dailyWeightRows(readings, { nodeIds = LIVE_NODE_IDS, year = LIVE_YEAR, unit = 'day' } = {}) {
   const allowed = new Set(nodeIds);
   const latest = new Map();
 
   for (const row of readings ?? []) {
     if (!isNodeReading(row) || !inLiveYear(row.Recorded_At, year)) continue;
     if (!allowed.has(row.NodeID)) continue;
-    const date = stamp(row.Recorded_At, daily);
-    const key = daily ? `${row.NodeID}|${date}` : `${row.NodeID}|${row.Recorded_At}`;
+    const date = stamp(row.Recorded_At, unit);
+    const key = `${row.NodeID}|${date}`;
     const previous = latest.get(key);
     if (previous && previous.at >= row.Recorded_At) continue;
     const tare = row.tareWeight ?? row.Tare_Weight ?? 0;
@@ -77,7 +92,8 @@ export function dailyWeightRows(readings, { nodeIds = LIVE_NODE_IDS, year = LIVE
       nodeId: row.NodeID,
       name: nodeName(row),
       at: row.Recorded_At,
-      weight: bucketGallons(row.Weight, tare),
+      weight: round1(bucketGallons(row.Weight, tare)),
+      pounds: round1(row.Weight),
     });
   }
 
@@ -86,6 +102,7 @@ export function dailyWeightRows(readings, { nodeIds = LIVE_NODE_IDS, year = LIVE
   for (const point of latest.values()) {
     const row = byDate.get(point.date) ?? { Date: point.date };
     row[String(point.nodeId)] = point.weight;
+    row[`${point.nodeId}-lb`] = point.pounds;
     byDate.set(point.date, row);
     series.set(point.nodeId, { key: String(point.nodeId), name: point.name });
   }

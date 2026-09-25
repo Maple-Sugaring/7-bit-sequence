@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -35,6 +36,8 @@ function emptyForm() {
 }
 
 export function ScheduleAdminPage() {
+  const [params] = useSearchParams();
+  const appliedAlert = useRef(false);
   const { data, loading, error, refresh } = useSchedule();
   const people = useUsers();
   const bush = useBush();
@@ -56,6 +59,23 @@ export function ScheduleAdminPage() {
   });
 
   const students = (people.data?.users ?? []).filter((user) => user.usable);
+
+  useEffect(() => {
+    if (appliedAlert.current) return;
+    const nodeId = Number(params.get('nodeId'));
+    const task = params.get('task');
+    const notes = params.get('notes');
+    if (!params.get('nodeId') && !task && !notes) return;
+    if (params.get('nodeId') && bush.loading) return;
+    const node = bucketOptions.find((item) => item.NodeID === nodeId);
+    setForm((prev) => ({
+      ...prev,
+      Task: SHIFT_TASKS.includes(task) ? task : prev.Task,
+      bucketIds: node?.BucketID ? [node.BucketID] : prev.bucketIds,
+      Notes: notes || prev.Notes,
+    }));
+    appliedAlert.current = true;
+  }, [params, bush.loading, bucketOptions]);
 
   const submit = async (event) => {
     event.preventDefault();

@@ -11,20 +11,17 @@ import { OAuth2Client } from 'google-auth-library';
 import { config } from '../config.js';
 import { ApiError } from '../lib/ApiError.js';
 
+/** One web client per deployment. Identity and Calendar share this redirect. */
 const client = new OAuth2Client({
   clientId: config.google.clientId,
   clientSecret: config.google.clientSecret,
   redirectUri: config.google.redirectUri,
 });
 
-const calendarClient = new OAuth2Client({
-  clientId: config.google.clientId,
-  clientSecret: config.google.clientSecret,
-  redirectUri: config.google.calendarRedirectUri,
-});
-
-const SCOPES = ['openid', 'email', 'profile'];
-const CALENDAR_SCOPES = [
+const SCOPES = [
+  'openid',
+  'email',
+  'profile',
   'https://www.googleapis.com/auth/calendar.events',
   'https://www.googleapis.com/auth/calendar.freebusy',
 ];
@@ -54,10 +51,10 @@ export function buildAuthorizationUrl(state) {
   return client.generateAuthUrl({
     scope: SCOPES,
     state,
-    // Always show the chooser: shared lab machines are the normal case here, and
-    // silently reusing whichever Google account the browser saw last is how a
-    // student ends up recording readings as someone else.
-    prompt: 'select_account',
+    access_type: 'offline',
+    // Account chooser for shared lab machines, plus consent so Google returns
+    // the Calendar refresh token in this same handshake.
+    prompt: 'select_account consent',
     include_granted_scopes: true,
   });
 }
@@ -117,44 +114,8 @@ export async function exchangeCodeForProfile(code) {
     firstName: payload.given_name ?? '',
     lastName: payload.family_name ?? '',
     hostedDomain: payload.hd ?? null,
+    refreshToken: tokens.refresh_token ?? null,
   };
-}
-
-export function buildCalendarAuthorizationUrl(state) {
-  return calendarClient.generateAuthUrl({
-    scope: CALENDAR_SCOPES,
-    state,
-    access_type: 'offline',
-    // Consent is required or Google will not issue a refresh token on reconnect.
-    prompt: 'consent',
-    include_granted_scopes: true,
-  });
-}
-
-/**
- * Exchanges a Calendar-connect code for a refresh token we can use later
- * without sending the user through Google again.
- */
-export async function exchangeCodeForCalendarTokens(code) {
-  let tokens;
-  try {
-    ({ tokens } = await calendarClient.getToken(code));
-  } catch (error) {
-    throw new ApiError('Google rejected the Calendar connection. Try again.', {
-      status: 401,
-      code: 'BAD_CREDENTIALS',
-      cause: error,
-    });
-  }
-
-  if (!tokens?.refresh_token) {
-    throw new ApiError(
-      'Google did not return a Calendar refresh token. Disconnect the app in your Google account and try again.',
-      { status: 502, code: 'OAUTH_FAILED' },
-    );
-  }
-
-  return { refreshToken: tokens.refresh_token };
 }
 
 /** Domain allowlist, so a personal Gmail cannot sign in to a course system. */
