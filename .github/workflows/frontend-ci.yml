@@ -1,0 +1,31 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: [main, backend]
+    paths:
+      - "Maple-Sugar-FE/**"
+      - ".github/workflows/frontend-ci.yml"
+  pull_request:
+    paths:
+      - "Maple-Sugar-FE/**"
+      - ".github/workflows/frontend-ci.yml"
+
+jobs:
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Maple-Sugar-FE
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Maple-Sugar-FE/package-lock.json
+
+      - run: npm ci
+      - run: npm test

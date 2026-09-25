@@ -1,0 +1,33 @@
+header{
+    background-color: black;
+    color: white;
+}
+
+.navbar{
+    display: flex;
+    gap: 10%;
+}
+
+.webTitle{
+    display:flex;
+    justify-content:center;
+    align-items: center;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 18px 24px 14px;
+    position: relative;
+}
+
+.webTitle > h1{
+    font-size: 32px;
+    margin: 0;
+    color: white;
+    font-weight: 500;
+    letter-spacing: -0.5px;
+}
+
+.bell{
+    position:absolute;
+    left: 8%;
+    color: white;
+}

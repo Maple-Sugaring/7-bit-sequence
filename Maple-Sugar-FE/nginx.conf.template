@@ -1,0 +1,63 @@
+# Processed by the nginx image's envsubst entrypoint on container start, which
+# only substitutes variables that actually exist in the environment. That is
+# why ${API_UPSTREAM} is filled in while nginx's own $uri and $host are not.
+
+server {
+    listen 80;
+    # The image only auto-adds an IPv6 listener to its own stock config, not a
+    # mounted one. Without this, anything resolving localhost to ::1 inside the
+    # container (the healthcheck did) gets connection refused.
+    listen [::]:80;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    include /etc/nginx/security-headers.conf;
+
+    # The app uses BrowserRouter, so deep links like /schedule/manage must be
+    # served index.html instead of 404ing.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Vite fingerprints asset filenames, so they can be cached indefinitely.
+    location /assets/ {
+        # Set directly rather than via `expires`, which would emit a second,
+        # competing Cache-Control header alongside this one.
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        include /etc/nginx/security-headers.conf;
+        access_log off;
+    }
+
+    # index.html must never be cached, or clients keep loading the old asset
+    # manifest after a deploy.
+    location = /index.html {
+        add_header Cache-Control "no-cache, must-revalidate";
+        include /etc/nginx/security-headers.conf;
+    }
+
+    # Proxy to the API container. The upstream host goes through a variable on
+    # purpose: nginx resolves a literal proxy_pass hostname once at startup and
+    # refuses to boot if it is missing, which would make the whole UI
+    # unavailable whenever the backend is down or not deployed yet. With a
+    # variable plus a resolver, DNS is looked up per request instead, so the
+    # frontend serves fine on its own and /api simply returns 502.
+    location ~ ^/api/(.*)$ {
+        resolver ${NGINX_LOCAL_RESOLVERS} ipv6=off valid=10s;
+        set $api_upstream ${API_UPSTREAM};
+        proxy_pass $api_upstream/$1$is_args$args;
+
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_read_timeout 60s;
+    }
+
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css application/javascript application/json image/svg+xml;
+}
