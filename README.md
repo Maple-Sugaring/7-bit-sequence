@@ -56,10 +56,13 @@ If you use a different host, replace `localhost` in both URIs. Calendar sync als
 
 ### 2. Build and start
 
+Start the stack in detached (headless) mode:
+
 ```sh
 docker compose up --build -d
-docker compose ps
 ```
+
+For later starts that do not need a rebuild, run `docker compose up -d`.
 
 Open **<http://localhost:8080>**. On first start, the API applies migrations and seeds data; the web service waits for the API health check. The addresses in `BOOTSTRAP_ADMIN_EMAILS` in [`docker-compose.yml`](docker-compose.yml) are promoted to Admin on API startup. Other accounts must be invited before they can sign in.
 
