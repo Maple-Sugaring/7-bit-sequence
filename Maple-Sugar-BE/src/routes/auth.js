@@ -9,7 +9,7 @@
 import { Router } from 'express';
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
-import { ApiError } from '../lib/ApiError.js';
+import { ApiError, unauthorized } from '../lib/ApiError.js';
 import {
   buildAuthorizationUrl,
   buildCalendarAuthorizationUrl,
@@ -19,16 +19,30 @@ import {
   statesMatch,
 } from '../auth/googleOAuth.js';
 import {
-  sessionCookieOptions,
-  signSessionToken,
+  accessCookieOptions,
+  clearAuthCookies,
+  refreshCookieOptions,
+  signAccessToken,
   stateCookieOptions,
 } from '../auth/jwt.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { resolveGoogleUser } from '../services/authService.js';
+import * as sessionService from '../services/sessionService.js';
 import * as calendarService from '../services/calendarService.js';
 import * as usersRepository from '../repositories/usersRepository.js';
 
 export const authRouter = Router();
+
+/** Metadata stamped on a session row for auditing and reuse forensics. */
+function requestMeta(req) {
+  return { userAgent: req.get('user-agent') ?? null, ip: req.ip ?? null };
+}
+
+/** Sets both auth cookies from an issued/rotated pair. */
+function setAuthCookies(res, { accessToken, refreshToken }) {
+  res.cookie(config.sessionCookieName, accessToken, accessCookieOptions());
+  res.cookie(config.refreshCookieName, refreshToken, refreshCookieOptions());
+}
 
 /**
  * Starts the handshake. A GET that redirects, because it is reached by a plain
@@ -76,7 +90,7 @@ authRouter.get('/google/callback', async (req, res) => {
     const profile = await exchangeCodeForProfile(code);
     const user = await resolveGoogleUser(profile);
 
-    res.cookie(config.sessionCookieName, signSessionToken(user), sessionCookieOptions());
+    setAuthCookies(res, await sessionService.issueSession(user, requestMeta(req)));
     logger.info({ userId: user.UserID }, 'Session established');
 
     // Calendar is connected on login, including the first time an invite is
@@ -110,20 +124,61 @@ authRouter.get('/session', (req, res) => {
   if (!req.user) return res.json(null);
 
   res.json({
-    token: req.cookies?.[config.sessionCookieName] ?? signSessionToken(req.user),
+    token: req.cookies?.[config.sessionCookieName] ?? signAccessToken(req.user),
     user: req.user,
   });
 });
 
-authRouter.post('/logout', (req, res) => {
-  // Options must match those the cookie was set with, or the browser keeps it.
-  res.clearCookie(config.sessionCookieName, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: config.publicWebUrl.startsWith('https://'),
-    path: '/',
-  });
-  res.status(204).end();
+/**
+ * Trades the long-lived refresh cookie for a fresh access token (and a rotated
+ * refresh cookie). The frontend calls this transparently when a request comes
+ * back 401, so a short access-token lifetime is invisible to the user.
+ *
+ * A rejected refresh clears both cookies and answers 401 rather than redirecting
+ * — the caller is a fetch, not a top-level navigation.
+ */
+authRouter.post('/refresh', async (req, res, next) => {
+  try {
+    const presented = req.cookies?.[config.refreshCookieName];
+    const result = await sessionService.rotateSession(presented, requestMeta(req));
+
+    if (!result.accessToken) {
+      clearAuthCookies(res);
+      const message =
+        result.reason === 'reuse'
+          ? 'This session was ended for security. Sign in again.'
+          : 'Your session has expired. Sign in again.';
+      return next(unauthorized(message));
+    }
+
+    setAuthCookies(res, result);
+    res.json({ token: result.accessToken, user: result.user });
+  } catch (error) {
+    next(error);
+  }
+});
+
+authRouter.post('/logout', async (req, res, next) => {
+  try {
+    // Best-effort revoke of the server-side session before the cookies go.
+    await sessionService.endSession(req.cookies?.[config.refreshCookieName]);
+    // Options must match those the cookies were set with, or the browser keeps them.
+    clearAuthCookies(res);
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** Revokes every session for the signed-in user ("log out everywhere"). */
+authRouter.post('/logout-all', requireAuth, async (req, res, next) => {
+  try {
+    await sessionService.endAllSessions(req.user.UserID);
+    clearAuthCookies(res);
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
 });
 
 /**
