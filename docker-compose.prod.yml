@@ -1,0 +1,29 @@
+# Production overlay for the RLES host.
+#
+# Usage (run by .github/workflows/deploy.yml over SSH):
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Every secret is read from the host environment, which the deploy workflow
+# populates from GitHub Secrets for the duration of the SSH session — nothing
+# secret is ever written to a file in the repo. The ":?" guards make the command
+# fail immediately if a required secret was not provided, rather than booting a
+# misconfigured API.
+services:
+  api:
+    environment:
+      NODE_ENV: production
+      # Signing key for access tokens. Must be a strong 32+ char value that
+      # lives only here in prod (different from any dev value).
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set for production}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?GOOGLE_CLIENT_ID must be set for production}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:?GOOGLE_CLIENT_SECRET must be set for production}
+      # The real domain the browser uses. Must byte-for-byte match the redirect
+      # URIs registered on the Google OAuth client.
+      PUBLIC_API_URL: ${PUBLIC_API_URL:?PUBLIC_API_URL must be set for production}
+      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:?PUBLIC_WEB_URL must be set for production}
+      # Token lifetimes: optional, sane defaults if unset.
+      ACCESS_TOKEN_TTL_MINUTES: ${ACCESS_TOKEN_TTL_MINUTES:-15}
+      REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS:-30}
+      # Optional integrations: forwarded when present, blank otherwise.
+      GATEWAY_INGEST_TOKEN: ${GATEWAY_INGEST_TOKEN:-}
+      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY:-}

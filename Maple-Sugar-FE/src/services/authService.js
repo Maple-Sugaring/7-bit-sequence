@@ -1,4 +1,5 @@
 import * as authRepository from '../data/repositories/authRepository';
+import { apiMode } from '../data/apiClient';
 import { ApiError } from '../data/ApiError';
 import { isAccountUsable, roleFromId } from '../business/permissions';
 
@@ -45,7 +46,16 @@ export async function signOut() {
 }
 
 export async function restoreSession() {
-  const result = await authRepository.getSession();
+  let result = await authRepository.getSession();
+
+  // The access token is short-lived, so on a fresh load it may already have
+  // lapsed while the refresh token is still valid. Trade the refresh cookie for
+  // a new session before concluding the user is signed out. Mock mode has no
+  // refresh endpoint, so it is skipped there.
+  if (!result?.user && apiMode === 'http') {
+    result = await authRepository.refresh().catch(() => null);
+  }
+
   if (!result?.user || !isAccountUsable(result.user)) return null;
   return { token: result.token, user: toSessionUser(result.user) };
 }
