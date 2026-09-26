@@ -27,3 +27,14 @@ export async function getSession() {
   setAuthToken(result?.token ?? null);
   return result;
 }
+
+/**
+ * Mints a new access token from the refresh cookie and returns the session.
+ * Used on load when the short access token has lapsed but the refresh token is
+ * still good. Throws (401) when there is no valid refresh token.
+ */
+export async function refresh() {
+  const result = await apiClient.post('/auth/refresh');
+  setAuthToken(result?.token ?? null);
+  return result;
+}

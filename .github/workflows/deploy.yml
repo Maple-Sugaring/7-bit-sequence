@@ -1,0 +1,66 @@
+name: Deploy to RLES
+
+# Ships main to the RIT RLES host over SSH. GitHub Secrets are the single source
+# of truth for production secrets: they are forwarded into the remote shell for
+# the length of the deploy and consumed by docker-compose.prod.yml. They are
+# never written to a file in the repo, and (by GitHub's design) cannot be read
+# back out onto a developer laptop — laptops get the shared Google client from
+# the team password manager instead.
+#
+# One-time setup on the RLES host: clone this repo to ${{ secrets.DEPLOY_PATH }},
+# install Docker + the compose plugin, and add the deploy key's public half to
+# the host user's authorized_keys.
+#
+# Required repository secrets:
+#   SSH_HOST, SSH_USER, SSH_KEY (private key), DEPLOY_PATH   — connection + repo path
+#   SSH_PORT (optional, defaults to 22)
+#   JWT_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET       — app secrets
+#   PUBLIC_API_URL, PUBLIC_WEB_URL                           — prod domain URLs
+#   GATEWAY_INGEST_TOKEN, OPENWEATHER_API_KEY (optional)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Never let two deploys race on the same host.
+concurrency:
+  group: deploy-rles
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and deploy over SSH
+    runs-on: ubuntu-latest
+    # Gate secrets behind a protected environment so a fork PR can't reach them.
+    environment: production
+    steps:
+      - name: Deploy
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          # Forward these host-side env vars (populated from secrets in `env`
+          # below) into the remote script's environment.
+          envs: JWT_SECRET,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,PUBLIC_API_URL,PUBLIC_WEB_URL,GATEWAY_INGEST_TOKEN,OPENWEATHER_API_KEY,DEPLOY_PATH
+          script_stop: true
+          script: |
+            set -euo pipefail
+            cd "$DEPLOY_PATH"
+            git fetch --all --prune
+            git checkout main
+            git pull --ff-only origin main
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build --remove-orphans
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
+            docker image prune -f
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          PUBLIC_API_URL: ${{ secrets.PUBLIC_API_URL }}
+          PUBLIC_WEB_URL: ${{ secrets.PUBLIC_WEB_URL }}
+          GATEWAY_INGEST_TOKEN: ${{ secrets.GATEWAY_INGEST_TOKEN }}
+          OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}

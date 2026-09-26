@@ -10,38 +10,54 @@ import {
   isAllowedDomain,
   statesMatch,
 } from '../../src/auth/googleOAuth.js';
-import { sessionCookieOptions, signSessionToken, stateCookieOptions, verifySessionToken } from '../../src/auth/jwt.js';
+import {
+  accessCookieOptions,
+  generateRefreshToken,
+  hashRefreshToken,
+  refreshCookieOptions,
+  signAccessToken,
+  stateCookieOptions,
+  verifyAccessToken,
+} from '../../src/auth/jwt.js';
 import { decryptSecret, encryptSecret } from '../../src/auth/secrets.js';
-import { config } from '../../src/config.js';
+import { accessTokenTtlSeconds, config, refreshTokenTtlSeconds } from '../../src/config.js';
 
 const user = { UserID: 4, Email: 'ada@rit.edu', RoleID: 1 };
 
-describe('session tokens', () => {
+describe('access tokens', () => {
   test('round-trips the id, email, and role and pins the issuer', () => {
-    const payload = verifySessionToken(signSessionToken(user));
+    const payload = verifyAccessToken(signAccessToken(user));
     assert.equal(payload.sub, '4');
     assert.equal(payload.email, 'ada@rit.edu');
     assert.equal(payload.roleId, 1);
+    assert.equal(payload.typ, 'access');
     assert.equal(payload.iss, 'maple-sugar-api');
   });
 
   test('rejects a missing token, a bad signature, the wrong issuer, and an expired token', () => {
-    assert.equal(verifySessionToken(null), null);
-    assert.equal(verifySessionToken('not-a-token'), null);
+    assert.equal(verifyAccessToken(null), null);
+    assert.equal(verifyAccessToken('not-a-token'), null);
 
     const otherSecret = jwt.sign({ sub: '4' }, 'a-different-secret-that-is-also-long-enough', {
       issuer: 'maple-sugar-api',
     });
-    assert.equal(verifySessionToken(otherSecret), null);
+    assert.equal(verifyAccessToken(otherSecret), null);
 
     const wrongIssuer = jwt.sign({ sub: '4' }, config.jwtSecret, { issuer: 'someone-else' });
-    assert.equal(verifySessionToken(wrongIssuer), null);
+    assert.equal(verifyAccessToken(wrongIssuer), null);
 
     const expired = jwt.sign({ sub: '4' }, config.jwtSecret, {
       issuer: 'maple-sugar-api',
       expiresIn: -10,
     });
-    assert.equal(verifySessionToken(expired), null);
+    assert.equal(verifyAccessToken(expired), null);
+  });
+
+  test('rejects a token that claims a non-access type', () => {
+    const refreshy = jwt.sign({ sub: '4', typ: 'refresh' }, config.jwtSecret, {
+      issuer: 'maple-sugar-api',
+    });
+    assert.equal(verifyAccessToken(refreshy), null);
   });
 
   test('rejects an unsigned alg=none token', () => {
@@ -49,20 +65,34 @@ describe('session tokens', () => {
     const payload = Buffer.from(
       JSON.stringify({ sub: '4', iss: 'maple-sugar-api', exp: Math.floor(Date.now() / 1000) + 3600 }),
     ).toString('base64url');
-    assert.equal(verifySessionToken(`${header}.${payload}.`), null);
+    assert.equal(verifyAccessToken(`${header}.${payload}.`), null);
   });
 });
 
-describe('session cookies', () => {
+describe('refresh token material', () => {
+  test('is high-entropy, unique, and hashes deterministically', () => {
+    const a = generateRefreshToken();
+    const b = generateRefreshToken();
+    assert.notEqual(a, b);
+    assert.equal(a.length > 40, true);
+    // The stored form is a hash, never the token itself.
+    assert.equal(hashRefreshToken(a), hashRefreshToken(a));
+    assert.notEqual(hashRefreshToken(a), a);
+    assert.equal(hashRefreshToken(a).length, 64);
+  });
+});
+
+describe('auth cookies', () => {
   test('are httpOnly and Lax, and stay insecure on the plain-HTTP stack', () => {
     assert.equal(config.publicWebUrl.startsWith('https://'), false);
-    for (const options of [sessionCookieOptions(), stateCookieOptions()]) {
+    for (const options of [accessCookieOptions(), refreshCookieOptions(), stateCookieOptions()]) {
       assert.equal(options.httpOnly, true);
       assert.equal(options.sameSite, 'lax');
       assert.equal(options.secure, false);
       assert.equal(options.path, '/');
     }
-    assert.equal(sessionCookieOptions().maxAge, config.sessionTtlDays * 24 * 60 * 60 * 1000);
+    assert.equal(accessCookieOptions().maxAge, accessTokenTtlSeconds * 1000);
+    assert.equal(refreshCookieOptions().maxAge, refreshTokenTtlSeconds * 1000);
     assert.equal(stateCookieOptions().maxAge, 10 * 60 * 1000);
   });
 });
