@@ -16,6 +16,7 @@ MSS members are members of the Maple Sugaring Society at RIT. MSS accounts are d
 
 Capabilities are listed in [api.md](api.md). `can(role, capability)` is what route guards call.
 
+
 ## `season.js`
 
 `seasonOf`: UTC month >= July belongs to the next calendar year. Matches SQL `sap_season()`.
