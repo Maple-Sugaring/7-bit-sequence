@@ -51,8 +51,15 @@ const problems = [];
 const databaseUrl = required('DATABASE_URL');
 if (!databaseUrl) problems.push('DATABASE_URL is required.');
 
-const jwtSecret = required('JWT_SECRET');
-if (!jwtSecret) problems.push('JWT_SECRET is required.');
+// JWT_SECRET is the API's own signing key, not a shared credential. It should
+// differ per environment, and dev tokens have no value off a developer's own
+// machine, so a fixed throwaway default is used when it is left unset outside
+// production. Production still fails closed: a real, 32+ char secret is
+// required and must live only on the prod host (injected at deploy time).
+const DEV_JWT_SECRET = 'dev-only-insecure-jwt-secret-change-in-production-0123456789';
+let jwtSecret = required('JWT_SECRET');
+if (!jwtSecret && !isProduction) jwtSecret = DEV_JWT_SECRET;
+if (!jwtSecret) problems.push('JWT_SECRET is required in production.');
 else if (jwtSecret.length < 32) problems.push('JWT_SECRET must be at least 32 characters.');
 
 const googleClientId = required('GOOGLE_CLIENT_ID');
@@ -79,8 +86,16 @@ export const config = {
   redisUrl: optional('REDIS_URL') || null,
 
   jwtSecret,
-  sessionTtlDays: integer('SESSION_TTL_DAYS', 7),
+  // Short-lived, stateless access token. Kept small so a leaked token is only
+  // useful for minutes; the frontend transparently mints a new one from the
+  // refresh cookie when it expires.
+  accessTokenTtlMinutes: integer('ACCESS_TOKEN_TTL_MINUTES', 15),
+  // Long-lived, database-backed refresh token. This is the credential that
+  // keeps a user signed in across restarts, and the only one that can be
+  // revoked per-session (logout, logout-everywhere, reuse detection).
+  refreshTokenTtlDays: integer('REFRESH_TOKEN_TTL_DAYS', 30),
   sessionCookieName: 'maple_session',
+  refreshCookieName: 'maple_refresh',
   // Guards the OAuth handshake against CSRF; short-lived, so it never needs to
   // survive a restart.
   stateCookieName: 'maple_oauth_state',
@@ -114,4 +129,5 @@ export const config = {
   bootstrapAdminEmails: list('BOOTSTRAP_ADMIN_EMAILS'),
 };
 
-export const sessionTtlSeconds = config.sessionTtlDays * 24 * 60 * 60;
+export const accessTokenTtlSeconds = config.accessTokenTtlMinutes * 60;
+export const refreshTokenTtlSeconds = config.refreshTokenTtlDays * 24 * 60 * 60;
