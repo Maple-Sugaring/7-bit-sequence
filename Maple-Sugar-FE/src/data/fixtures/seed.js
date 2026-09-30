@@ -154,12 +154,25 @@ export const users = [
     Account_Expiry: null,
     Google_Calendar_ID: null,
   },
+
   {
     UserID: 11,
     RoleID: ROLE_ADMIN,
     First_Name: 'Darren',
     Last_Name: 'Yang',
     Email: 'dy4385@g.rit.edu',
+    Created_At: '2026-08-25',
+    Last_Login: '2026-09-11T13:15:00Z',
+    Is_Active: true,
+    Account_Expiry: null,
+    Google_Calendar_ID: null,
+  },
+  {
+    UserID: 12,
+    RoleID: ROLE_STUDENT,
+    First_Name: 'Sponge',
+    Last_Name: 'Bob',
+    Email: 'spg9196@g.rit.edu',
     Created_At: '2026-08-25',
     Last_Login: '2026-09-11T13:15:00Z',
     Is_Active: true,
@@ -225,6 +238,8 @@ export const nodes = STANDS.flatMap((stand, standIndex) =>
       Signal_Rssi: Math.round(offline ? between(-124, -112) : between(-102, -64)),
       Location: { lat: round(stand.lat + between(-0.0012, 0.0012), 6), lon: round(stand.lon + between(-0.0012, 0.0012), 6) },
       Stand: stand.name,
+      // One tree per stand is on the dashboard, like the live database.
+      Tracked: treeIndex === 0,
       Last_Seen: offline
         ? dayjs('2026-09-10T22:00:00Z').subtract(Math.floor(between(1, 30)), 'hour').toISOString()
         : dayjs('2026-09-11T13:55:00Z').subtract(Math.floor(between(0, 20)), 'minute').toISOString(),

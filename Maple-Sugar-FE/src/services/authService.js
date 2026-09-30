@@ -1,6 +1,8 @@
 import * as authRepository from '../data/repositories/authRepository';
+import { apiMode } from '../data/apiClient';
 import { ApiError } from '../data/ApiError';
-import { isAccountUsable, roleFromId } from '../business/permissions';
+import { users as seedUsers } from '../data/fixtures/seed';
+import { ROLE_LABELS, isAccountUsable, roleFromId } from '../business/permissions';
 
 /**
  * Authentication orchestration: talks to the repository, then applies the
@@ -38,6 +40,23 @@ export async function signIn({ email, password }) {
   }
 
   return { token: result.token, user: toSessionUser(result.user) };
+}
+
+/**
+ * One usable seeded account per role, for signing in without Google while the
+ * UI runs on mock data. Empty against the real API.
+ */
+export function demoAccounts() {
+  if (apiMode !== 'mock') return [];
+
+  const byRole = new Map();
+  for (const user of seedUsers) {
+    const role = roleFromId(user.RoleID);
+    if (!byRole.has(role) && isAccountUsable(user)) {
+      byRole.set(role, { email: user.Email, label: ROLE_LABELS[role] ?? role });
+    }
+  }
+  return [...byRole.values()];
 }
 
 export async function signOut() {
