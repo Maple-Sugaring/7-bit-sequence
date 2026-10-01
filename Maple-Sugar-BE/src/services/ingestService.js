@@ -30,9 +30,15 @@ async function acceptReading(gateway, reading) {
     throw forbidden('That node is not on this gateway.');
   }
 
-  // Air temperature comes from OpenWeather, not the load cell. Drop anything
-  // the Pi sent so a node reading cannot raise a heat alert on its own.
-  const input = { ...reading, NodeID: node.NodeID, BucketID: reading.BucketID, Temperature: null };
+  // Air temperature comes from OpenWeather. A sap probe is a separate field, so
+  // a load-cell payload cannot raise a heat alert by sending ambient air.
+  const input = {
+    ...reading,
+    NodeID: node.NodeID,
+    BucketID: reading.BucketID,
+    Temperature: reading.Sap_Temperature ?? null,
+    Sap_Flow_Rate_Lph: reading.Sap_Flow_Rate_Lph ?? null,
+  };
   const { errors, isValid } = validateReading(input);
   if (!isValid) {
     const message = errors.Weight ?? errors.Recorded_At ?? errors.Sugar_Percent ?? 'Some fields need attention.';
@@ -49,10 +55,11 @@ async function acceptReading(gateway, reading) {
     signalRssi: reading.Signal_Rssi ?? null,
   });
 
-  if (existing) return { Reading: existing, Duplicate: true };
+  const desired = node.Report_Interval_Seconds ?? null;
+  if (existing) return { Reading: existing, Duplicate: true, Desired_Interval_Seconds: desired };
 
   const stored = await metricsService.createMetric(input, null);
-  return { Reading: stored, Duplicate: false };
+  return { Reading: stored, Duplicate: false, Desired_Interval_Seconds: desired };
 }
 
 /**

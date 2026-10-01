@@ -1,4 +1,6 @@
 import { queryAll, queryOne } from '../db/pool.js';
+import { logger } from '../lib/logger.js';
+import { notifyCriticalAlert } from '../services/notificationService.js';
 import { mapAlert } from './mappers.js';
 
 const ALERT_COLUMNS = `
@@ -43,7 +45,12 @@ export async function createAlert({ NodeID, Alert_Type, Description, severity = 
      returning ${ALERT_COLUMNS}`,
     [NodeID, Alert_Type, severity, Description],
   );
-  return mapAlert(row);
+  const alert = mapAlert(row);
+  // Delivery is best-effort. A mail outage must not roll back the alert row.
+  void notifyCriticalAlert({ ...alert, severity, Alert_Type }).catch((error) => {
+    logger.error({ err: error, alertId: alert.AlertID }, 'Critical notification failed');
+  });
+  return alert;
 }
 
 /**

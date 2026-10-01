@@ -5,15 +5,18 @@
 import { config } from './config.js';
 import { logger } from './lib/logger.js';
 import { createApp } from './app.js';
+import { clearSeededData } from './db/clearSeed.js';
 import { runMigrations } from './db/migrate.js';
 import { connectCache, disconnectCache } from './cache/redisCache.js';
 import { closePool } from './db/pool.js';
+import { startHousekeeping } from './services/housekeeping.js';
 import { ensureHistoricWeather } from './services/historicWeather.js';
 import * as usersRepository from './repositories/usersRepository.js';
 
 // Migrations run before the server listens, so a container that rolls out ahead
 // of its schema fails to start rather than serving 500s against missing columns.
 await runMigrations();
+await clearSeededData();
 
 const promoted = await usersRepository.promoteEmailsToAdmin(config.bootstrapAdminEmails);
 if (promoted) logger.info({ promoted }, 'Promoted bootstrap administrators');
@@ -25,6 +28,8 @@ await ensureHistoricWeather();
 await connectCache();
 
 const app = createApp();
+
+const stopHousekeeping = startHousekeeping();
 
 const server = app.listen(config.port, () => {
   logger.info(
@@ -41,6 +46,7 @@ async function shutdown(signal) {
   shuttingDown = true;
 
   logger.info({ signal }, 'Shutting down');
+  stopHousekeeping();
 
   // Stop accepting connections, then let in-flight requests finish before the
   // pool goes away underneath them.

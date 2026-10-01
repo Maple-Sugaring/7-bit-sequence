@@ -52,3 +52,5 @@ export const MAX_TEMPERATURE_F = 90;
 
 /** Below this a node's battery warrants a swap. */
 export const LOW_BATTERY_PERCENT = 20;
+/** A tracked node that has not reported for this long is treated as down. */
+export const STALE_AFTER_MINUTES = 45;

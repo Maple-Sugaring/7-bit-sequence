@@ -115,6 +115,18 @@ export const config = {
   gatewayIngestToken: optional('GATEWAY_INGEST_TOKEN') || null,
   // Comma-separated. Promoted to Admin on boot so the role is not baked into SQL.
   bootstrapAdminEmails: list('BOOTSTRAP_ADMIN_EMAILS'),
+
+  // Critical alerts. Both channels stay off until these are set, so a dev
+  // machine never sends mail or texts.
+  smtpUrl: optional('SMTP_URL') || null,
+  alertFrom: optional('ALERT_FROM') || null,
+  alertEmails: list('ALERT_EMAILS'),
+  twilio: {
+    accountSid: optional('TWILIO_ACCOUNT_SID') || null,
+    authToken: optional('TWILIO_AUTH_TOKEN') || null,
+    from: optional('TWILIO_FROM') || null,
+  },
+  alertSmsTo: list('ALERT_SMS_TO'),
 };
 
 export const sessionTtlSeconds = config.sessionTtlDays * 24 * 60 * 60;

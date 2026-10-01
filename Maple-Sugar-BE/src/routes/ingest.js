@@ -6,8 +6,9 @@
 
 import { Router } from 'express';
 import { requireGateway } from '../middleware/authenticate.js';
-import { ingestBody } from './schemas.js';
 import { ingestReadings } from '../services/ingestService.js';
+import { ingestBuffer, isDatabaseUnavailable } from '../services/readingBuffer.js';
+import { ingestBody } from './schemas.js';
 
 export const ingestRouter = Router();
 
@@ -21,7 +22,19 @@ function asBatch(body) {
 
 ingestRouter.post('/', requireGateway, async (req, res) => {
   const batch = asBatch(ingestBody.parse(req.body));
-  const result = await ingestReadings({ ...batch, clientIp: req.ip });
+  let result;
+  try {
+    result = await ingestReadings({ ...batch, clientIp: req.ip });
+  } catch (error) {
+    if (!isDatabaseUnavailable(error)) throw error;
+    await ingestBuffer.enqueue({ ...batch, clientIp: req.ip });
+    return res.status(202).json({
+      Buffered: true,
+      Accepted: [],
+      Rejected: [],
+      message: 'The database is unreachable. This batch is stored locally and will be saved when the connection returns.',
+    });
+  }
 
   if (!result.Accepted.length) {
     return res.status(422).json({

@@ -53,6 +53,29 @@ export const updateMetricBody = z
   })
   .refine((body) => Object.keys(body).length > 0, { message: 'Nothing to update.' });
 
+export const createGatewayBody = z.object({
+  Gateway_Code: z
+    .string()
+    .trim()
+    .min(1, 'Name the gateway.')
+    .max(50)
+    .regex(/^[A-Za-z0-9_-]+$/, 'Use letters, numbers, dashes, or underscores.'),
+  Gateway_Name: z.string().trim().min(1, 'Give the gateway a label.').max(100),
+});
+
+export const createNodeBody = z.object({
+  Node_Name: z.string().trim().min(1, 'Name the tree.').max(100),
+  Stand: z.string().trim().min(1, 'Name the stand.').max(50),
+  Latitude: z.coerce.number().min(-90).max(90),
+  Longitude: z.coerce.number().min(-180).max(180),
+  Tare_Weight: z.coerce.number().min(0).max(30).optional(),
+  Barcode_ID: z.string().trim().max(50).optional(),
+  Tree_Species: z.string().trim().max(50).optional(),
+  Rf_Tag: z.string().trim().max(64).optional(),
+  Notes: z.string().trim().max(500).optional(),
+  GatewayID: z.coerce.number().int().positive().optional(),
+});
+
 export const updateNodeBody = z.object({
   Status_Code: z.coerce.number().int().min(0).max(3).optional(),
   Node_Name: z.string().min(1).max(100).optional(),
@@ -141,6 +164,23 @@ export const createSlotBody = z
     path: ['Ends_At'],
   });
 
+export const nodeDetailsBody = z.object({
+  Node_Name: z.string().trim().min(1, 'Name the tree.').max(100),
+  Stand: z.string().trim().min(1, 'Name the stand.').max(50),
+  Latitude: z.coerce.number().min(-90).max(90),
+  Longitude: z.coerce.number().min(-180).max(180),
+  Rf_Tag: z.string().trim().max(64).optional(),
+  Notes: z.string().trim().max(500).optional(),
+});
+
+export const nodeIntervalBody = z.object({
+  Report_Interval_Minutes: z.coerce
+    .number()
+    .int()
+    .min(1, 'Use at least 1 minute.')
+    .max(1440, 'Use a day or less.'),
+});
+
 export const nodeActionBody = z.object({
   Action: z.enum(['collect', 'maintenance', 'online']),
   Notes: z.string().max(2000).optional(),
@@ -201,6 +241,9 @@ const ingestReadingObject = z.object({
   Recorded_At: isoDateTime,
   Weight: z.coerce.number(),
   Sugar_Percent: nullableNumber,
+  // Sap probe only. Air temperature is OpenWeather and is not stored from the Pi.
+  Sap_Temperature: nullableNumber,
+  Sap_Flow_Rate_Lph: nullableNumber,
   Weather_Conditions: z.string().max(50).nullish(),
   Ice_Present: z.boolean().optional().default(false),
   Battery_Percent: z.union([z.coerce.number().min(0).max(100), z.null()]).optional(),

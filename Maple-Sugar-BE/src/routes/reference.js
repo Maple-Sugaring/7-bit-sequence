@@ -7,8 +7,9 @@
 import { Router } from 'express';
 import { Capability } from '../business/permissions.js';
 import { requireAnyCapability, requireAuth, requireCapability } from '../middleware/authenticate.js';
-import { cacheKeys, TTL } from '../cache/cacheKeys.js';
-import { readThrough } from '../cache/redisCache.js';
+import { cacheKeys, cacheNamespaces, TTL } from '../cache/cacheKeys.js';
+import { invalidateNamespaces, readThrough } from '../cache/redisCache.js';
+import { createGatewayBody } from './schemas.js';
 import * as usersRepository from '../repositories/usersRepository.js';
 import * as nodesRepository from '../repositories/nodesRepository.js';
 import * as bucketsRepository from '../repositories/bucketsRepository.js';
@@ -20,6 +21,13 @@ export const referenceRouter = Router();
 // user's name, so any signed-in user may read them.
 referenceRouter.get('/roles', requireAuth, async (req, res) => {
   res.json(await readThrough(cacheKeys.roles(), TTL.USERS, () => usersRepository.listRoles()));
+});
+
+referenceRouter.post('/gateways', requireCapability(Capability.DEPLOY_NODES), async (req, res) => {
+  const body = createGatewayBody.parse(req.body);
+  const gateway = await nodesRepository.createGateway(body);
+  await invalidateNamespaces([cacheNamespaces.GATEWAYS]);
+  res.status(201).json(gateway);
 });
 
 referenceRouter.get(
