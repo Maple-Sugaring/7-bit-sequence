@@ -123,16 +123,88 @@ const routes = [
   // ---- Reference data ---------------------------------------------------
   { method: 'GET', match: /^\/roles$/, handler: () => db.roles },
   { method: 'GET', match: /^\/gateways$/, handler: () => db.gateways },
+  {
+    method: 'POST',
+    match: /^\/gateways$/,
+    handler: (_match, { body }) => {
+      const gateway = {
+        GatewayID: Math.max(0, ...db.gateways.map((item) => item.GatewayID)) + 1,
+        Gateway_Code: body?.Gateway_Code,
+        Gateway_Name: body?.Gateway_Name,
+        Status: 'Offline',
+        Last_Seen: null,
+      };
+      db.gateways.push(gateway);
+      return gateway;
+    },
+  },
   { method: 'GET', match: /^\/buckets$/, handler: () => db.buckets },
   { method: 'GET', match: /^\/guides$/, handler: () => db.guides },
 
   // ---- Nodes ------------------------------------------------------------
   { method: 'GET', match: /^\/nodes$/, handler: () => db.nodes },
   {
+    method: 'POST',
+    match: /^\/nodes$/,
+    handler: (_match, { body }) => {
+      const id = Math.max(0, ...db.nodes.map((node) => node.NodeID)) + 1;
+      const node = {
+        NodeID: id,
+        Node_Code: `NODE-${String(id).padStart(3, '0')}`,
+        Node_Name: body?.Node_Name ?? `Tree ${id}`,
+        Stand: body?.Stand ?? '',
+        Location: { lat: Number(body?.Latitude), lon: Number(body?.Longitude) },
+        Rf_Tag: body?.Rf_Tag || null,
+        Notes: body?.Notes || null,
+        Status_Code: 0,
+        Tracked: true,
+        Battery_Percent: null,
+        Signal_Rssi: null,
+        Last_Seen: null,
+      };
+      db.nodes.push(node);
+      return node;
+    },
+  },
+  {
+    method: 'DELETE',
+    match: /^\/nodes\/(\d+)$/,
+    handler: ([id]) => {
+      const index = db.nodes.findIndex((node) => node.NodeID === Number(id));
+      if (index < 0) notFound('Node');
+      db.nodes.splice(index, 1);
+      return null;
+    },
+  },
+  {
     method: 'GET',
     match: /^\/nodes\/(\d+)$/,
     handler: ([id]) =>
       db.nodes.find((node) => node.NodeID === Number(id)) ?? notFound('Node'),
+  },
+  {
+    method: 'PATCH',
+    match: /^\/nodes\/(\d+)\/details$/,
+    handler: ([id], { body }) => {
+      const node = db.nodes.find((candidate) => candidate.NodeID === Number(id));
+      if (!node) notFound('Node');
+      node.Node_Name = body?.Node_Name ?? node.Node_Name;
+      node.Stand = body?.Stand ?? node.Stand;
+      node.Location = { lat: Number(body?.Latitude), lon: Number(body?.Longitude) };
+      node.Rf_Tag = body?.Rf_Tag || null;
+      node.Notes = body?.Notes || null;
+      return node;
+    },
+  },
+  {
+    method: 'PATCH',
+    match: /^\/nodes\/(\d+)\/interval$/,
+    handler: ([id], { body }) => {
+      const node = db.nodes.find((candidate) => candidate.NodeID === Number(id));
+      if (!node) notFound('Node');
+      node.Report_Interval_Seconds = Number(body?.Report_Interval_Minutes) * 60;
+      return node;
+    },
   },
   {
     method: 'PATCH',

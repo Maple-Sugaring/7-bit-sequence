@@ -129,9 +129,27 @@ export function AlertsPage() {
       <PageHeader
         title="Notifications"
         actions={
-          <Button variant="outlined" onClick={refresh} disabled={loading}>
-            Refresh
-          </Button>
+          <Stack direction="row" spacing={1}>
+            <Button
+              variant="outlined"
+              onClick={async () => {
+                if (typeof Notification === 'undefined') return;
+                const permission = await Notification.requestPermission();
+                if (permission !== 'granted') return;
+                const notice = new Notification('Maple Sugaring', {
+                  body: openCount
+                    ? `${openCount} open alert${openCount === 1 ? '' : 's'} on the sugarbush.`
+                    : 'Alerts on this phone are on. You will be notified when a new one opens.',
+                });
+                notice.onclick = () => navigate('/notifications');
+              }}
+            >
+              Notify this phone
+            </Button>
+            <Button variant="outlined" onClick={refresh} disabled={loading}>
+              Refresh
+            </Button>
+          </Stack>
         }
       />
 

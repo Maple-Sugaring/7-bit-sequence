@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Autocomplete from '@mui/material/Autocomplete';
 import Button from '@mui/material/Button';
@@ -14,10 +14,12 @@ import Typography from '@mui/material/Typography';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import dayjs from 'dayjs';
 import { estimatedSyrupGallons, sugarPercentForSyrup } from '../business/sugarContent';
+import { validateReading } from '../business/validation';
 import { gallonsFromWeight } from '../business/yieldMetrics';
 import { PageHeader } from '../components/common/PageHeader';
 import { dateTime } from '../components/common/format';
-import { useJournal, useRecordingTargets } from '../services/hooks';
+import { enqueueCollection, flushCollectionQueue, queuedCollections } from '../data/offlineQueue';
+import { useBush, useJournal, useRecordingTargets } from '../services/hooks';
 import { useAction } from '../services/hooks/useAsync';
 import { saveJournalEntry } from '../services/journalService';
 import { submitReading } from '../services/metricsService';
@@ -32,27 +34,70 @@ function emptyForm() {
     Syrup_Gallons: '',
     Ice_Present: false,
     Collected_At: dayjs(),
+    Batch_Label: '',
+    Keep_Batch: false,
   };
+}
+
+function withEstimate(next) {
+  const sap = next.Weight === '' ? null : gallonsFromWeight(Number(next.Weight));
+  const sugar = next.Sugar_Percent === '' ? null : Number(next.Sugar_Percent);
+  return {
+    ...next,
+    Syrup_Gallons: sap == null ? next.Syrup_Gallons : estimatedSyrupGallons(sap, sugar).toFixed(2),
+  };
+}
+
+async function persistEntry(entry) {
+  if (entry.Weight != null || entry.Sugar_Percent != null) {
+    await submitReading({
+      NodeID: entry.NodeID,
+      BucketID: entry.BucketID,
+      Weight: entry.Weight,
+      Sugar_Percent: entry.Sugar_Percent,
+      Ice_Present: entry.Ice_Present,
+      Recorded_At: entry.Collected_At,
+    });
+  }
+  await saveJournalEntry(entry);
 }
 
 export function CollectionPage() {
   const journal = useJournal();
+  const bush = useBush();
   const { data: targets } = useRecordingTargets();
   const [form, setForm] = useState(emptyForm);
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [notice, setNotice] = useState('');
+  const [queued, setQueued] = useState(() => queuedCollections().length);
+  const [session, setSession] = useState([]);
   const save = useAction(async (entry) => {
-    if (entry.Weight != null || entry.Sugar_Percent != null) {
-      await submitReading({
-        NodeID: entry.NodeID,
-        BucketID: entry.BucketID,
-        Weight: entry.Weight,
-        Sugar_Percent: entry.Sugar_Percent,
-        Ice_Present: entry.Ice_Present,
-        Recorded_At: entry.Collected_At,
-      });
-    }
-    await saveJournalEntry(entry);
+    await persistEntry(entry);
     await journal.refresh();
   });
+
+  const refreshJournal = journal.refresh;
+
+  useEffect(() => {
+    let cancelled = false;
+    flushCollectionQueue(persistEntry)
+      .then(async (result) => {
+        if (cancelled) return;
+        setQueued(result.remaining);
+        if (result.flushed) {
+          setNotice(
+            result.flushed === 1
+              ? 'Uploaded 1 collection saved while offline.'
+              : `Uploaded ${result.flushed} collections saved while offline.`,
+          );
+          await refreshJournal();
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshJournal]);
 
   const selected = useMemo(
     () => (targets ?? []).find((target) => target.nodeId === form.NodeID) ?? null,
@@ -60,6 +105,32 @@ export function CollectionPage() {
   );
 
   const update = (field) => (value) => setForm((prev) => ({ ...prev, [field]: value }));
+
+  const readingCheck = useMemo(
+    () =>
+      validateReading({
+        NodeID: form.NodeID,
+        Weight: form.Weight,
+        Sugar_Percent: form.Sugar_Percent,
+        Ice_Present: form.Ice_Present,
+        Recorded_At: form.Collected_At?.toISOString?.() ?? form.Collected_At,
+      }),
+    [form.NodeID, form.Weight, form.Sugar_Percent, form.Ice_Present, form.Collected_At],
+  );
+
+  const chooseTree = (option) => {
+    const node = (bush.data ?? []).find((row) => row.NodeID === option?.nodeId) ?? null;
+    setFieldErrors({});
+    setForm((prev) =>
+      withEstimate({
+        ...prev,
+        NodeID: option?.nodeId ?? '',
+        Weight: node?.Weight != null ? String(node.Weight) : prev.Weight,
+        Sugar_Percent: node?.Sugar_Percent != null ? String(node.Sugar_Percent) : prev.Sugar_Percent,
+        Ice_Present: node?.Ice_Present ?? prev.Ice_Present,
+      }),
+    );
+  };
 
   const sapGallons = form.Weight === '' ? null : gallonsFromWeight(Number(form.Weight));
 
@@ -95,17 +166,70 @@ export function CollectionPage() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    const result = await save.execute({
+    setNotice('');
+    const hasMeasurement = form.Weight !== '' || form.Sugar_Percent !== '';
+    if (hasMeasurement && !readingCheck.isValid) {
+      setFieldErrors(readingCheck.errors);
+      return;
+    }
+    setFieldErrors({});
+
+    const batch = form.Batch_Label.trim();
+    const notes = form.Process_Notes.trim();
+    const entry = {
       Title: form.Title.trim(),
-      Process_Notes: form.Process_Notes.trim(),
+      Process_Notes: batch ? `Batch ${batch}.\n${notes}` : notes,
       NodeID: form.NodeID || null,
       BucketID: selected?.bucketId ?? null,
       Collected_At: form.Collected_At.toISOString(),
       Weight: form.Weight === '' ? null : Number(form.Weight),
       Sugar_Percent: form.Sugar_Percent === '' ? null : Number(form.Sugar_Percent),
       Ice_Present: form.Ice_Present,
-    });
-    if (result.ok) setForm(emptyForm());
+    };
+
+    const kept = {
+      NodeID: form.NodeID,
+      Ice_Present: form.Ice_Present,
+      Batch_Label: form.Batch_Label,
+      Keep_Batch: true,
+    };
+    const reset = () => {
+      if (!form.Keep_Batch) {
+        setForm(emptyForm());
+        return;
+      }
+      const node = (bush.data ?? []).find((row) => row.NodeID === form.NodeID) ?? null;
+      setForm(
+        withEstimate({
+          ...emptyForm(),
+          ...kept,
+          Weight: node?.Weight != null ? String(node.Weight) : '',
+          Sugar_Percent: node?.Sugar_Percent != null ? String(node.Sugar_Percent) : '',
+          Ice_Present: node?.Ice_Present ?? form.Ice_Present,
+        }),
+      );
+    };
+
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      setQueued(enqueueCollection(entry));
+      setSession((prev) => [...prev, form.Title.trim()]);
+      setNotice('No connection. This entry is saved on this phone and will upload when you are back online.');
+      reset();
+      return;
+    }
+
+    const result = await save.execute(entry);
+    if (result.offline) {
+      save.clearError();
+      setQueued(enqueueCollection(entry));
+      setNotice('Cannot reach the server. This entry is saved on this phone and will upload when the connection returns.');
+      reset();
+      return;
+    }
+    if (result.ok) {
+      setSession((prev) => [...prev, form.Title.trim()]);
+      reset();
+    }
   };
 
   return (
@@ -121,10 +245,23 @@ export function CollectionPage() {
                   Document a collection
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Write how the round went. Weight, sugar, and the ice tag are saved with the note
-                  and count as a bucket reading.
+                  Write how the round went. Choosing a tree fills in the latest weight and Brix.
+                  Weight, sugar, and the ice tag are saved with the note and count as a bucket reading.
                 </Typography>
+                {notice ? <Alert severity="info">{notice}</Alert> : null}
+                {queued > 0 ? (
+                  <Alert severity="warning">
+                    {queued === 1 ? '1 entry is waiting on this phone.' : `${queued} entries are waiting on this phone.`}
+                  </Alert>
+                ) : null}
                 {save.error ? <Alert severity="error">{save.error}</Alert> : null}
+                {session.length ? (
+                  <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }} useFlexGap>
+                    {session.map((title, index) => (
+                      <Chip key={`${title}-${index}`} label={title} size="small" />
+                    ))}
+                  </Stack>
+                ) : null}
                 <TextField
                   label="Title"
                   value={form.Title}
@@ -135,11 +272,47 @@ export function CollectionPage() {
                 <Autocomplete
                   options={targets ?? []}
                   value={selected}
-                  onChange={(_event, option) => update('NodeID')(option?.nodeId ?? '')}
+                  onChange={(_event, option) => chooseTree(option)}
                   getOptionLabel={(option) => option.label}
                   groupBy={(option) => option.stand}
                   isOptionEqualToValue={(option, value) => option.nodeId === value.nodeId}
-                  renderInput={(params) => <TextField {...params} label="Tree" />}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Tree"
+                      error={Boolean(fieldErrors.NodeID)}
+                      helperText={fieldErrors.NodeID}
+                    />
+                  )}
+                />
+                {selected ? (
+                  <Alert severity="info" icon={false}>
+                    Bucket {selected.barcode ?? 'unassigned'}
+                    {selected.tareWeight != null ? ` · tare ${selected.tareWeight} lb` : ''}.
+                    The weight and Brix fields start from the latest sensor reading. Change them if you measured something else.
+                  </Alert>
+                ) : null}
+                {selected?.isOffline ? (
+                  <Alert severity="warning">
+                    This tree&apos;s device is offline. You can still record the collection. It will be checked against the sensor when the node reports again.
+                  </Alert>
+                ) : null}
+                <TextField
+                  label="Batch label"
+                  value={form.Batch_Label}
+                  onChange={(event) => update('Batch_Label')(event.target.value)}
+                  placeholder="Morning round, north line"
+                  helperText="Optional. Tags every entry in this round."
+                  fullWidth
+                />
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={form.Keep_Batch}
+                      onChange={(event) => update('Keep_Batch')(event.target.checked)}
+                    />
+                  }
+                  label="Keep this tree, ice tag, and batch label for the next entry"
                 />
                 <TextField
                   label="What you did"
@@ -158,17 +331,26 @@ export function CollectionPage() {
                       type="number"
                       value={form.Weight}
                       onChange={(event) => changeWeight(event.target.value)}
+                      error={Boolean(fieldErrors.Weight)}
+                      color={readingCheck.warnings.Weight ? 'warning' : 'primary'}
+                      helperText={fieldErrors.Weight || readingCheck.warnings.Weight || 'Gross pounds, bucket included.'}
                       fullWidth
                       slotProps={{ htmlInput: { min: 0, step: 0.1 } }}
                     />
                   </Grid>
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <TextField
-                      label="Sugar content"
+                      label="Sugar content (Brix %)"
                       type="number"
                       value={form.Sugar_Percent}
                       onChange={(event) => changeSugar(event.target.value)}
-                      helperText="A reading replaces the 40:1 estimate."
+                      error={Boolean(fieldErrors.Sugar_Percent)}
+                      color={readingCheck.warnings.Sugar_Percent ? 'warning' : 'primary'}
+                      helperText={
+                        fieldErrors.Sugar_Percent ||
+                        readingCheck.warnings.Sugar_Percent ||
+                        'Refractometer Brix. A reading replaces the 40:1 estimate.'
+                      }
                       fullWidth
                       slotProps={{ htmlInput: { min: 0, step: 0.1 } }}
                     />

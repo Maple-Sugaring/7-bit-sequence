@@ -164,11 +164,13 @@ describe('who can see what', () => {
     expect(labels).toContain('Sugar Woods');
     expect(labels).not.toContain('Admin');
     expect(labels).not.toContain('Schedule');
+    expect(labels).toContain('Deploy');
     expect(labels).not.toContain('Collection');
 
     const student = navItemsFor(Role.STUDENT).map((item) => item.to);
     expect(student).toContain('/schedule');
     expect(student).not.toContain('/admin');
+    expect(student).not.toContain('/deploy');
   });
 
   test('a raw exception is not shown to the user', () => {

@@ -4,6 +4,7 @@ import EditCalendarIcon from '@mui/icons-material/EditCalendar';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import RestoreIcon from '@mui/icons-material/Restore';
 import ParkIcon from '@mui/icons-material/Park';
+import SettingsInputAntennaIcon from '@mui/icons-material/SettingsInputAntenna';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import { can, Capability } from '../business/permissions';
 
@@ -49,6 +50,12 @@ export const NAV_ITEMS = [
     label: 'Admin',
     icon: AdminPanelSettingsIcon,
     capability: Capability.MANAGE_USERS,
+  },
+  {
+    to: '/deploy',
+    label: 'Deploy',
+    icon: SettingsInputAntennaIcon,
+    capability: Capability.DEPLOY_NODES,
   },
 ];
 

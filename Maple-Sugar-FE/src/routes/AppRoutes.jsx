@@ -36,6 +36,9 @@ const AdminPage = lazy(() =>
 const CollectionPage = lazy(() =>
   import('../pages/CollectionPage').then((module) => ({ default: module.CollectionPage })),
 );
+const DeployPage = lazy(() =>
+  import('../pages/DeployPage').then((module) => ({ default: module.DeployPage })),
+);
 
 const PROTECTED = [
   { path: '/dashboard', element: <DashboardPage />, capability: Capability.VIEW_DASHBOARD },
@@ -51,6 +54,7 @@ const PROTECTED = [
     capability: Capability.MANAGE_SCHEDULE,
   },
   { path: '/admin', element: <AdminPage />, capability: Capability.MANAGE_USERS },
+  { path: '/deploy', element: <DeployPage />, capability: Capability.DEPLOY_NODES },
 ];
 
 function PageFallback() {

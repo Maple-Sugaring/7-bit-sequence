@@ -3,6 +3,8 @@
 #include <SPI.h>
 #include <RadioLib.h>
 #include <U8g2lib.h>
+#include <esp_flash.h>
+#include <string.h>
 
 #ifndef NODE_CODE
 #define NODE_CODE "NODE-001"
@@ -47,10 +49,8 @@ uint32_t txIntervalMs = TX_INTERVAL_MS;
 SX1262 radio = new Module(PIN_LORA_NSS, PIN_LORA_DIO1, PIN_LORA_RST, PIN_LORA_BUSY);
 U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, PIN_OLED_SCL, PIN_OLED_SDA, PIN_OLED_RST);
 
-// NODE_CODE is only the compile-time fallback. A field board is built as
-// UNPROVISIONED and learns its tree from the Deploy page over USB:
-//   PROVISION {"Node_Code":"NODE-017","Rf_Tag":""}
-//   FACTORY
+// The field image is built with NODE_CODE "MAPLENODE00000000". The website
+// replaces that exact text with the real node code before flashing.
 Preferences provisionStore;
 char nodeCode[24] = NODE_CODE;
 char rfTag[40] = "";
@@ -78,21 +78,26 @@ void rememberProvision() {
 
 bool loadProvision() {
   provisionStore.begin("maple", true);
-  const String stored = provisionStore.getString("node_code", "");
-  const String tag = provisionStore.getString("rf_tag", "");
   const uint32_t seconds = provisionStore.getUInt("interval_s", 0);
   provisionStore.end();
   if (seconds >= 60 && seconds <= 86400) {
     txIntervalMs = seconds * 1000UL;
   }
-  if (stored.length() > 0) {
-    stored.toCharArray(nodeCode, sizeof(nodeCode));
-    tag.toCharArray(rfTag, sizeof(rfTag));
+
+  // Written by the website at flash time. Not part of the signed app image,
+  // so the OLED still powers on.
+  uint8_t identity[32] = {0};
+  if (esp_flash_read(nullptr, identity, 0x670000, sizeof(identity)) == ESP_OK &&
+      memcmp(identity, "MAPLEID1", 8) == 0 && identity[8] != 0 && identity[8] != 0xFF) {
+    memcpy(nodeCode, identity + 8, 16);
+    nodeCode[16] = '\0';
     provisioned = true;
     return true;
   }
-  // node_001 and node_002 images still ship with a baked-in code.
-  if (strcmp(NODE_CODE, "UNPROVISIONED") != 0) {
+
+  if (strcmp(NODE_CODE, "MAPLENODE00000000") != 0 && strcmp(NODE_CODE, "UNPROVISIONED") != 0) {
+    strncpy(nodeCode, NODE_CODE, sizeof(nodeCode) - 1);
+    nodeCode[sizeof(nodeCode) - 1] = '\0';
     provisioned = true;
     return true;
   }
@@ -375,11 +380,7 @@ void setup() {
   USBSerial.printf("Maple sap LoRa node  %s  Heltec WiFi LoRa 32 V3\n", nodeCode);
 
   if (!loadProvision()) {
-    announce("Waiting to deploy", "Open Deploy on the phone", "USB cable");
-    while (!provisioned) {
-      pollSerial();
-      delay(20);
-    }
+    announce("No node code", "Flash again from Deploy", "Identity is in the image");
   }
 
   radioReady = initRadio();
