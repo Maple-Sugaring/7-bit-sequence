@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
+import Divider from '@mui/material/Divider';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import GoogleIcon from '@mui/icons-material/Google';
@@ -10,15 +12,28 @@ import mapleLogo from '../assets/MapleLogo.png';
 import ritLogo from '../assets/RITLogo.png';
 import { useAuth } from '../context/auth';
 import { landingRouteFor } from '../routes/navigation';
+import { demoAccounts } from '../services/authService';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? '/api').replace(/\/$/, '');
 const GOOGLE_START = `${API_BASE}/auth/google`;
+const DEMO_ACCOUNTS = demoAccounts();
 
 export function LoginPage() {
-  const { isAuthenticated, restoring, role } = useAuth();
+  const { isAuthenticated, restoring, role, signIn } = useAuth();
+  const [demoError, setDemoError] = useState(null);
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const banner = searchParams.get('error');
+
+  // The mock transport accepts any password for a seeded account.
+  const signInAsDemo = async (email) => {
+    setDemoError(null);
+    try {
+      await signIn({ email, password: 'mock' });
+    } catch (error) {
+      setDemoError(error.message);
+    }
+  };
 
   if (!restoring && isAuthenticated) {
     return <Navigate to={location.state?.from ?? landingRouteFor(role)} replace />;
@@ -108,6 +123,17 @@ export function LoginPage() {
                 >
                   Sign in with Google
                 </Button>
+                {DEMO_ACCOUNTS.length ? (
+                  <>
+                    <Divider>Mock data</Divider>
+                    {demoError ? <Alert severity="error">{demoError}</Alert> : null}
+                    {DEMO_ACCOUNTS.map((account) => (
+                      <Button key={account.email} variant="outlined" onClick={() => signInAsDemo(account.email)}>
+                        Continue as {account.label}
+                      </Button>
+                    ))}
+                  </>
+                ) : null}
               </>
             )}
           </Stack>
