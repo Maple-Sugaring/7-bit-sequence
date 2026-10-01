@@ -2,11 +2,17 @@ import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import NotificationsIcon from '@mui/icons-material/Notifications';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/auth';
+import { can, Capability } from '../business/permissions';
 import { MainNav } from './MainNav';
 
 export function TopBar() {
   const navigate = useNavigate();
+  const {pathname} = useLocation();
+  const {role} = useAuth();
+  const canViewAlerts = can(role, Capability.VIEW_ALERTS);
+  const onAlerts = pathname === '/notifications' || pathname.startsWith('/notifications/');
 
   return (
     <Box
@@ -41,9 +47,21 @@ export function TopBar() {
         Maple Sugaring
       </Typography>
       <MainNav />
-      <IconButton aria-label="Notifications" onClick={() => navigate('/notifications')} sx={{ color: '#fff' }}>
+      {canViewAlerts ? (
+              <IconButton 
+      aria-label="Notifications"
+      aria-current={onAlerts ? 'page' : undefined}
+      onClick={() => navigate('/notifications')} 
+      sx={{ 
+        color: '#fff',
+        bgcolor: onAlerts ? '#F76902' : 'transparent',
+        '&hover': {bgcolor: onAlerts ? '#C75300' : 'rgba(255,255,255,0.08'},
+        }}>
         <NotificationsIcon />
       </IconButton>
+      ):(
+        <Box/>
+      )}
     </Box>
   );
 }
