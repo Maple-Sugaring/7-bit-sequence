@@ -6,3 +6,10 @@ node_modules
 
 # Google OAuth client secret downloads (e.g. client_secret_*.apps.googleusercontent.com.json)
 client_secret*.json
+
+# Hardware builds and the Pi gateway
+.pio
+.venv
+__pycache__/
+*.pyc
+.env
