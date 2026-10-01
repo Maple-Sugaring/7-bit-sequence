@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <Preferences.h>
 #include <SPI.h>
 #include <RadioLib.h>
 #include <U8g2lib.h>
@@ -42,6 +43,107 @@ static const uint32_t TX_INTERVAL_MS = 20000;
 
 SX1262 radio = new Module(PIN_LORA_NSS, PIN_LORA_DIO1, PIN_LORA_RST, PIN_LORA_BUSY);
 U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, PIN_OLED_SCL, PIN_OLED_SDA, PIN_OLED_RST);
+
+// NODE_CODE is only the compile-time fallback. A field board is built as
+// UNPROVISIONED and learns its tree from the Deploy page over USB:
+//   PROVISION {"Node_Code":"NODE-017","Rf_Tag":""}
+//   FACTORY
+Preferences provisionStore;
+char nodeCode[24] = NODE_CODE;
+char rfTag[40] = "";
+bool provisioned = false;
+String serialLine;
+
+bool jsonString(const String &line, const char *key, char *out, size_t outLen) {
+  const String needle = String("\"") + key + "\":\"";
+  const int at = line.indexOf(needle);
+  if (at < 0) return false;
+  const int start = at + needle.length();
+  const int end = line.indexOf('"', start);
+  if (end < 0) return false;
+  line.substring(start, end).toCharArray(out, outLen);
+  return out[0] != '\0';
+}
+
+void rememberProvision() {
+  provisionStore.begin("maple", false);
+  provisionStore.putString("node_code", nodeCode);
+  provisionStore.putString("rf_tag", rfTag);
+  provisionStore.end();
+  provisioned = true;
+}
+
+bool loadProvision() {
+  provisionStore.begin("maple", true);
+  const String stored = provisionStore.getString("node_code", "");
+  const String tag = provisionStore.getString("rf_tag", "");
+  provisionStore.end();
+  if (stored.length() > 0) {
+    stored.toCharArray(nodeCode, sizeof(nodeCode));
+    tag.toCharArray(rfTag, sizeof(rfTag));
+    provisioned = true;
+    return true;
+  }
+  // node_001 and node_002 images still ship with a baked-in code.
+  if (strcmp(NODE_CODE, "UNPROVISIONED") != 0) {
+    provisioned = true;
+    return true;
+  }
+  return false;
+}
+
+void clearProvision() {
+  provisionStore.begin("maple", false);
+  provisionStore.clear();
+  provisionStore.end();
+  strncpy(nodeCode, "UNPROVISIONED", sizeof(nodeCode) - 1);
+  nodeCode[sizeof(nodeCode) - 1] = '\0';
+  rfTag[0] = '\0';
+  provisioned = false;
+  USBSerial.println("CLEARED");
+}
+
+void announce(const char *action, const char *detail, const char *extra);
+
+void handleSerialLine(const String &line) {
+  if (line.startsWith("FACTORY")) {
+    clearProvision();
+    announce("Cleared", "Open Deploy to reuse", "Waiting for PROVISION");
+    return;
+  }
+  if (!line.startsWith("PROVISION ")) return;
+
+  char nextCode[24];
+  if (!jsonString(line, "Node_Code", nextCode, sizeof(nextCode))) {
+    USBSerial.println("PROVISION failed");
+    return;
+  }
+  strncpy(nodeCode, nextCode, sizeof(nodeCode) - 1);
+  nodeCode[sizeof(nodeCode) - 1] = '\0';
+  char nextTag[40] = "";
+  if (jsonString(line, "Rf_Tag", nextTag, sizeof(nextTag))) {
+    strncpy(rfTag, nextTag, sizeof(rfTag) - 1);
+    rfTag[sizeof(rfTag) - 1] = '\0';
+  } else {
+    rfTag[0] = '\0';
+  }
+  rememberProvision();
+  USBSerial.println("PROVISIONED");
+  announce("Provisioned", nodeCode, rfTag[0] ? rfTag : "No RF tag yet");
+}
+
+void pollSerial() {
+  while (USBSerial.available()) {
+    const char c = static_cast<char>(USBSerial.read());
+    if (c == '\n') {
+      serialLine.trim();
+      if (serialLine.length()) handleSerialLine(serialLine);
+      serialLine = "";
+    } else if (c != '\r' && serialLine.length() < 180) {
+      serialLine += c;
+    }
+  }
+}
 
 char lineAction[28] = "Booting...";
 char lineDetail[28] = "";
@@ -115,7 +217,7 @@ void powerOled(bool on) {
 }
 
 bool initRadio() {
-  announce("Booting radio...", "SPI SX1262 @ 915.1", NODE_CODE);
+  announce("Booting radio...", "SPI SX1262 @ 915.1", nodeCode);
   SPI.begin(PIN_LORA_SCK, PIN_LORA_MISO, PIN_LORA_MOSI, PIN_LORA_NSS);
 
   int16_t state = radio.begin(
@@ -155,7 +257,7 @@ bool initRadio() {
   radio.setCRC(true);
 
   char extra[28];
-  snprintf(extra, sizeof(extra), "SF%d BW125  %s", LORA_SF, NODE_CODE);
+  snprintf(extra, sizeof(extra), "SF%d BW125  %s", LORA_SF, nodeCode);
   announce("Radio ready 915.1", extra, "Dummy weight to gateway");
   return true;
 }
@@ -193,7 +295,7 @@ void sendDummyReading() {
       json,
       sizeof(json),
       "{\"Node_Code\":\"%s\",\"Weight\":%.1f,\"Battery_Percent\":%d}",
-      NODE_CODE,
+      nodeCode,
       weight,
       battery);
 
@@ -201,7 +303,7 @@ void sendDummyReading() {
   char action[28];
   char detail[28];
   snprintf(action, sizeof(action), "TX sap #%lu", static_cast<unsigned long>(txCount));
-  snprintf(detail, sizeof(detail), "%s %.1fgal %.0flb", NODE_CODE, gallons, weight);
+  snprintf(detail, sizeof(detail), "%s %.1fgal %.0flb", nodeCode, gallons, weight);
   announce(action, detail, "On air to gateway...");
 
   digitalWrite(PIN_LED, HIGH);
@@ -233,17 +335,31 @@ void setup() {
   powerOled(true);
   u8g2.begin();
   u8g2.setContrast(180);
-  announce("Booting...", NODE_CODE, "Starting USB + radio");
+  announce("Booting...", nodeCode, "Starting USB + radio");
 
   USBSerial.begin(115200);
   USBSerial.setTxTimeoutMs(0);
   USBSerial.println();
-  USBSerial.printf("Maple sap LoRa node  %s  Heltec WiFi LoRa 32 V3\n", NODE_CODE);
+  USBSerial.printf("Maple sap LoRa node  %s  Heltec WiFi LoRa 32 V3\n", nodeCode);
+
+  if (!loadProvision()) {
+    announce("Waiting to deploy", "Open Deploy on the phone", "USB cable");
+    while (!provisioned) {
+      pollSerial();
+      delay(20);
+    }
+  }
 
   radioReady = initRadio();
 }
 
 void loop() {
+  pollSerial();
+  if (!provisioned) {
+    delay(50);
+    return;
+  }
+
   if (!radioReady) {
     delay(4000);
     radioReady = initRadio();
@@ -252,7 +368,7 @@ void loop() {
 
   if (!offsetDone) {
     char detail[28];
-    snprintf(detail, sizeof(detail), "%s offset", NODE_CODE);
+    snprintf(detail, sizeof(detail), "%s offset", nodeCode);
     announce("Holding TX", detail, "Next TX in 10s");
     waitWithCountdown(TX_OFFSET_MS);
     offsetDone = true;
