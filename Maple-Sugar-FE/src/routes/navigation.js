@@ -1,7 +1,6 @@
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import EditCalendarIcon from '@mui/icons-material/EditCalendar';
-import NotificationsIcon from '@mui/icons-material/Notifications';
 import RestoreIcon from '@mui/icons-material/Restore';
 import ParkIcon from '@mui/icons-material/Park';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
@@ -31,12 +30,6 @@ export const NAV_ITEMS = [
     label: 'Sugar Woods',
     icon: ParkIcon,
     capability: Capability.VIEW_DATA_TABLE,
-  },
-  {
-    to: '/notifications',
-    label: 'Notifications',
-    icon: NotificationsIcon,
-    capability: Capability.VIEW_ALERTS,
   },
   {
     to: '/schedule-admin',
