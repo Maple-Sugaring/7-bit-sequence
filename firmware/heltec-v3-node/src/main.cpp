@@ -39,7 +39,10 @@ static const uint8_t LORA_SYNC = 0x12;
 static const int8_t LORA_POWER_DBM = 22;
 static const uint16_t LORA_PREAMBLE = 8;
 
-static const uint32_t TX_INTERVAL_MS = 20000;
+#ifndef TX_INTERVAL_MS
+#define TX_INTERVAL_MS 20000
+#endif
+uint32_t txIntervalMs = TX_INTERVAL_MS;
 
 SX1262 radio = new Module(PIN_LORA_NSS, PIN_LORA_DIO1, PIN_LORA_RST, PIN_LORA_BUSY);
 U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, PIN_OLED_SCL, PIN_OLED_SDA, PIN_OLED_RST);
@@ -77,7 +80,11 @@ bool loadProvision() {
   provisionStore.begin("maple", true);
   const String stored = provisionStore.getString("node_code", "");
   const String tag = provisionStore.getString("rf_tag", "");
+  const uint32_t seconds = provisionStore.getUInt("interval_s", 0);
   provisionStore.end();
+  if (seconds >= 60 && seconds <= 86400) {
+    txIntervalMs = seconds * 1000UL;
+  }
   if (stored.length() > 0) {
     stored.toCharArray(nodeCode, sizeof(nodeCode));
     tag.toCharArray(rfTag, sizeof(rfTag));
@@ -277,6 +284,27 @@ void waitWithCountdown(uint32_t durationMs) {
   }
 }
 
+void applyIntervalSeconds(uint32_t seconds) {
+  if (seconds < 60 || seconds > 86400) return;
+  txIntervalMs = seconds * 1000UL;
+  provisionStore.begin("maple", false);
+  provisionStore.putUInt("interval_s", seconds);
+  provisionStore.end();
+  char extra[28];
+  snprintf(extra, sizeof(extra), "Every %lus", static_cast<unsigned long>(seconds));
+  announce("Interval updated", nodeCode, extra);
+}
+
+void hearInterval() {
+  String payload;
+  const int16_t state = radio.receive(payload, 0, 1500);
+  if (state != RADIOLIB_ERR_NONE) return;
+  if (payload.indexOf(nodeCode) < 0) return;
+  const int key = payload.indexOf("\"Interval_Seconds\":");
+  if (key < 0) return;
+  applyIntervalSeconds(static_cast<uint32_t>(payload.substring(key + 19).toInt()));
+}
+
 void sendDummyReading() {
   txCount++;
   // Each packet adds a quarter gallon, so the bucket fills, then empties
@@ -290,14 +318,15 @@ void sendDummyReading() {
   const float weight = kEmptyBucketLb + gallons * kSapLbPerGallon;
   const int battery = 80 + static_cast<int>(txCount % 16);
 
-  char json[160];
+  char json[192];
   snprintf(
       json,
       sizeof(json),
-      "{\"Node_Code\":\"%s\",\"Weight\":%.1f,\"Battery_Percent\":%d}",
+      "{\"Node_Code\":\"%s\",\"Weight\":%.1f,\"Battery_Percent\":%d,\"Interval_Seconds\":%lu}",
       nodeCode,
       weight,
-      battery);
+      battery,
+      static_cast<unsigned long>(txIntervalMs / 1000UL));
 
   const size_t jsonLen = strlen(json);
   char action[28];
@@ -311,10 +340,13 @@ void sendDummyReading() {
   digitalWrite(PIN_LED, LOW);
 
   if (state == RADIOLIB_ERR_NONE) {
+    hearInterval();
     snprintf(action, sizeof(action), "Sent OK %.1flb %d%%", weight, battery);
     snprintf(detail, sizeof(detail), "%u bytes  sap #%lu", static_cast<unsigned>(jsonLen),
              static_cast<unsigned long>(txCount));
-    announce(action, detail, "Next TX in 20s");
+    char extra[28];
+    snprintf(extra, sizeof(extra), "Next TX in %lus", static_cast<unsigned long>(txIntervalMs / 1000UL));
+    announce(action, detail, extra);
     USBSerial.printf("[tx] %s\n", json);
     return;
   }
@@ -375,5 +407,5 @@ void loop() {
   }
 
   sendDummyReading();
-  waitWithCountdown(TX_INTERVAL_MS);
+  waitWithCountdown(txIntervalMs);
 }

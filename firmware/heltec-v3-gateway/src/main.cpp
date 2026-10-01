@@ -203,6 +203,43 @@ bool extractNumber(const char *json, const char *key, float *out) {
   return true;
 }
 
+void sendInterval(const String &line) {
+  const int first = line.indexOf(' ');
+  const int second = line.indexOf(' ', first + 1);
+  if (first < 0 || second < 0) return;
+  const String code = line.substring(first + 1, second);
+  const int seconds = line.substring(second + 1).toInt();
+  if (code.length() == 0 || seconds < 60 || seconds > 86400) return;
+
+  char packet[96];
+  snprintf(
+      packet,
+      sizeof(packet),
+      "{\"Node_Code\":\"%s\",\"Interval_Seconds\":%d}",
+      code.c_str(),
+      seconds);
+  radio.transmit(reinterpret_cast<uint8_t *>(packet), strlen(packet));
+
+  char detail[28];
+  snprintf(detail, sizeof(detail), "%s %ds", code.c_str(), seconds);
+  announce("Interval sent", detail, "Back to listening");
+}
+
+String downlinkLine;
+
+void pollDownlink() {
+  while (PiUart.available()) {
+    const char c = static_cast<char>(PiUart.read());
+    if (c == '\n') {
+      downlinkLine.trim();
+      if (downlinkLine.startsWith("INTERVAL ")) sendInterval(downlinkLine);
+      downlinkLine = "";
+    } else if (c != '\r' && downlinkLine.length() < 80) {
+      downlinkLine += c;
+    }
+  }
+}
+
 void publishReading(const char *payload, int rssi) {
   char nodeCode[16];
   float weight = 0.0f;
@@ -218,15 +255,29 @@ void publishReading(const char *payload, int rssi) {
   }
 
   const int batteryPercent = static_cast<int>(lroundf(battery));
-  char line[180];
-  snprintf(
-      line,
-      sizeof(line),
-      "{\"Node_Code\":\"%s\",\"Weight\":%.1f,\"Battery_Percent\":%d,\"Signal_Rssi\":%d}",
-      nodeCode,
-      weight,
-      batteryPercent,
-      rssi);
+  float interval = 0.0f;
+  const bool hasInterval = extractNumber(payload, "Interval_Seconds", &interval);
+  char line[220];
+  if (hasInterval) {
+    snprintf(
+        line,
+        sizeof(line),
+        "{\"Node_Code\":\"%s\",\"Weight\":%.1f,\"Battery_Percent\":%d,\"Signal_Rssi\":%d,\"Interval_Seconds\":%d}",
+        nodeCode,
+        weight,
+        batteryPercent,
+        rssi,
+        static_cast<int>(lroundf(interval)));
+  } else {
+    snprintf(
+        line,
+        sizeof(line),
+        "{\"Node_Code\":\"%s\",\"Weight\":%.1f,\"Battery_Percent\":%d,\"Signal_Rssi\":%d}",
+        nodeCode,
+        weight,
+        batteryPercent,
+        rssi);
+  }
 
   logLine(line);
   USBSerial.flush();
@@ -273,6 +324,7 @@ void setup() {
 }
 
 void loop() {
+  pollDownlink();
   if (!radioReady) {
     delay(4000);
     radioReady = initRadio();

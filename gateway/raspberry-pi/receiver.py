@@ -73,6 +73,12 @@ def parse_reading(text: str) -> dict[str, Any]:
             raise ValueError("Signal_Rssi is not a number")
         reading["Signal_Rssi"] = int(rssi)
 
+    if parsed.get("Interval_Seconds") is not None:
+        interval = parsed["Interval_Seconds"]
+        if isinstance(interval, bool) or not isinstance(interval, (int, float)):
+            raise ValueError("Interval_Seconds is not a number")
+        reading["Interval_Seconds"] = int(interval)
+
     return reading
 
 
@@ -134,22 +140,44 @@ def forward_status(response: requests.Response) -> dict[str, str]:
     return {"status": str(response.status_code), "detail": snippet or response.reason}
 
 
+def interval_command(response: requests.Response, reading: dict[str, Any]) -> str | None:
+    """Ask the gateway to radio a new packet interval when the site disagrees."""
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+    accepted = payload.get("Accepted") or []
+    if not accepted:
+        return None
+    desired = accepted[0].get("Desired_Interval_Seconds")
+    if isinstance(desired, bool) or not isinstance(desired, int):
+        return None
+    if reading.get("Interval_Seconds") == desired:
+        return None
+    node = reading.get("Node_Code")
+    if not isinstance(node, str) or not node.strip():
+        return None
+    return f"INTERVAL {node.strip()} {desired}\n"
+
+
 def forward_reading(
     packet: dict[str, Any],
     api_url: str,
     token: str,
     gateway_code: str,
-) -> None:
+) -> str | None:
     reading = packet.get("reading")
     if not reading:
-        return
+        return None
     body = build_ingest_body(reading, gateway_code, packet["received_at"])
     packet["ingest"] = body
     try:
         response = post_ingest(body, api_url, token)
         packet["forward"] = forward_status(response)
+        return interval_command(response, reading)
     except requests.RequestException as exc:
         packet["forward"] = {"status": "error", "detail": str(exc)}
+        return None
 
 
 class PacketStore:
@@ -250,8 +278,12 @@ def run_receiver(store: PacketStore) -> None:
             packet = line_packet(text)
             if packet is None:
                 continue
+            command = None
             if forward and packet.get("reading") and token:
-                forward_reading(packet, api_url, token, gateway_code)
+                command = forward_reading(packet, api_url, token, gateway_code)
+            if command:
+                port.write(command.encode("utf-8"))
+                port.flush()
             elif forward and packet.get("reading") and not token:
                 packet["forward"] = {
                     "status": "skipped",
