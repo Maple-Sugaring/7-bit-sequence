@@ -16,7 +16,6 @@ MSS members are members of the Maple Sugaring Society at RIT. MSS accounts are d
 
 Capabilities are listed in [api.md](api.md). `can(role, capability)` is what route guards call.
 
-
 ## `season.js`
 
 `seasonOf`: UTC month >= July belongs to the next calendar year. Matches SQL `sap_season()`.
@@ -49,6 +48,12 @@ Weight is gross pounds. Without ice, weight above the liquid cap plus 8 lb is re
 
 ## `alerting.js`
 
+Used for defining situations where there could be an issue, and will send an alert. The three issues that are being checked for are sap spoilage, full buckets, and tipped buckets. 
+A spoilage alert is sent when the temperature is too warm. 
+A full bucket alert is sent when the weight of a bucket reaches a high threshold, where it is implied that the bucket is full and needs to be emptied. 
+A tipped bucket alert is sent when the weight detected by the sensor becomes unusually low, where it is implied that the bucket was removed or that it has tipped over.
+More details below.
+
 `deriveAlerts({ reading, history, tareWeight })` returns alert candidates. It does not write them.
 
 - Spoilage: temperature above 40°F and `hoursAboveThreshold` of the recent history is at least 4 hours. A single warm afternoon does not alert.
@@ -68,6 +73,8 @@ Sugar on a run starts near 2.55% and falls as the afternoon warms or rain dilute
 `describeSapChange` compares today’s flow index with the previous live snapshot. An increase of 0.12, or the first freeze-thaw after a quiet day, is what raises the Sap Run alert.
 
 ## `sites.js`
+
+Used for defining the geographical locations of the maple sugaring sites. These coordinates are used to get weather reports from OpenWeather for the area and determine temperatures and any concerning weather conditions.
 
 Campus coordinates used for OpenWeather and for the small temperature offset in the historic model:
 
