@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -34,6 +34,15 @@ export function LoginPage() {
       setDemoError(error.message);
     }
   };
+
+  useEffect(() => {
+    if (!import.meta.env.DEV || restoring || isAuthenticated || !DEMO_ACCOUNTS.length) return;
+    if (!import.meta.env.VITE_AUTO_LOGIN_ROLE_INDEX) return; // opt-in
+    const index = Number(import.meta.env.VITE_AUTO_LOGIN_ROLE_INDEX);
+    const account = DEMO_ACCOUNTS[index];
+    if (account) signInAsDemo(account.email);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restoring, isAuthenticated]);
 
   if (!restoring && isAuthenticated) {
     return <Navigate to={location.state?.from ?? landingRouteFor(role)} replace />;
