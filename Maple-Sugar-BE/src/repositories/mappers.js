@@ -68,12 +68,17 @@ export function mapUser(row) {
 const ONLINE_STATUSES = new Set(['online', 'active', 'up']);
 
 export function mapGateway(row) {
+  const lat = num(row.latitude);
+  const lon = num(row.longitude);
+
   return {
     GatewayID: row.id,
     Gateway_Code: row.gateway_code ?? null,
     Gateway_Name: row.gateway_name ?? row.gateway_code,
     Last_Seen: iso(row.last_ping),
     Status: ONLINE_STATUSES.has(String(row.status ?? '').toLowerCase()) ? 'Online' : 'Offline',
+    Notes: row.notes ?? null,
+    Location: lat == null || lon == null ? null : { lat, lon },
   };
 }
 

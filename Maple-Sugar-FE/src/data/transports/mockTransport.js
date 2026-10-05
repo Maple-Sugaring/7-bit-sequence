@@ -48,6 +48,11 @@ function notFound(resource) {
   throw new ApiError(`${resource} not found.`, { status: 404, code: 'NOT_FOUND' });
 }
 
+/** A gateway is placed by both coordinates or by neither. */
+function hasPoint(body) {
+  return body?.Latitude != null && body?.Longitude != null && body.Latitude !== '' && body.Longitude !== '';
+}
+
 function invalid(message, details) {
   throw new ApiError(message, { status: 422, code: 'VALIDATION', details });
 }
@@ -238,9 +243,41 @@ const routes = [
         Gateway_Name: body?.Gateway_Name,
         Status: 'Offline',
         Last_Seen: null,
+        Notes: body?.Notes || null,
+        Location: hasPoint(body) ? { lat: Number(body.Latitude), lon: Number(body.Longitude) } : null,
       };
       db.gateways.push(gateway);
       return gateway;
+    },
+  },
+  {
+    method: 'PATCH',
+    match: /^\/gateways\/(\d+)$/,
+    handler: ([id], { body }) => {
+      const gateway = db.gateways.find((candidate) => candidate.GatewayID === Number(id));
+      if (!gateway) notFound('Gateway');
+      const code = body?.Gateway_Code;
+      if (code && db.gateways.some((other) => other !== gateway && other.Gateway_Code === code)) {
+        invalid('That record already exists.');
+      }
+      if (code) gateway.Gateway_Code = code;
+      if (body?.Gateway_Name) gateway.Gateway_Name = body.Gateway_Name;
+      if ('Notes' in (body ?? {})) gateway.Notes = body.Notes || null;
+      if ('Latitude' in (body ?? {}) || 'Longitude' in (body ?? {})) {
+        gateway.Location = hasPoint(body) ? { lat: Number(body.Latitude), lon: Number(body.Longitude) } : null;
+      }
+      return gateway;
+    },
+  },
+  {
+    method: 'DELETE',
+    match: /^\/gateways\/(\d+)$/,
+    handler: ([id]) => {
+      const index = db.gateways.findIndex((candidate) => candidate.GatewayID === Number(id));
+      if (index < 0) notFound('Gateway');
+      db.gateways.splice(index, 1);
+      for (const node of db.nodes) if (node.GatewayID === Number(id)) node.GatewayID = null;
+      return null;
     },
   },
   { method: 'GET', match: /^\/buckets$/, handler: () => db.buckets },
@@ -249,6 +286,16 @@ const routes = [
   // ---- Nodes ------------------------------------------------------------
   { method: 'GET', match: /^\/nodes$/, handler: () => db.nodes },
   { method: 'GET', match: /^\/nodes\/board$/, handler: () => boardRows() },
+  {
+    method: 'GET',
+    match: /^\/nodes\/board$/,
+    // The real board joins each node to its bucket and latest reading.
+    handler: () =>
+      db.nodes.map((node) => {
+        const bucket = db.buckets.find((item) => item.NodeID === node.NodeID);
+        return { ...node, BucketID: bucket?.BucketID ?? null, Barcode_ID: bucket?.Barcode_ID ?? null };
+      }),
+  },
   {
     method: 'POST',
     match: /^\/nodes$/,

@@ -32,6 +32,20 @@ export async function createGateway(body) {
   return gateway;
 }
 
+export async function updateGateway(gatewayId, body) {
+  const gateway = await apiClient.patch(`/gateways/${gatewayId}`, body);
+  // Node rows carry the gateway's label, so both caches go stale.
+  invalidatePrefix(cacheNamespaces.GATEWAYS);
+  invalidatePrefix(cacheNamespaces.NODES);
+  return gateway;
+}
+
+export async function deleteGateway(gatewayId) {
+  await apiClient.delete(`/gateways/${gatewayId}`);
+  invalidatePrefix(cacheNamespaces.GATEWAYS);
+  invalidatePrefix(cacheNamespaces.NODES);
+}
+
 export function listGateways() {
   return readThrough(cacheKeys.gateways(), TTL.NODE_HEALTH, () => apiClient.get('/gateways'));
 }

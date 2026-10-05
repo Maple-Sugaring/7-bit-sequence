@@ -21,6 +21,7 @@ import { ChartCard } from '../components/charts/ChartCard';
 import { WeightChart } from '../components/charts/SeriesChart';
 import { PageHeader } from '../components/common/PageHeader';
 import { dateTime } from '../components/common/format';
+import { LocationWidget } from '../components/map/LocationWidget';
 import { useAuth } from '../context/auth';
 import { useBush, useReadings } from '../services/hooks';
 import { useAction, useAsync } from '../services/hooks/useAsync';
@@ -161,6 +162,8 @@ export function NodePage() {
           </Card>
         </Grid>
       </Grid>
+
+      <LocationWidget location={node?.Location} title="Where this tree is" sx={{ mb: 2 }} />
 
       <Card sx={{ mb: 2 }}>
         <CardContent>

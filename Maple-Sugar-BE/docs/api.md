@@ -62,6 +62,9 @@ Redirect URIs must match `PUBLIC_API_URL`:
 | GET | `/health` | Public | `{ status, database, cache, uptimeSeconds }`. |
 | GET | `/roles` | Session | |
 | GET | `/gateways` | Dashboard or nodes | |
+| POST | `/gateways` | Deploy nodes | `{ Gateway_Code, Gateway_Name, Notes?, Latitude?, Longitude? }`. |
+| PATCH | `/gateways/:id` | Deploy nodes | Any of `Gateway_Code`, `Gateway_Name`, `Notes`, `Latitude`, `Longitude`. Send `null` coordinates (both) to clear the location. A duplicate code is a 422. Changing the code means changing `GATEWAY_CODE` on the Pi. |
+| DELETE | `/gateways/:id` | Deploy nodes | 204. Its nodes stay deployed with no gateway. |
 | GET | `/buckets` | Dashboard or data table | |
 | GET | `/guides` | Guides | |
 
