@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -14,7 +14,6 @@ import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import { DataGrid } from '@mui/x-data-grid';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
@@ -38,16 +37,43 @@ function emptyForm() {
   };
 }
 
+function formFromSearch(params, bucketOptions) {
+  const next = emptyForm();
+  const nodeId = Number(params.get('nodeId'));
+  const task = params.get('task');
+  const notes = params.get('notes');
+  const node = bucketOptions.find((item) => item.NodeID === nodeId);
+  return {
+    ...next,
+    Task: SHIFT_TASKS.includes(task) ? task : next.Task,
+    bucketIds: node?.BucketID ? [node.BucketID] : next.bucketIds,
+    Notes: notes || next.Notes,
+  };
+}
+
 export function ScheduleAdminPage() {
   const [params] = useSearchParams();
-  const appliedAlert = useRef(false);
   const { data, loading, error, refresh } = useSchedule();
   const people = useUsers();
   const bush = useBush();
-  const bucketOptions = (bush.data ?? []).filter((node) => node.BucketID);
+  const bucketOptions = useMemo(
+    () => (bush.data ?? []).filter((node) => node.BucketID),
+    [bush.data],
+  );
+  const seedKey = `${params.get('nodeId') || ''}|${params.get('task') || ''}|${params.get('notes') || ''}`;
+  const [seededKey, setSeededKey] = useState('');
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState('');
   const [tab, setTab] = useState('active');
+
+  if (
+    seedKey !== '||' &&
+    seedKey !== seededKey &&
+    !(params.get('nodeId') && bush.loading)
+  ) {
+    setSeededKey(seedKey);
+    setForm(formFromSearch(params, bucketOptions));
+  }
 
   const create = useAction(async (assignment) => {
     await assignShift(assignment);
@@ -72,23 +98,6 @@ export function ScheduleAdminPage() {
     [data?.slots],
   );
   const visibleSlots = tab === 'completed' ? completedSlots : activeSlots;
-
-  useEffect(() => {
-    if (appliedAlert.current) return;
-    const nodeId = Number(params.get('nodeId'));
-    const task = params.get('task');
-    const notes = params.get('notes');
-    if (!params.get('nodeId') && !task && !notes) return;
-    if (params.get('nodeId') && bush.loading) return;
-    const node = bucketOptions.find((item) => item.NodeID === nodeId);
-    setForm((prev) => ({
-      ...prev,
-      Task: SHIFT_TASKS.includes(task) ? task : prev.Task,
-      bucketIds: node?.BucketID ? [node.BucketID] : prev.bucketIds,
-      Notes: notes || prev.Notes,
-    }));
-    appliedAlert.current = true;
-  }, [params, bush.loading, bucketOptions]);
 
   const submit = async (event) => {
     event.preventDefault();

@@ -143,7 +143,7 @@ export function SchedulePage() {
     await refresh();
   });
 
-  const allSlots = data?.slots ?? [];
+  const allSlots = useMemo(() => data?.slots ?? [], [data?.slots]);
   const activeSlots = useMemo(() => allSlots.filter((slot) => !slot.Is_Complete), [allSlots]);
   const completedSlots = useMemo(() => allSlots.filter((slot) => slot.Is_Complete), [allSlots]);
   const visibleSlots = tab === 'completed' ? completedSlots : activeSlots;

@@ -95,8 +95,8 @@ export function DeployPage() {
   const canDeploy = can(Capability.DEPLOY_NODES);
   const nodes = useNodes();
   const gateways = useGateways();
-  const nodeList = nodes.data ?? [];
-  const gatewayList = gateways.data ?? [];
+  const nodeList = useMemo(() => nodes.data ?? [], [nodes.data]);
+  const gatewayList = useMemo(() => gateways.data ?? [], [gateways.data]);
   const gatewayById = useMemo(
     () => new Map(gatewayList.map((gateway) => [gateway.GatewayID, gateway])),
     [gatewayList],
@@ -111,6 +111,56 @@ export function DeployPage() {
   const [saved, setSaved] = useState(false);
   const [query, setQuery] = useState('');
   const [menu, setMenu] = useState({ anchor: null, node: null });
+  const [handledLink, setHandledLink] = useState('');
+
+  const linkAction = params.get('action') || '';
+  const linkEditId = Number(params.get('edit')) || 0;
+  const linkFlashId = Number(params.get('flash')) || 0;
+  const linkKey = `${linkAction}|${linkEditId}|${linkFlashId}`;
+
+  // Hydrate dialogs from deep links during render (React-recommended vs effect setState).
+  if (canDeploy && linkKey !== '||0|0' && linkKey !== handledLink) {
+    if (linkAction === 'add' && !gateways.loading) {
+      setHandledLink(linkKey);
+      setTarget(null);
+      setDraft({
+        ...emptyDraft(),
+        GatewayID: gatewayList[0] ? String(gatewayList[0].GatewayID) : '',
+      });
+      setCreated(null);
+      setNotice('');
+      setSaved(false);
+      setDialog('node');
+    } else if (!nodes.loading && nodeList.length > 0) {
+      if (linkEditId) {
+        const node = nodeList.find((item) => item.NodeID === linkEditId);
+        if (node) {
+          setHandledLink(linkKey);
+          setTarget(node);
+          setDraft(draftFromNode(node));
+          setCreated(null);
+          setSaved(false);
+          setNotice('');
+          setDialog('node');
+        }
+      } else if (linkFlashId) {
+        const node = nodeList.find((item) => item.NodeID === linkFlashId);
+        if (node) {
+          setHandledLink(linkKey);
+          setTarget(node);
+          setCreated(node);
+          setNotice('');
+          setDialog('flash');
+        }
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (!handledLink || handledLink === '||0|0') return;
+    if (!params.get('action') && !params.get('edit') && !params.get('flash')) return;
+    setParams({}, { replace: true });
+  }, [handledLink, params, setParams]);
 
   const refresh = () => {
     nodes.refresh();
@@ -159,52 +209,6 @@ export function DeployPage() {
     setNotice('');
     setDialog('flash');
   };
-
-  useEffect(() => {
-    if (!canDeploy) return;
-    const action = params.get('action');
-    const editId = Number(params.get('edit'));
-    const flashId = Number(params.get('flash'));
-    if (!action && !editId && !flashId) return;
-
-    if (action === 'add') {
-      if (gateways.loading) return;
-      setTarget(null);
-      setDraft({
-        ...emptyDraft(),
-        GatewayID: gatewayList[0] ? String(gatewayList[0].GatewayID) : '',
-      });
-      setCreated(null);
-      setNotice('');
-      setSaved(false);
-      setDialog('node');
-      setParams({}, { replace: true });
-      return;
-    }
-
-    if (nodes.loading || nodeList.length === 0) return;
-    if (editId) {
-      const node = nodeList.find((item) => item.NodeID === editId);
-      if (!node) return;
-      setTarget(node);
-      setDraft(draftFromNode(node));
-      setCreated(null);
-      setSaved(false);
-      setNotice('');
-      setDialog('node');
-      setParams({}, { replace: true });
-      return;
-    }
-    if (flashId) {
-      const node = nodeList.find((item) => item.NodeID === flashId);
-      if (!node) return;
-      setTarget(node);
-      setCreated(node);
-      setNotice('');
-      setDialog('flash');
-      setParams({}, { replace: true });
-    }
-  }, [canDeploy, gatewayList, gateways.loading, nodeList, nodes.loading, params, setParams]);
 
   const setField = (field) => (event) => {
     setDraft((current) => ({ ...current, [field]: event.target.value }));
