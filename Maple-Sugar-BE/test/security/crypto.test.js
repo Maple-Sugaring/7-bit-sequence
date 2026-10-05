@@ -5,7 +5,6 @@ import { describe, test } from 'node:test';
 import '../env.js';
 import {
   buildAuthorizationUrl,
-  buildCalendarAuthorizationUrl,
   createState,
   isAllowedDomain,
   statesMatch,
@@ -103,17 +102,17 @@ describe('Google OAuth', () => {
     assert.equal(statesMatch('', state), false);
   });
 
-  test('authorization URLs carry the state and never the client secret', () => {
+  test('sign-in asks for identity and Calendar on one client', () => {
     const login = buildAuthorizationUrl('login-state');
-    const calendar = buildCalendarAuthorizationUrl('calendar-state');
 
     assert.match(login, /login-state/);
     assert.match(login, /select_account/);
-    assert.match(calendar, /calendar-state/);
-    assert.match(calendar, /consent/);
-    assert.match(calendar, /calendar\.events/);
+    assert.match(login, /consent/);
+    assert.match(login, /calendar\.events/);
+    assert.match(login, /access_type=offline/);
+    assert.match(login, /auth%2Fgoogle%2Fcallback|\/auth\/google\/callback/);
+    assert.equal(login.includes('calendar%2Fcallback') || login.includes('/calendar/callback'), false);
     assert.equal(login.includes(config.google.clientSecret), false);
-    assert.equal(calendar.includes(config.google.clientSecret), false);
   });
 
   test('allows only the configured RIT domains', () => {

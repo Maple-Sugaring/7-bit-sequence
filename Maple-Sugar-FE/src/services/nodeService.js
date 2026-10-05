@@ -94,6 +94,34 @@ export async function getDeviceHealth() {
   };
 }
 
+export function listGateways() {
+  return nodesRepository.listGateways();
+}
+
+export function createGateway(body) {
+  return nodesRepository.createGateway(body);
+}
+
+export function listNodes() {
+  return nodesRepository.listNodes();
+}
+
+export function createNode(body) {
+  return nodesRepository.createNode(body);
+}
+
+export function deleteNode(nodeId) {
+  return nodesRepository.deleteNode(nodeId);
+}
+
+export function updateNodeDetails(nodeId, body) {
+  return nodesRepository.updateNodeDetails(nodeId, body);
+}
+
+export function setReportInterval(nodeId, minutes) {
+  return nodesRepository.setReportInterval(nodeId, minutes);
+}
+
 export function setMaintenanceMode(nodeId, enabled) {
   return nodesRepository.updateNode(nodeId, { Status_Code: enabled ? 3 : 1 });
 }

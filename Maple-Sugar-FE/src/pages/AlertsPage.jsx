@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Alert from '@mui/material/Alert';
 import AlertTitle from '@mui/material/AlertTitle';
 import Box from '@mui/material/Box';
@@ -16,6 +17,7 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ReplayIcon from '@mui/icons-material/Replay';
 import TaskAltIcon from '@mui/icons-material/TaskAlt';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import { schedulePathForAlert } from '../business/alertSchedule';
 import { Capability } from '../business/permissions';
 import { PageHeader } from '../components/common/PageHeader';
 import { AsyncBlock, EmptyBlock, SkeletonRows } from '../components/common/StateBlock';
@@ -30,7 +32,7 @@ const SEVERITY_ICON = {
   info: InfoOutlinedIcon,
 };
 
-function AlertRow({ alert, canResolve, onResolve, onReopen, pending }) {
+function AlertRow({ alert, canResolve, canSchedule, onResolve, onReopen, onSchedule, pending }) {
   const Icon = SEVERITY_ICON[alert.severity] ?? InfoOutlinedIcon;
 
   return (
@@ -71,6 +73,11 @@ function AlertRow({ alert, canResolve, onResolve, onReopen, pending }) {
             </Typography>
           </Box>
 
+          {canSchedule && alert.NodeID != null ? (
+            <Button size="small" variant="contained" onClick={() => onSchedule(alert)} sx={{ flexShrink: 0 }}>
+              Schedule
+            </Button>
+          ) : null}
           {canResolve ? (
             <Button
               size="small"
@@ -90,8 +97,10 @@ function AlertRow({ alert, canResolve, onResolve, onReopen, pending }) {
 }
 
 export function AlertsPage() {
+  const navigate = useNavigate();
   const { can } = useAuth();
   const canResolve = can(Capability.RESOLVE_ALERTS);
+  const canSchedule = can(Capability.MANAGE_SCHEDULE);
   const { data: alerts, loading, error, refresh } = useAlerts();
   const [tab, setTab] = useState('open');
 
@@ -119,10 +128,29 @@ export function AlertsPage() {
     <>
       <PageHeader
         title="Notifications"
+        subtitle="Open field alerts for full buckets, spills, ice, offline nodes, and more."
         actions={
-          <Button variant="outlined" onClick={refresh} disabled={loading}>
-            Refresh
-          </Button>
+          <Stack direction="row" spacing={1}>
+            <Button
+              variant="outlined"
+              onClick={async () => {
+                if (typeof Notification === 'undefined') return;
+                const permission = await Notification.requestPermission();
+                if (permission !== 'granted') return;
+                const notice = new Notification('Maple Sugaring', {
+                  body: openCount
+                    ? `${openCount} open alert${openCount === 1 ? '' : 's'} on the sugarbush.`
+                    : 'Alerts on this phone are on. You will be notified when a new one opens.',
+                });
+                notice.onclick = () => navigate('/notifications');
+              }}
+            >
+              Notify this phone
+            </Button>
+            <Button variant="outlined" onClick={refresh} disabled={loading}>
+              Refresh
+            </Button>
+          </Stack>
         }
       />
 
@@ -193,8 +221,10 @@ export function AlertsPage() {
               key={alert.AlertID}
               alert={alert}
               canResolve={canResolve}
+              canSchedule={canSchedule}
               onResolve={resolve.execute}
               onReopen={reopen.execute}
+              onSchedule={(item) => navigate(schedulePathForAlert(item))}
               pending={resolve.pending || reopen.pending}
             />
           ))}

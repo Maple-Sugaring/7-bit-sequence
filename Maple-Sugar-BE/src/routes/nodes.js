@@ -9,7 +9,7 @@ import * as alertsRepository from '../repositories/alertsRepository.js';
 import * as metricsRepository from '../repositories/metricsRepository.js';
 import * as journalRepository from '../repositories/journalRepository.js';
 import { query } from '../db/pool.js';
-import { flagNodeBody, idParam, nodeActionBody, updateNodeBody } from './schemas.js';
+import { createNodeBody, flagNodeBody, idParam, nodeActionBody, nodeDetailsBody, nodeIntervalBody, updateNodeBody } from './schemas.js';
 
 export const nodesRouter = Router();
 
@@ -30,6 +30,21 @@ nodesRouter.get(
     res.json(await nodesRepository.listBoard());
   },
 );
+
+nodesRouter.post('/', requireCapability(Capability.DEPLOY_NODES), async (req, res) => {
+  const body = createNodeBody.parse(req.body);
+  const node = await nodesRepository.createDeployedNode(body);
+  await invalidateNamespaces([cacheNamespaces.NODES]);
+  res.status(201).json(node);
+});
+
+nodesRouter.delete('/:id', requireCapability(Capability.DEPLOY_NODES), async (req, res) => {
+  const id = idParam.parse(req.params.id);
+  const removed = await nodesRepository.deleteNode(id);
+  if (!removed) throw notFound('Node');
+  await invalidateNamespaces([cacheNamespaces.NODES, cacheNamespaces.METRICS, cacheNamespaces.ALERTS]);
+  res.status(204).end();
+});
 
 nodesRouter.post('/:id/actions', requireAuth, async (req, res) => {
   const id = idParam.parse(req.params.id);
@@ -100,6 +115,31 @@ nodesRouter.get(
 
 // Taking a node in and out of maintenance changes what the dashboard counts as
 // a fault, so it is an admin action.
+nodesRouter.patch('/:id/details', requireCapability(Capability.DEPLOY_NODES), async (req, res) => {
+  const id = idParam.parse(req.params.id);
+  const body = nodeDetailsBody.parse(req.body);
+  const node = await nodesRepository.updateNode(id, {
+    Node_Name: body.Node_Name,
+    Stand: body.Stand,
+    Location: { lat: body.Latitude, lon: body.Longitude },
+    ...(body.Rf_Tag !== undefined ? { Rf_Tag: body.Rf_Tag || null } : {}),
+    ...(body.Notes !== undefined ? { Notes: body.Notes || null } : {}),
+    ...(body.GatewayID != null ? { GatewayID: body.GatewayID } : {}),
+  });
+  if (!node) throw notFound('Node');
+  await invalidateNamespaces([cacheNamespaces.NODES]);
+  res.json(node);
+});
+
+nodesRouter.patch('/:id/interval', requireCapability(Capability.DEPLOY_NODES), async (req, res) => {
+  const id = idParam.parse(req.params.id);
+  const { Report_Interval_Minutes: minutes } = nodeIntervalBody.parse(req.body);
+  const node = await nodesRepository.updateNode(id, { Report_Interval_Seconds: minutes * 60 });
+  if (!node) throw notFound('Node');
+  await invalidateNamespaces([cacheNamespaces.NODES]);
+  res.json(node);
+});
+
 nodesRouter.patch('/:id', requireCapability(Capability.MANAGE_USERS), async (req, res) => {
   const id = idParam.parse(req.params.id);
   const changes = updateNodeBody.parse(req.body);

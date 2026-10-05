@@ -18,9 +18,6 @@ const SapDataPage = lazy(() =>
 const NodePage = lazy(() =>
   import('../pages/NodePage').then((module) => ({ default: module.NodePage })),
 );
-const PlacementPage = lazy(() =>
-  import('../pages/PlacementPage').then((module) => ({ default: module.PlacementPage })),
-);
 const AlertsPage = lazy(() =>
   import('../pages/AlertsPage').then((module) => ({ default: module.AlertsPage })),
 );
@@ -36,13 +33,16 @@ const AdminPage = lazy(() =>
 const CollectionPage = lazy(() =>
   import('../pages/CollectionPage').then((module) => ({ default: module.CollectionPage })),
 );
+const DeployPage = lazy(() =>
+  import('../pages/DeployPage').then((module) => ({ default: module.DeployPage })),
+);
 
 const PROTECTED = [
   { path: '/dashboard', element: <DashboardPage />, capability: Capability.VIEW_DASHBOARD },
+  { path: '/deploy', element: <DeployPage />, capability: Capability.DEPLOY_NODES },
   { path: '/table', element: <SapDataPage />, capability: Capability.VIEW_DATA_TABLE },
   { path: '/collection', element: <CollectionPage />, capability: Capability.RECORD_DATA },
   { path: '/nodes/:nodeId', element: <NodePage />, capability: Capability.VIEW_DASHBOARD },
-  { path: '/placement', element: <PlacementPage />, capability: Capability.VIEW_DASHBOARD },
   { path: '/notifications', element: <AlertsPage />, capability: Capability.VIEW_ALERTS },
   { path: '/schedule', element: <SchedulePage />, capability: Capability.VIEW_SCHEDULE },
   {
@@ -74,7 +74,8 @@ export function AppRoutes() {
       <Route path="/alerts" element={<Navigate to="/notifications" replace />} />
       <Route path="/schedule/manage" element={<Navigate to="/schedule-admin" replace />} />
       <Route path="/guides" element={<Navigate to="/dashboard" replace />} />
-      <Route path="/nodes" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/nodes" element={<Navigate to="/deploy" replace />} />
+      <Route path="/deployed" element={<Navigate to="/deploy" replace />} />
 
       <Route
         element={

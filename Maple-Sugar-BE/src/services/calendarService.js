@@ -14,18 +14,30 @@ import * as scheduleRepository from '../repositories/scheduleRepository.js';
 
 const CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
 
-function calendarClient() {
-  return new OAuth2Client({
-    clientId: config.google.clientId,
-    clientSecret: config.google.clientSecret,
-  });
+/** One Google client per signed-in user, reused for later Calendar calls. */
+const clientsByUser = new Map();
+
+function clientForUser(userId) {
+  let client = clientsByUser.get(userId);
+  if (!client) {
+    client = new OAuth2Client({
+      clientId: config.google.clientId,
+      clientSecret: config.google.clientSecret,
+    });
+    clientsByUser.set(userId, client);
+  }
+  return client;
+}
+
+export function forgetCalendarClient(userId) {
+  clientsByUser.delete(userId);
 }
 
 async function accessTokenFor(userId) {
   const refreshToken = await usersRepository.getGoogleRefreshToken(userId);
   if (!refreshToken) return null;
 
-  const client = calendarClient();
+  const client = clientForUser(userId);
   client.setCredentials({ refresh_token: refreshToken });
   const { token } = await client.getAccessToken();
   return token ?? null;

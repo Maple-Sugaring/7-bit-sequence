@@ -12,9 +12,7 @@ import { logger } from '../lib/logger.js';
 import { ApiError } from '../lib/ApiError.js';
 import {
   buildAuthorizationUrl,
-  buildCalendarAuthorizationUrl,
   createState,
-  exchangeCodeForCalendarTokens,
   exchangeCodeForProfile,
   statesMatch,
 } from '../auth/googleOAuth.js';
@@ -79,13 +77,13 @@ authRouter.get('/google/callback', async (req, res) => {
     res.cookie(config.sessionCookieName, signSessionToken(user), sessionCookieOptions());
     logger.info({ userId: user.UserID }, 'Session established');
 
-    // Calendar is connected on login, including the first time an invite is
-    // linked. A missing refresh token sends them through consent before the app.
-    const refreshToken = await usersRepository.getGoogleRefreshToken(user.UserID);
-    if (!refreshToken) {
-      const calendarState = createState();
-      res.cookie(config.stateCookieName, calendarState, stateCookieOptions());
-      return res.redirect(buildCalendarAuthorizationUrl(calendarState));
+    if (profile.refreshToken) {
+      await usersRepository.saveCalendarConnection(user.UserID, profile.refreshToken);
+      try {
+        await calendarService.backfillUserCalendar(user.UserID);
+      } catch (error) {
+        logger.warn({ err: error, userId: user.UserID }, 'Calendar backfill after sign-in failed');
+      }
     }
 
     // Lands on a route that pulls the session and forwards to the role's home.
@@ -127,54 +125,17 @@ authRouter.post('/logout', (req, res) => {
 });
 
 /**
- * Incremental Calendar consent. Login stays identity-only; this asks Google
- * for calendar.events and a refresh token, then lands back on /schedule.
+ * Same Google handshake as sign-in. Kept so an already-open session can grant
+ * Calendar without a second OAuth client or a second consent screen design.
  */
 authRouter.get('/google/calendar', requireAuth, (req, res) => {
   const state = createState();
   res.cookie(config.stateCookieName, state, stateCookieOptions());
-  res.redirect(buildCalendarAuthorizationUrl(state));
-});
-
-authRouter.get('/google/calendar/callback', requireAuth, async (req, res) => {
-  const scheduleUrl = new URL('/schedule', config.publicWebUrl);
-
-  const fail = (message, logContext) => {
-    logger.warn(logContext, 'Calendar OAuth callback rejected');
-    scheduleUrl.searchParams.set('calendarError', message);
-    res.clearCookie(config.stateCookieName, { path: '/' });
-    return res.redirect(scheduleUrl.toString());
-  };
-
-  if (req.query.error) {
-    return fail('Google Calendar access was cancelled.', { reason: req.query.error });
-  }
-
-  const code = typeof req.query.code === 'string' ? req.query.code : null;
-  if (!code) return fail('Google Calendar did not complete. Try again.', { reason: 'missing_code' });
-
-  if (!statesMatch(req.cookies?.[config.stateCookieName], req.query.state)) {
-    return fail('That Calendar link has expired. Try again.', { reason: 'state_mismatch' });
-  }
-
-  res.clearCookie(config.stateCookieName, { path: '/' });
-
-  try {
-    const { refreshToken } = await exchangeCodeForCalendarTokens(code);
-    await usersRepository.saveCalendarConnection(req.user.UserID, refreshToken);
-    await calendarService.backfillUserCalendar(req.user.UserID);
-    logger.info({ userId: req.user.UserID }, 'Google Calendar connected');
-    return res.redirect(new URL('/auth/callback', config.publicWebUrl).toString());
-  } catch (error) {
-    if (error instanceof ApiError && error.status < 500) {
-      return fail(error.message, { code: error.code });
-    }
-    logger.error({ err: error }, 'Calendar OAuth callback failed');
-    return fail('Could not connect Google Calendar. Try again.', { reason: 'internal' });
-  }
+  res.redirect(buildAuthorizationUrl(state));
 });
 
 authRouter.delete('/calendar', requireAuth, async (req, res) => {
   await usersRepository.clearCalendarConnection(req.user.UserID);
+  calendarService.forgetCalendarClient(req.user.UserID);
   res.status(204).end();
 });

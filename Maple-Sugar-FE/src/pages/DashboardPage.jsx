@@ -8,16 +8,23 @@ import CardActionArea from '@mui/material/CardActionArea';
 import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import Grid from '@mui/material/Grid';
-import LinearProgress from '@mui/material/LinearProgress';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { sapToSyrupRatio } from '../business/sugarContent';
-import { fillPercent, gallonsFromWeight, isFull, netWeight } from '../business/yieldMetrics';
+import {
+  formatShelfLife,
+  remainingShelfLifeHours,
+  shelfLifeFromReadings,
+  shelfLifeSeverity,
+} from '../business/shelfLife';
+import { estimatedSyrupGallons } from '../business/sugarContent';
+import { isFull } from '../business/yieldMetrics';
+import { LIVE_FROM, LIVE_NODE_IDS, LIVE_TO, bucketGallons, bucketPercent, recordedSugar } from '../business/liveWeight';
 import { SiteForecastChart } from '../components/charts/SeriesChart';
+import { MeterBar } from '../components/common/MeterBar';
 import { PageHeader } from '../components/common/PageHeader';
 import { dateTime } from '../components/common/format';
-import { useBush, useLiveWeather, useSapCompare } from '../services/hooks';
+import { useBush, useJournal, useLiveWeather, useReadings } from '../services/hooks';
 
 const STATUS = {
   0: { label: 'Offline', color: 'error' },
@@ -26,7 +33,7 @@ const STATUS = {
   3: { label: 'Maintenance', color: 'info' },
 };
 
-function Meter({ label, value, detail, color = 'primary' }) {
+function Meter({ label, value, percent, detail, color }) {
   return (
     <Box sx={{ mt: 1.5 }}>
       <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
@@ -35,12 +42,7 @@ function Meter({ label, value, detail, color = 'primary' }) {
         </Typography>
         <Typography variant="caption">{value}</Typography>
       </Stack>
-      <LinearProgress
-        variant="determinate"
-        value={Math.min(100, Number.parseFloat(value) || 0)}
-        color={color}
-        sx={{ mt: 0.5, height: 8, borderRadius: 4 }}
-      />
+      <MeterBar percent={percent} color={color} />
       <Typography variant="caption" color="text.secondary">
         {detail}
       </Typography>
@@ -52,39 +54,61 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const bush = useBush();
   const live = useLiveWeather();
-  const season = useSapCompare(2024);
+  const readings = useReadings({ from: LIVE_FROM, to: LIVE_TO });
+  const journal = useJournal();
   const weather = live.data?.Sites?.[0] ?? (live.data?.Configured ? live.data : null);
   const totals = useMemo(() => {
-    let gallons = 0;
-    let sugarSum = 0;
-    let sugarCount = 0;
-    for (const node of season.data?.Nodes ?? []) {
-      for (const point of node.Points) {
-        gallons += point.Flow_Gal ?? 0;
-        if (point.Sugar_Percent) {
-          sugarSum += point.Sugar_Percent;
-          sugarCount += 1;
-        }
+    const tracked = new Set(LIVE_NODE_IDS);
+    const weights = (readings.data ?? []).filter((row) => tracked.has(row.NodeID) && row.Weight != null);
+    const sugars = recordedSugar([...(readings.data ?? []), ...(journal.data ?? [])]);
+    const sugar = sugars.length ? sugars.reduce((sum, value) => sum + value, 0) / sugars.length : null;
+    const syrup = (bush.data ?? []).reduce((sum, node) => {
+      const gallons = bucketGallons(node.Weight, node.Tare_Weight ?? 0);
+      return sum + (estimatedSyrupGallons(gallons, node.Sugar_Percent) ?? 0);
+    }, 0);
+    const measured = (bush.data ?? []).some((node) => node.Sugar_Percent != null);
+    return { readings: weights.length, sugar, syrup, measured };
+  }, [readings.data, journal.data, bush.data]);
+
+  const shelfByNode = useMemo(() => {
+    const ambient = weather?.Temperature_F ?? null;
+    const map = new Map();
+    for (const node of bush.data ?? []) {
+      const rows = (readings.data ?? []).filter((row) => row.NodeID === node.NodeID);
+      const fromProbe = shelfLifeFromReadings(rows);
+      if (fromProbe) {
+        map.set(node.NodeID, { ...fromProbe, source: 'sap temperature' });
+        continue;
       }
+      if (ambient == null || !node.Recorded_At) continue;
+      const hours = remainingShelfLifeHours({
+        filledAt: node.Recorded_At,
+        temperatureF: ambient,
+        sugarPercent: node.Sugar_Percent,
+      });
+      map.set(node.NodeID, {
+        hours,
+        label: formatShelfLife(hours),
+        severity: shelfLifeSeverity(hours),
+        source: 'air temperature',
+      });
     }
-    const sugar = sugarCount ? sugarSum / sugarCount : null;
-    const ratio = sapToSyrupRatio(sugar);
-    return {
-      gallons,
-      sugar,
-      syrup: ratio ? gallons / ratio : null,
-    };
-  }, [season.data]);
+    return map;
+  }, [bush.data, readings.data, weather]);
+
+  const offlineNodes = (bush.data ?? []).filter((node) => node.Status_Code === 0);
+  const shortestShelf = [...shelfByNode.values()].reduce((soonest, entry) => {
+    if (entry.hours == null) return soonest;
+    if (!soonest || entry.hours < soonest.hours) return entry;
+    return soonest;
+  }, null);
 
   return (
     <>
-      <PageHeader title="The Bush" />
-      <Typography color="text.secondary" sx={{ mt: -2, mb: 2, textAlign: 'center' }}>
-        One tap at Alumni House, Chabad House, and the Red Barn.{' '}
-        <Button size="small" onClick={() => navigate('/placement')}>
-          Where the gear lives
-        </Button>
-      </Typography>
+      <PageHeader
+        title="The Bush"
+        subtitle="Live weather and bucket fill for every tree on Deploy."
+      />
 
       <Box sx={{ mb: 3 }}>
         <Card>
@@ -117,10 +141,10 @@ export function DashboardPage() {
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ justifyContent: 'space-between' }}>
             <Box>
               <Typography variant="h5" component="h2">
-                2024 sap year
+                2026 weight
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Simple totals. The day-by-day chart is one step deeper.
+                Gallons of sap in each 10 gallon bucket. Sugar content is the Brix reading from collection.
               </Typography>
             </Box>
             <Button variant="outlined" onClick={() => navigate('/table')}>
@@ -128,42 +152,61 @@ export function DashboardPage() {
             </Button>
           </Stack>
           <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid size={{ xs: 12, sm: 4 }}>
+            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
               <Typography variant="overline">In the buckets now</Typography>
               {(bush.data ?? []).map((node) => {
-                const gallons = gallonsFromWeight(netWeight(node.Weight, node.Tare_Weight ?? 0));
+                const gallons = bucketGallons(node.Weight, node.Tare_Weight ?? 0);
                 const full = isFull(node.Weight, node.Tare_Weight ?? 0);
                 return (
                   <Stack key={node.NodeID} direction="row" sx={{ justifyContent: 'space-between', py: 0.5 }}>
-                    <Typography>{node.Stand}</Typography>
+                    <Typography>{node.Node_Name}</Typography>
                     <Typography fontWeight={700}>
-                      {gallons == null ? '—' : `${gallons.toFixed(1)} gal`}
+                      {gallons == null ? '—' : `${gallons.toFixed(1)} gal · ${Number(node.Weight).toFixed(1)} lb`}
                       {full ? ' · full' : ''}
                     </Typography>
                   </Stack>
                 );
               })}
             </Grid>
-            <Grid size={{ xs: 6, sm: 4 }}>
-              <Typography variant="overline">Sap run</Typography>
-              <Typography variant="h4">{totals.gallons.toFixed(0)} gal</Typography>
+            <Grid size={{ xs: 6, sm: 3, md: 2 }}>
+              <Typography variant="overline">Weight readings</Typography>
+              <Typography variant="h4">{totals.readings}</Typography>
               <Typography variant="body2" color="text.secondary">
-                Modeled across the three taps
+                Nodes 001 and 002 in 2026
               </Typography>
             </Grid>
-            <Grid size={{ xs: 6, sm: 4 }}>
-              <Typography variant="overline">Estimated syrup</Typography>
-              <Typography variant="h4">{totals.syrup == null ? '—' : `${totals.syrup.toFixed(1)} gal`}</Typography>
+            <Grid size={{ xs: 6, sm: 3, md: 2 }}>
+              <Typography variant="overline">Sugar content</Typography>
+              <Typography variant="h4">{totals.sugar == null ? '—' : `${totals.sugar.toFixed(1)}%`}</Typography>
               <Typography variant="body2" color="text.secondary">
-                {totals.sugar == null
-                  ? 'Needs sugar readings'
-                  : `From an average ${totals.sugar.toFixed(1)}% sugar, rule of 86`}
+                {totals.sugar == null ? 'Brix is recorded at collection' : 'Average Brix from recorded readings'}
+              </Typography>
+            </Grid>
+            <Grid size={{ xs: 6, sm: 3, md: 2 }}>
+              <Typography variant="overline">Shelf life</Typography>
+              <Typography variant="h4">{shortestShelf?.label ?? '—'}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                {shortestShelf ? `Shortest window, from ${shortestShelf.source}` : 'Needs a temperature and a reading'}
+              </Typography>
+            </Grid>
+            <Grid size={{ xs: 6, sm: 3, md: 2 }}>
+              <Typography variant="overline">Estimated syrup</Typography>
+              <Typography variant="h4">{totals.syrup.toFixed(2)} gal</Typography>
+              <Typography variant="body2" color="text.secondary">
+                {totals.measured
+                  ? '40:1, replaced where a student recorded sugar'
+                  : '40 gallons of sap per gallon of syrup'}
               </Typography>
             </Grid>
           </Grid>
           {(bush.data ?? []).some((node) => isFull(node.Weight, node.Tare_Weight ?? 0)) ? (
             <Alert severity="warning" sx={{ mt: 2 }} action={<Button color="inherit" onClick={() => navigate('/notifications')}>Alerts</Button>}>
-              A bucket is full. Collect it or open the alerts.
+              A bucket is full. Collect it before it spills, or open the alerts.
+            </Alert>
+          ) : null}
+          {offlineNodes.length ? (
+            <Alert severity="error" sx={{ mt: 2 }} action={<Button color="inherit" onClick={() => navigate('/notifications')}>Alerts</Button>}>
+              {offlineNodes.map((node) => node.Node_Name).join(', ')} {offlineNodes.length === 1 ? 'is' : 'are'} offline and not reporting.
             </Alert>
           ) : null}
         </CardContent>
@@ -172,8 +215,9 @@ export function DashboardPage() {
       <Grid container spacing={2}>
         {(bush.data ?? []).map((node) => {
           const status = STATUS[node.Status_Code] ?? STATUS[1];
-          const gallons = gallonsFromWeight(netWeight(node.Weight, node.Tare_Weight ?? 0));
-          const fill = fillPercent(node.Weight, node.Tare_Weight ?? 0);
+          const gallons = bucketGallons(node.Weight, node.Tare_Weight ?? 0);
+          const fill = bucketPercent(node.Weight, node.Tare_Weight ?? 0);
+          const shelf = shelfByNode.get(node.NodeID);
           const tip = [
             node.Node_Name,
             `Status ${status.label}`,
@@ -201,16 +245,41 @@ export function DashboardPage() {
                       </Typography>
                       <Meter
                         label="Battery"
-                        value={node.Battery_Percent == null ? '0' : `${Math.round(node.Battery_Percent)}%`}
+                        value={node.Battery_Percent == null ? '—' : `${Math.round(node.Battery_Percent)}%`}
+                        percent={node.Battery_Percent ?? 0}
                         detail={node.Battery_Percent == null ? 'No report' : 'Charge on the node pack'}
-                        color={node.Battery_Percent < 20 ? 'error' : 'success'}
+                        color={node.Battery_Percent < 20 ? '#c62828' : '#2e7d32'}
                       />
                       <Meter
                         label="Bucket"
-                        value={fill == null ? '0' : `${Math.min(100, Math.round(fill))}%`}
-                        detail={gallons == null ? 'Empty or unread' : `${gallons.toFixed(1)} gal of 10`}
-                        color={(fill ?? 0) >= 90 ? 'warning' : 'primary'}
+                        value={gallons == null ? '—' : `${gallons.toFixed(1)} gal · ${Number(node.Weight).toFixed(1)} lb`}
+                        percent={fill}
+                        detail={
+                          gallons == null
+                            ? 'No weight yet'
+                            : gallons > 10
+                              ? `${gallons.toFixed(1)} gal · past 10 gal because the sap froze`
+                              : `${gallons.toFixed(1)} of 10 gal`
+                        }
+                        color={(fill ?? 0) >= 90 ? '#ed6c02' : '#F76902'}
                       />
+                      <Typography variant="body2" sx={{ mt: 1.5 }}>
+                        Sugar {node.Sugar_Percent == null ? '— not recorded' : `${node.Sugar_Percent}% Brix`}
+                      </Typography>
+                      <Typography variant="body2" color={shelf ? `${shelf.severity}.main` : 'text.secondary'}>
+                        Shelf life {shelf?.label ?? '—'}
+                        {shelf ? ` · ${shelf.source}` : ''}
+                      </Typography>
+                      {node.Temperature != null ? (
+                        <Typography variant="body2" color="text.secondary">
+                          Sap temperature {node.Temperature}°F
+                        </Typography>
+                      ) : null}
+                      {node.Sap_Flow_Rate_Lph != null ? (
+                        <Typography variant="body2" color="text.secondary">
+                          Flow {node.Sap_Flow_Rate_Lph} L/h
+                        </Typography>
+                      ) : null}
                     </CardContent>
                   </CardActionArea>
                 </Card>

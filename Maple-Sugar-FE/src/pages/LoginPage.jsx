@@ -98,7 +98,7 @@ export function LoginPage() {
               The sugarbush
             </Typography>
             <Typography sx={{ mt: 1.5, color: '#4A4A4A' }}>
-              Alumni House, Chabad House, and the Red Barn.
+              Live taps at Alumni House, plus weather, alerts, and collection shifts.
             </Typography>
           </Box>
 
@@ -111,7 +111,7 @@ export function LoginPage() {
               <>
                 {banner ? <Alert severity="error">{banner}</Alert> : null}
                 <Typography sx={{ color: '#4A4A4A', textAlign: 'center' }}>
-                  Sign in with your RIT Google account to see the taps, the weather, and your shifts.
+                  Use your RIT Google account to open the bush.
                 </Typography>
                 <Button
                   variant="contained"

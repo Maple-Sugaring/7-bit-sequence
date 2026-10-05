@@ -81,6 +81,14 @@ export function useSapCompare(year) {
   });
 }
 
+export function useGateways() {
+  return useAsync(useCallback(() => nodeService.listGateways(), []), { initialData: [] });
+}
+
+export function useNodes() {
+  return useAsync(useCallback(() => nodeService.listNodes(), []), { initialData: [] });
+}
+
 export function useBush() {
   return useAsync(useCallback(() => nodeService.getBoard(), []), { initialData: [] });
 }

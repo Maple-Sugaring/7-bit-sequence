@@ -123,16 +123,88 @@ const routes = [
   // ---- Reference data ---------------------------------------------------
   { method: 'GET', match: /^\/roles$/, handler: () => db.roles },
   { method: 'GET', match: /^\/gateways$/, handler: () => db.gateways },
+  {
+    method: 'POST',
+    match: /^\/gateways$/,
+    handler: (_match, { body }) => {
+      const gateway = {
+        GatewayID: Math.max(0, ...db.gateways.map((item) => item.GatewayID)) + 1,
+        Gateway_Code: body?.Gateway_Code,
+        Gateway_Name: body?.Gateway_Name,
+        Status: 'Offline',
+        Last_Seen: null,
+      };
+      db.gateways.push(gateway);
+      return gateway;
+    },
+  },
   { method: 'GET', match: /^\/buckets$/, handler: () => db.buckets },
   { method: 'GET', match: /^\/guides$/, handler: () => db.guides },
 
   // ---- Nodes ------------------------------------------------------------
   { method: 'GET', match: /^\/nodes$/, handler: () => db.nodes },
   {
+    method: 'POST',
+    match: /^\/nodes$/,
+    handler: (_match, { body }) => {
+      const id = Math.max(0, ...db.nodes.map((node) => node.NodeID)) + 1;
+      const node = {
+        NodeID: id,
+        Node_Code: `NODE-${String(id).padStart(3, '0')}`,
+        Node_Name: body?.Node_Name ?? `Tree ${id}`,
+        Stand: body?.Stand ?? '',
+        Location: { lat: Number(body?.Latitude), lon: Number(body?.Longitude) },
+        Rf_Tag: body?.Rf_Tag || null,
+        Notes: body?.Notes || null,
+        Status_Code: 0,
+        Tracked: true,
+        Battery_Percent: null,
+        Signal_Rssi: null,
+        Last_Seen: null,
+      };
+      db.nodes.push(node);
+      return node;
+    },
+  },
+  {
+    method: 'DELETE',
+    match: /^\/nodes\/(\d+)$/,
+    handler: ([id]) => {
+      const index = db.nodes.findIndex((node) => node.NodeID === Number(id));
+      if (index < 0) notFound('Node');
+      db.nodes.splice(index, 1);
+      return null;
+    },
+  },
+  {
     method: 'GET',
     match: /^\/nodes\/(\d+)$/,
     handler: ([id]) =>
       db.nodes.find((node) => node.NodeID === Number(id)) ?? notFound('Node'),
+  },
+  {
+    method: 'PATCH',
+    match: /^\/nodes\/(\d+)\/details$/,
+    handler: ([id], { body }) => {
+      const node = db.nodes.find((candidate) => candidate.NodeID === Number(id));
+      if (!node) notFound('Node');
+      node.Node_Name = body?.Node_Name ?? node.Node_Name;
+      node.Stand = body?.Stand ?? node.Stand;
+      node.Location = { lat: Number(body?.Latitude), lon: Number(body?.Longitude) };
+      node.Rf_Tag = body?.Rf_Tag || null;
+      node.Notes = body?.Notes || null;
+      return node;
+    },
+  },
+  {
+    method: 'PATCH',
+    match: /^\/nodes\/(\d+)\/interval$/,
+    handler: ([id], { body }) => {
+      const node = db.nodes.find((candidate) => candidate.NodeID === Number(id));
+      if (!node) notFound('Node');
+      node.Report_Interval_Seconds = Number(body?.Report_Interval_Minutes) * 60;
+      return node;
+    },
   },
   {
     method: 'PATCH',
@@ -330,24 +402,44 @@ const routes = [
     method: 'POST',
     match: /^\/schedule\/slots$/,
     handler: (unused, { body }) => {
-      if (!body?.AlertID) invalid('A collection task can only be opened from a full-bucket alert.');
-      const alert = db.alerts.find((item) => item.AlertID === Number(body.AlertID));
-      if (!alert || alert.Is_Resolved || alert.Alert_Type !== 'Full Bucket') {
-        invalid('A collection task can only be opened from an unresolved full-bucket alert.');
+      if (!body?.Task) invalid('Name the task.');
+      if (!Array.isArray(body?.BucketIDs) || body.BucketIDs.length === 0) {
+        invalid('Choose at least one bucket.');
       }
-      const node = db.nodes.find((item) => item.NodeID === alert.NodeID);
+      if (!body?.Starts_At || !body?.Ends_At) invalid('Pick a start and an end.');
+      if (Date.parse(body.Ends_At) <= Date.parse(body.Starts_At)) {
+        invalid('The shift must end after it starts.');
+      }
+
+      const buckets = body.BucketIDs.map((id) => {
+        const bucket = db.buckets.find((item) => item.BucketID === Number(id));
+        if (!bucket) invalid('One of those buckets is not on a tree.');
+        const node = db.nodes.find((item) => item.NodeID === bucket.NodeID);
+        return { bucket, node };
+      });
+      const stands = [...new Set(buckets.map((item) => item.node?.Stand).filter(Boolean))];
+      const assigned = [];
+      if (body.UserID) {
+        const user = db.users.find((candidate) => candidate.UserID === Number(body.UserID));
+        if (!user) invalid('Choose a student who already has an account.');
+        assigned.push(user.UserID);
+      }
+
       const slot = {
         SlotID: nextId.slot++,
-        Task: 'Sap Collection',
-        Stand: node?.Stand ?? 'Sugarbush',
-        Starts_At: null,
-        Ends_At: null,
-        Capacity: 1,
-        Assigned_UserIDs: [],
+        Task: body.Task,
+        Stand: stands.join(', ') || 'Sugarbush',
+        Starts_At: body.Starts_At,
+        Ends_At: body.Ends_At,
+        Capacity: Number(body.Capacity) > 0 ? Number(body.Capacity) : 1,
+        Assigned_UserIDs: assigned,
         Is_Complete: false,
-        Alert_ID: alert.AlertID,
-        Node_ID: alert.NodeID,
-        Awaiting_Time: true,
+        Alert_ID: body.AlertID ?? null,
+        Node_ID: buckets[0].node?.NodeID ?? null,
+        Notes: body.Notes ?? '',
+        Bucket_IDs: body.BucketIDs.map(Number),
+        Bucket_Labels: buckets.map((item) => item.bucket.Barcode_ID),
+        Awaiting_Time: false,
       };
       db.scheduleSlots.push(slot);
       return withAssignees(slot);

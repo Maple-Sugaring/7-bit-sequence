@@ -12,8 +12,13 @@ import { FINISHED_SUGAR_PERCENT, sapToSyrupRatio } from './sugarContent';
 export const BUCKET_CAPACITY_GALLONS = 10;
 /** Frozen sap can stack above the rim, so an iced bucket may weigh more. */
 export const ICE_CAPACITY_GALLONS = 14;
-/** Sap weighs roughly this much per gallon at sap-season temperatures. */
-export const LB_PER_GALLON = 8.6;
+/**
+ * Raw sap is mostly water (about 2–3% sugar), so a gallon weighs about the
+ * same as water. 10 gallons is 83.4 lb of sap. An empty 10 gallon bucket is
+ * another 2–3 lb, so a full liquid bucket is about 85–86 lb on the scale.
+ * Ice can stack above the rim and weigh more than this.
+ */
+export const LB_PER_GALLON = 8.34;
 /** Net sap weight at the 10 gallon liquid line. */
 export const BUCKET_CAPACITY_LB = BUCKET_CAPACITY_GALLONS * LB_PER_GALLON;
 /** Net sap weight allowed when the bucket is tagged as icy. */
