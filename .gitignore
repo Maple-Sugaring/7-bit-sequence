@@ -5,7 +5,7 @@ node_modules.nosync
 *.swp
 *.swo
 .DS_Store
-
+.claude
 # Google OAuth client secret downloads (e.g. client_secret_*.apps.googleusercontent.com.json)
 client_secret*.json
 
