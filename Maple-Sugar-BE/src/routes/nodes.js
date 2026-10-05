@@ -124,6 +124,7 @@ nodesRouter.patch('/:id/details', requireCapability(Capability.DEPLOY_NODES), as
     Location: { lat: body.Latitude, lon: body.Longitude },
     ...(body.Rf_Tag !== undefined ? { Rf_Tag: body.Rf_Tag || null } : {}),
     ...(body.Notes !== undefined ? { Notes: body.Notes || null } : {}),
+    ...(body.GatewayID != null ? { GatewayID: body.GatewayID } : {}),
   });
   if (!node) throw notFound('Node');
   await invalidateNamespaces([cacheNamespaces.NODES]);

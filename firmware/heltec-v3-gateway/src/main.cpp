@@ -242,27 +242,63 @@ void pollDownlink() {
 
 void publishReading(const char *payload, int rssi) {
   char nodeCode[16];
+  char fault[24];
+  if (!extractString(payload, "Node_Code", nodeCode, sizeof(nodeCode))) {
+    char bad[160];
+    snprintf(bad, sizeof(bad), "[rx] bad payload: %s", payload);
+    logLine(bad);
+    announce("RX parse FAIL", "need a node code", "Pi ignores this line");
+    return;
+  }
+
+  float battery = 100;
+  const bool hasBattery = extractNumber(payload, "Battery_Percent", &battery);
+  const int batteryPercent = hasBattery ? static_cast<int>(lroundf(battery)) : 100;
+  float interval = 0.0f;
+  const bool hasInterval = extractNumber(payload, "Interval_Seconds", &interval);
+
+  if (extractString(payload, "Fault", fault, sizeof(fault))) {
+    char line[220];
+    if (hasInterval) {
+      snprintf(
+          line,
+          sizeof(line),
+          "{\"Node_Code\":\"%s\",\"Fault\":\"%s\",\"Battery_Percent\":%d,\"Signal_Rssi\":%d,\"Interval_Seconds\":%d}",
+          nodeCode,
+          fault,
+          batteryPercent,
+          rssi,
+          static_cast<int>(lroundf(interval)));
+    } else {
+      snprintf(
+          line,
+          sizeof(line),
+          "{\"Node_Code\":\"%s\",\"Fault\":\"%s\",\"Battery_Percent\":%d,\"Signal_Rssi\":%d}",
+          nodeCode,
+          fault,
+          batteryPercent,
+          rssi);
+    }
+    logLine(line);
+    rxCount++;
+    announce("RX fault", fault, nodeCode);
+    return;
+  }
+
   float weight = 0.0f;
-  float battery = 0.0f;
-  if (!extractString(payload, "Node_Code", nodeCode, sizeof(nodeCode)) ||
-      !extractNumber(payload, "Weight", &weight) ||
-      !extractNumber(payload, "Battery_Percent", &battery)) {
+  if (!extractNumber(payload, "Weight", &weight)) {
     char bad[160];
     snprintf(bad, sizeof(bad), "[rx] bad payload: %s", payload);
     logLine(bad);
     announce("RX parse FAIL", "need node/wt/batt", "Pi ignores this line");
     return;
   }
-
-  const int batteryPercent = static_cast<int>(lroundf(battery));
-  float interval = 0.0f;
-  const bool hasInterval = extractNumber(payload, "Interval_Seconds", &interval);
   char line[220];
   if (hasInterval) {
     snprintf(
         line,
         sizeof(line),
-        "{\"Node_Code\":\"%s\",\"Weight\":%.1f,\"Battery_Percent\":%d,\"Signal_Rssi\":%d,\"Interval_Seconds\":%d}",
+        "{\"Node_Code\":\"%s\",\"Weight\":%.2f,\"Battery_Percent\":%d,\"Signal_Rssi\":%d,\"Interval_Seconds\":%d}",
         nodeCode,
         weight,
         batteryPercent,
@@ -272,7 +308,7 @@ void publishReading(const char *payload, int rssi) {
     snprintf(
         line,
         sizeof(line),
-        "{\"Node_Code\":\"%s\",\"Weight\":%.1f,\"Battery_Percent\":%d,\"Signal_Rssi\":%d}",
+        "{\"Node_Code\":\"%s\",\"Weight\":%.2f,\"Battery_Percent\":%d,\"Signal_Rssi\":%d}",
         nodeCode,
         weight,
         batteryPercent,
@@ -287,7 +323,7 @@ void publishReading(const char *payload, int rssi) {
   char detail[28];
   char extra[28];
   snprintf(action, sizeof(action), "RX #%lu", static_cast<unsigned long>(rxCount));
-  snprintf(detail, sizeof(detail), "%s %.1flb %d%%", nodeCode, weight, batteryPercent);
+  snprintf(detail, sizeof(detail), "%s %.2flb %d%%", nodeCode, weight, batteryPercent);
   snprintf(extra, sizeof(extra), "RSSI %d dBm", rssi);
   announce(action, detail, extra);
 }

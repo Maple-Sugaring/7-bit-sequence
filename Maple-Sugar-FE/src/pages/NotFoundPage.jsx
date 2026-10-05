@@ -14,7 +14,7 @@ export function NotFoundPage() {
         Page not found
       </Typography>
       <Typography variant="body1" color="text.secondary" sx={{ maxWidth: '52ch' }}>
-        That address does not match anything in the sap monitoring system.
+        That link is not part of Maple Sugaring. Head back to your home page.
       </Typography>
       <Button variant="contained" component={RouterLink} to={landingRouteFor(role)}>
         Back to my dashboard

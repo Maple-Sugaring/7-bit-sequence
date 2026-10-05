@@ -2,8 +2,9 @@
  * Removes the fixture bush inserted by migrations/003_seed.sql.
  *
  * Runs on every API boot, including a fresh container. Nodes registered from
- * Deploy use a different LoRa id, so they stay. Roles, accounts, guides, and
- * the gateway rows stay too: sign-in and sensor ingest still need them.
+ * Deploy use a different LoRa id, so they stay. Roles, accounts, and guides
+ * stay too. A gateway added from Deploy stays even when its code matches an
+ * old fixture name such as GW-ALUMNI.
  */
 
 import { logger } from '../lib/logger.js';
@@ -31,6 +32,12 @@ export const SEEDED_LORA_IDS = [
 
 /** Stands that exist only in the generated fixture schedule. */
 export const SEEDED_STANDS = ['Hill Bottom', 'Rabbi House', 'Sugar Shack', 'North Ridge'];
+
+/**
+ * Old fixture Pi codes that may linger from earlier migrations. GW-ALUMNI is
+ * intentionally absent: that is the live campus Pi code used from Deploy.
+ */
+export const SEEDED_GATEWAY_CODES = ['GW-SHACK', 'GW-RELAY', 'GW-CHABAD', 'GW-BARN'];
 
 export async function clearSeededData() {
   return transaction(async (client) => {
@@ -61,13 +68,32 @@ export async function clearSeededData() {
       [SEEDED_STANDS],
     );
 
+    // Only detach leftover fixture gateways from already-deleted seed nodes.
+    // Never strip a gateway that still has a Deployed node on it.
+    await client.query(
+      `update node
+          set gateway_id = null
+        where lora_device_id = any($1::text[])
+          and gateway_id in (
+            select id from gateway where gateway_code = any($2::text[])
+          )`,
+      [SEEDED_LORA_IDS, SEEDED_GATEWAY_CODES],
+    );
+    const gateways = await client.query(
+      `delete from gateway g
+        where g.gateway_code = any($1::text[])
+          and not exists (select 1 from node n where n.gateway_id = g.id)`,
+      [SEEDED_GATEWAY_CODES],
+    );
+
     const removed = {
       nodes: nodeIds.length,
       shifts: shifts.rowCount ?? 0,
       assignments: slots.rowCount ?? 0,
+      gateways: gateways.rowCount ?? 0,
     };
-    if (removed.nodes || removed.shifts) {
-      logger.info(removed, 'Cleared seeded nodes and fixture schedule');
+    if (removed.nodes || removed.shifts || removed.gateways) {
+      logger.info(removed, 'Cleared seeded nodes, gateways, and fixture schedule');
     }
     return removed;
   });

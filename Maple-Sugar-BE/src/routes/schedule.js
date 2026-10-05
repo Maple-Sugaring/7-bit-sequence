@@ -47,8 +47,12 @@ scheduleRouter.get('/availability', requireCapability(Capability.VIEW_SCHEDULE),
 
 scheduleRouter.post('/slots', requireCapability(Capability.MANAGE_SCHEDULE), async (req, res) => {
   const body = createSlotBody.parse(req.body);
-  const assignee = await usersRepository.findUserById(body.UserID);
-  if (!assignee) throw invalid('Choose a student who already has an account.', { UserID: 'missing' });
+
+  let assignee = null;
+  if (body.UserID) {
+    assignee = await usersRepository.findUserById(body.UserID);
+    if (!assignee) throw invalid('Choose a student who already has an account.', { UserID: 'missing' });
+  }
 
   const buckets = await queryAll(
     `select b.id, n.id as node_id, n.stand, n.node_name
@@ -67,11 +71,16 @@ scheduleRouter.post('/slots', requireCapability(Capability.MANAGE_SCHEDULE), asy
     Stand: stands.join(', ') || 'Sugarbush',
     Starts_At: body.Starts_At,
     Ends_At: body.Ends_At,
-    Capacity: 1,
+    Capacity: body.Capacity ?? 1,
     Node_ID: buckets[0].node_id,
     Notes: body.Notes,
     Bucket_IDs: body.BucketIDs,
   });
+
+  if (!body.UserID) {
+    await invalidateNamespaces([cacheNamespaces.SCHEDULE]);
+    return res.status(201).json(slot);
+  }
 
   let assigned;
   try {

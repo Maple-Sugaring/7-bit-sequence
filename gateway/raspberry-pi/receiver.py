@@ -51,15 +51,19 @@ def parse_reading(text: str) -> dict[str, Any]:
 
     node = parsed.get("Node_Code")
     weight = parsed.get("Weight")
+    fault = parsed.get("Fault")
     if not isinstance(node, str) or not node.strip():
         raise ValueError("missing Node_Code")
-    if isinstance(weight, bool) or not isinstance(weight, (int, float)):
+    has_fault = isinstance(fault, str) and fault.strip()
+    has_weight = not isinstance(weight, bool) and isinstance(weight, (int, float))
+    if not has_fault and not has_weight:
         raise ValueError("missing Weight")
 
-    reading: dict[str, Any] = {
-        "Node_Code": node.strip(),
-        "Weight": float(weight),
-    }
+    reading: dict[str, Any] = {"Node_Code": node.strip()}
+    if has_fault:
+        reading["Fault"] = fault.strip()
+    if has_weight:
+        reading["Weight"] = float(weight)
 
     if parsed.get("Battery_Percent") is not None:
         battery = parsed["Battery_Percent"]
@@ -90,8 +94,11 @@ def build_ingest_body(
     item: dict[str, Any] = {
         "Node_Code": reading["Node_Code"],
         "Recorded_At": recorded_at,
-        "Weight": reading["Weight"],
     }
+    if "Fault" in reading:
+        item["Fault"] = reading["Fault"]
+    if "Weight" in reading:
+        item["Weight"] = reading["Weight"]
     if "Battery_Percent" in reading:
         item["Battery_Percent"] = reading["Battery_Percent"]
     if "Signal_Rssi" in reading:

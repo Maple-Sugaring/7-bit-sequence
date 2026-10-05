@@ -6,11 +6,13 @@ import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
+import Tab from '@mui/material/Tab';
+import Tabs from '@mui/material/Tabs';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import dayjs from 'dayjs';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Capability } from '../business/permissions';
 import { PageHeader } from '../components/common/PageHeader';
@@ -126,6 +128,7 @@ export function SchedulePage() {
   const { data, loading, error, refresh } = useSchedule({ userId: user?.id });
 
   const [picking, setPicking] = useState(null);
+  const [tab, setTab] = useState('active');
   const claim = useAction(async (slotId) => {
     await claimShift(slotId, user.id);
     await refresh();
@@ -140,11 +143,18 @@ export function SchedulePage() {
     await refresh();
   });
 
-  const days = groupByDay(data?.slots ?? []);
+  const allSlots = data?.slots ?? [];
+  const activeSlots = useMemo(() => allSlots.filter((slot) => !slot.Is_Complete), [allSlots]);
+  const completedSlots = useMemo(() => allSlots.filter((slot) => slot.Is_Complete), [allSlots]);
+  const visibleSlots = tab === 'completed' ? completedSlots : activeSlots;
+  const days = groupByDay(visibleSlots);
 
   return (
     <>
-      <PageHeader title="Schedule" />
+      <PageHeader
+        title="Schedule"
+        subtitle="Claim a collection shift, or connect Google Calendar so claimed times land on your calendar."
+      />
 
       {calendarError ? (
         <Alert
@@ -179,7 +189,7 @@ export function SchedulePage() {
       ) : null}
 
       {data?.summary ? (
-        <Stack direction="row" spacing={1} sx={{ mb: 3, flexWrap: 'wrap', gap: 1 }}>
+        <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}>
           <Chip label={`${data.summary.open} open shifts`} color="primary" variant="outlined" />
           <Chip label={`${data.summary.mine} assigned to you`} variant="outlined" />
           {data.summary.unfilledPast > 0 ? (
@@ -188,50 +198,79 @@ export function SchedulePage() {
         </Stack>
       ) : null}
 
-      <AsyncBlock
-        loading={loading}
-        error={error}
-        refresh={refresh}
-        data={days}
-        skeleton={<SkeletonRows rows={4} height={140} />}
-        isEmpty={(rows) => rows.length === 0}
-        empty={
-          <EmptyBlock
-            title="No shifts scheduled"
-            description="An administrator has not published any shifts for this period yet."
-          />
-        }
+      <Tabs
+        value={tab}
+        onChange={(_event, value) => setTab(value)}
+        sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
       >
-        <Stack spacing={3}>
-          {days.map(({ day, slots }) => (
-            <Box key={day}>
-              <Stack direction="row" spacing={1.5} sx={{ alignItems: 'baseline', mb: 1.5 }}>
-                <Typography variant="h5" component="h2">
-                  {day === 'needs-time' ? 'Needs a time' : dayjs(day).format('dddd, MMM D')}
-                </Typography>
-                {day !== 'needs-time' && dayjs(day).isSame(dayjs(), 'day') ? (
-                  <Chip label="Today" size="small" color="primary" />
-                ) : null}
-              </Stack>
+        <Tab
+          value="active"
+          label={`Active (${activeSlots.length})`}
+          id="schedule-tab-active"
+          aria-controls="schedule-panel-active"
+        />
+        <Tab
+          value="completed"
+          label={`Completed (${completedSlots.length})`}
+          id="schedule-tab-completed"
+          aria-controls="schedule-panel-completed"
+        />
+      </Tabs>
 
-              <Grid container spacing={2}>
-                {slots.map((slot) => (
-                  <Grid size={{ xs: 12, sm: 6, lg: 4 }} key={slot.SlotID}>
-                    <SlotCard
-                      slot={slot}
-                      canClaim={canClaim}
-                      onClaim={claim.execute}
-                      onRelease={release.execute}
-                      onPickTime={setPicking}
-                      pending={claim.pending || release.pending || pick.pending}
-                    />
-                  </Grid>
-                ))}
-              </Grid>
-            </Box>
-          ))}
-        </Stack>
-      </AsyncBlock>
+      <Box
+        role="tabpanel"
+        id={tab === 'completed' ? 'schedule-panel-completed' : 'schedule-panel-active'}
+        aria-labelledby={tab === 'completed' ? 'schedule-tab-completed' : 'schedule-tab-active'}
+      >
+        <AsyncBlock
+          loading={loading}
+          error={error}
+          refresh={refresh}
+          data={days}
+          skeleton={<SkeletonRows rows={4} height={140} />}
+          isEmpty={(rows) => rows.length === 0}
+          empty={
+            <EmptyBlock
+              title={tab === 'completed' ? 'No completed shifts yet' : 'No active shifts'}
+              description={
+                tab === 'completed'
+                  ? 'Finished collection tasks will show up here.'
+                  : 'An administrator has not published any open shifts for this period yet.'
+              }
+            />
+          }
+        >
+          <Stack spacing={3}>
+            {days.map(({ day, slots }) => (
+              <Box key={day}>
+                <Stack direction="row" spacing={1.5} sx={{ alignItems: 'baseline', mb: 1.5 }}>
+                  <Typography variant="h5" component="h2">
+                    {day === 'needs-time' ? 'Needs a time' : dayjs(day).format('dddd, MMM D')}
+                  </Typography>
+                  {day !== 'needs-time' && dayjs(day).isSame(dayjs(), 'day') ? (
+                    <Chip label="Today" size="small" color="primary" />
+                  ) : null}
+                </Stack>
+
+                <Grid container spacing={2}>
+                  {slots.map((slot) => (
+                    <Grid size={{ xs: 12, sm: 6, lg: 4 }} key={slot.SlotID}>
+                      <SlotCard
+                        slot={slot}
+                        canClaim={canClaim && tab === 'active'}
+                        onClaim={claim.execute}
+                        onRelease={release.execute}
+                        onPickTime={setPicking}
+                        pending={claim.pending || release.pending || pick.pending}
+                      />
+                    </Grid>
+                  ))}
+                </Grid>
+              </Box>
+            ))}
+          </Stack>
+        </AsyncBlock>
+      </Box>
 
       <TimePickerDialog
         open={Boolean(picking)}

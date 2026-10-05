@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 
-import { staleNodeAlerts } from '../../src/services/nodeWatch.js';
+import { staleNodeAlerts, nodeHealthAlerts } from '../../src/services/nodeWatch.js';
 import { shouldNotify } from '../../src/services/notificationService.js';
 import { createReadingBuffer, isDatabaseUnavailable } from '../../src/services/readingBuffer.js';
 
@@ -54,6 +54,34 @@ describe('downed nodes', () => {
     assert.equal(alerts[0].NodeID, 1);
     assert.equal(alerts[0].Alert_Type, 'Node Offline');
     assert.equal(alerts[0].severity, 'critical');
+  });
+
+  test('a late but not dead node is a missed reading, and a silent one never checked in', () => {
+    const now = new Date('2026-03-20T16:00:00.000Z');
+    const alerts = nodeHealthAlerts(
+      [
+        {
+          NodeID: 4,
+          Node_Name: 'Late',
+          Tracked: true,
+          Status_Code: 1,
+          Report_Interval_Seconds: 60,
+          Last_Seen: '2026-03-20T15:50:00.000Z',
+        },
+        {
+          NodeID: 5,
+          Node_Name: 'New',
+          Tracked: true,
+          Status_Code: 1,
+          Last_Seen: null,
+        },
+      ],
+      now,
+    );
+    assert.equal(alerts[0].Alert_Type, 'Missed Readings');
+    assert.equal(alerts[0].Status_Code, 2);
+    assert.equal(alerts[1].Alert_Type, 'Node Offline');
+    assert.match(alerts[1].Description, /never reported/);
   });
 });
 

@@ -66,7 +66,12 @@ export function useAction(action) {
       } catch (caught) {
         const message = toUserMessage(caught);
         setError(message);
-        return { ok: false, error: message, offline: Boolean(caught?.isOffline) };
+        return {
+          ok: false,
+          error: message,
+          details: caught?.details ?? null,
+          offline: Boolean(caught?.isOffline),
+        };
       } finally {
         setPending(false);
       }

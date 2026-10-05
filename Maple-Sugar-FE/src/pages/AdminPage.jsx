@@ -319,7 +319,7 @@ export function AdminPage() {
   if (error) {
     return (
       <>
-        <PageHeader title="Admin" />
+        <PageHeader title="Admin" subtitle="Invite accounts, change roles, and lock or extend access." />
         <ErrorBlock error={error} onRetry={refresh} />
       </>
     );
@@ -331,6 +331,7 @@ export function AdminPage() {
     <>
       <PageHeader
         title="Admin"
+        subtitle="Invite accounts, change roles, and lock or extend access."
         actions={
           <Button variant="contained" startIcon={<PersonAddAltIcon />} onClick={() => setInviteOpen(true)}>
             Invite user

@@ -1,4 +1,4 @@
-import { queryAll, queryOne } from '../db/pool.js';
+import { query, queryAll, queryOne } from '../db/pool.js';
 import { logger } from '../lib/logger.js';
 import { notifyCriticalAlert } from '../services/notificationService.js';
 import { mapAlert } from './mappers.js';
@@ -78,4 +78,18 @@ export async function setResolved(id, isResolved) {
     [id, isResolved],
   );
   return row ? mapAlert(row) : null;
+}
+
+/** Closes every open alert of the given types on one node. */
+export async function resolveOpenByTypes(nodeId, types) {
+  if (!types?.length) return 0;
+  const result = await query(
+    `update alerts
+        set is_resolved = true
+      where node_id = $1
+        and is_resolved = false
+        and alert_type = any($2::text[])`,
+    [nodeId, types],
+  );
+  return result.rowCount ?? 0;
 }

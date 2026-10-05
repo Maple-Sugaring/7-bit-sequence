@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -7,7 +7,6 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import Grid from '@mui/material/Grid';
-import LinearProgress from '@mui/material/LinearProgress';
 import { MeterBar } from '../components/common/MeterBar';
 import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
@@ -27,8 +26,7 @@ import { useBush, useReadings } from '../services/hooks';
 import { useAction, useAsync } from '../services/hooks/useAsync';
 import { getUsers } from '../services/adminService';
 import { flagNode } from '../services/alertService';
-import { flashHeltec } from '../hardware/heltecFlash';
-import { runNodeAction, setReportInterval, updateNodeDetails } from '../services/nodeService';
+import { runNodeAction } from '../services/nodeService';
 import { assignShift, SHIFT_TASKS } from '../services/scheduleService';
 
 const STATUS = {
@@ -44,38 +42,15 @@ export function NodePage() {
   const { can } = useAuth();
   const bush = useBush();
   const canSchedule = can(Capability.MANAGE_SCHEDULE);
+  const canDeploy = can(Capability.DEPLOY_NODES);
   const people = useAsync(useCallback(() => getUsers(), []), { enabled: canSchedule, initialData: null });
   const node = (bush.data ?? []).find((item) => item.NodeID === Number(nodeId));
   const [notes, setNotes] = useState('');
-  const [minutes, setMinutes] = useState('15');
-  const [intervalSaved, setIntervalSaved] = useState(false);
-  const [edit, setEdit] = useState(null);
-  const [flashing, setFlashing] = useState(false);
-  const [flashStatus, setFlashStatus] = useState('');
-  const [flashProgress, setFlashProgress] = useState(0);
-  const canDeploy = can(Capability.DEPLOY_NODES);
   const [unit, setUnit] = useState('day');
   const [shift, setShift] = useState(() => {
     const start = dayjs().add(1, 'day').hour(9).minute(0).second(0);
     return { Task: SHIFT_TASKS[0], UserID: '', Starts_At: start, Ends_At: start.add(2, 'hour'), Notes: '' };
   });
-
-  useEffect(() => {
-    if (node?.Report_Interval_Seconds == null) return;
-    setMinutes(String(Math.round(node.Report_Interval_Seconds / 60)));
-  }, [node?.Report_Interval_Seconds]);
-
-  useEffect(() => {
-    if (!node) return;
-    setEdit({
-      Node_Name: node.Node_Name ?? '',
-      Stand: node.Stand ?? '',
-      Latitude: node.Location?.lat ?? '',
-      Longitude: node.Location?.lon ?? '',
-      Rf_Tag: node.Rf_Tag ?? '',
-      Notes: node.Notes ?? '',
-    });
-  }, [node]);
 
   const history = useReadings({
     nodeId: Number(nodeId),
@@ -84,41 +59,6 @@ export function NodePage() {
   });
   const action = useAction(async (name) => {
     await runNodeAction(Number(nodeId), { Action: name, Notes: notes });
-    await bush.refresh();
-  });
-  const saveDetails = useAction(async () => {
-    await updateNodeDetails(Number(nodeId), {
-      Node_Name: edit.Node_Name.trim(),
-      Stand: edit.Stand.trim(),
-      Latitude: Number(edit.Latitude),
-      Longitude: Number(edit.Longitude),
-      Rf_Tag: edit.Rf_Tag.trim(),
-      Notes: edit.Notes.trim(),
-    });
-    await bush.refresh();
-  });
-
-  const pushFirmware = async () => {
-    if (!node?.Node_Code || !navigator.serial) return;
-    setFlashStatus('Starting…');
-    setFlashProgress(0);
-    setFlashing(true);
-    try {
-      const port = await navigator.serial.requestPort();
-      await flashHeltec(port, node.Node_Code, ({ message, progress }) => {
-        setFlashStatus(message);
-        setFlashProgress(progress ?? 0);
-      });
-    } catch (error) {
-      if (error?.name === 'NotFoundError') return;
-      setFlashStatus(error?.message || 'The firmware did not reach the Heltec.');
-    } finally {
-      setFlashing(false);
-    }
-  };
-
-  const interval = useAction(async () => {
-    await setReportInterval(Number(nodeId), Number(minutes));
     await bush.refresh();
   });
   const report = useAction(async (type) => {
@@ -142,11 +82,14 @@ export function NodePage() {
   const gallons = node ? bucketGallons(node.Weight, node.Tare_Weight ?? 0) : null;
   const fill = node ? bucketPercent(node.Weight, node.Tare_Weight ?? 0) : null;
   const weights = dailyWeightRows(history.data ?? [], { nodeIds: [Number(nodeId)], unit });
+  const intervalMinutes = node?.Report_Interval_Seconds == null
+    ? 15
+    : Math.round(node.Report_Interval_Seconds / 60);
 
   if (!bush.loading && !node) {
     return (
       <>
-        <PageHeader title="Tree" />
+        <PageHeader title="Tree" subtitle="That tree is not on the board right now." />
         <Alert severity="warning">That tree is not one of the taps we are watching.</Alert>
         <Button sx={{ mt: 2 }} onClick={() => navigate('/dashboard')}>
           Back to the bush
@@ -157,10 +100,26 @@ export function NodePage() {
 
   return (
     <>
-      <PageHeader title={node?.Node_Name ?? 'Tree'} />
+      <PageHeader
+        title={node?.Node_Name ?? 'Tree'}
+        subtitle={`${node?.Stand ?? 'Sugarbush'}${node?.Node_Code ? ` · ${node.Node_Code}` : ''} · battery, bucket, and field actions for this tap.`}
+        actions={
+          canDeploy ? (
+            <Stack direction="row" spacing={1} sx={{ justifyContent: 'center', flexWrap: 'wrap' }}>
+              <Button variant="outlined" onClick={() => navigate(`/deploy?edit=${nodeId}`)}>
+                Edit on Deploy
+              </Button>
+              <Button variant="contained" onClick={() => navigate(`/deploy?flash=${nodeId}`)}>
+                Flash firmware
+              </Button>
+            </Stack>
+          ) : null
+        }
+      />
       <Stack direction="row" spacing={1} sx={{ mb: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
         <Chip label={node?.Stand} />
         <Chip label={status.label} color={status.color} />
+        {node?.Node_Code ? <Chip label={node.Node_Code} variant="outlined" /> : null}
         {node?.Ice_Present ? <Chip label="Ice in the bucket" color="info" /> : null}
         <Chip label={node?.Barcode_ID ?? 'No bucket'} variant="outlined" />
       </Stack>
@@ -203,84 +162,21 @@ export function NodePage() {
         </Grid>
       </Grid>
 
-      {canDeploy && edit ? (
-        <Card sx={{ mb: 2 }}>
-          <CardContent>
-            <Typography variant="h6" component="h2">Edit this node</Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              {node?.Node_Code} is written into the firmware. Push firmware to put that code on the Heltec.
-            </Typography>
-            {flashing ? (
-              <Stack spacing={1.5}>
-                <LinearProgress variant="determinate" value={flashProgress ?? 0} sx={{ height: 10, borderRadius: 999 }} />
-                <Typography variant="body2">{flashStatus || 'Flashing…'}</Typography>
-              </Stack>
-            ) : (
-              <Stack spacing={2}>
-                <TextField label="Tree name" value={edit.Node_Name} onChange={(event) => setEdit((prev) => ({ ...prev, Node_Name: event.target.value }))} fullWidth />
-                <TextField label="Stand" value={edit.Stand} onChange={(event) => setEdit((prev) => ({ ...prev, Stand: event.target.value }))} fullWidth />
-                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-                  <TextField label="Latitude" value={edit.Latitude} onChange={(event) => setEdit((prev) => ({ ...prev, Latitude: event.target.value }))} fullWidth />
-                  <TextField label="Longitude" value={edit.Longitude} onChange={(event) => setEdit((prev) => ({ ...prev, Longitude: event.target.value }))} fullWidth />
-                </Stack>
-                <TextField label="RF tag" value={edit.Rf_Tag} onChange={(event) => setEdit((prev) => ({ ...prev, Rf_Tag: event.target.value }))} fullWidth />
-                <TextField label="Notes" value={edit.Notes} onChange={(event) => setEdit((prev) => ({ ...prev, Notes: event.target.value }))} multiline minRows={2} fullWidth />
-                {saveDetails.error ? <Alert severity="error">{saveDetails.error}</Alert> : null}
-                {flashStatus && !flashing ? <Alert severity="info">{flashStatus}</Alert> : null}
-                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-                  <Button variant="outlined" disabled={saveDetails.pending} onClick={() => saveDetails.execute()}>Save details</Button>
-                  <Button variant="contained" disabled={!navigator.serial} onClick={pushFirmware}>Push firmware</Button>
-                </Stack>
-              </Stack>
-            )}
-          </CardContent>
-        </Card>
-      ) : null}
-
       <Card sx={{ mb: 2 }}>
         <CardContent>
           <Typography variant="h6" component="h2">
             Packet interval
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            How often this node radios its weight. The board picks up a new interval the next time it checks in.
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            How often this node radios its weight.
+          </Typography>
+          <Typography>
+            Every {intervalMinutes} minute{intervalMinutes === 1 ? '' : 's'}.
           </Typography>
           {canDeploy ? (
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: { sm: 'center' } }}>
-              <TextField
-                label="Minutes between packets"
-                type="number"
-                value={minutes}
-                onChange={(event) => {
-                  setIntervalSaved(false);
-                  setMinutes(event.target.value);
-                }}
-                helperText="From 1 minute to 1 day."
-                sx={{ maxWidth: 280 }}
-                slotProps={{ htmlInput: { min: 1, max: 1440, step: 1 } }}
-              />
-              <Button
-                variant="contained"
-                size="large"
-                disabled={interval.pending || !Number(minutes)}
-                onClick={async () => {
-                  const result = await interval.execute();
-                  setIntervalSaved(result.ok);
-                }}
-              >
-                Save interval
-              </Button>
-            </Stack>
-          ) : (
-            <Typography>
-              Every {node?.Report_Interval_Seconds == null ? '15' : Math.round(node.Report_Interval_Seconds / 60)} minutes.
-            </Typography>
-          )}
-          {interval.error ? <Alert severity="error" sx={{ mt: 2 }}>{interval.error}</Alert> : null}
-          {intervalSaved ? (
-            <Alert severity="success" sx={{ mt: 2 }}>
-              Saved. This node will use the new interval the next time it checks in.
-            </Alert>
+            <Button sx={{ mt: 1.5 }} onClick={() => navigate(`/deploy?edit=${nodeId}`)}>
+              Change on Deploy
+            </Button>
           ) : null}
         </CardContent>
       </Card>
@@ -397,7 +293,6 @@ export function NodePage() {
                     slotProps={{ textField: { fullWidth: true } }}
                   />
                   {createShift.error ? <Alert severity="error">{createShift.error}</Alert> : null}
-                  {createShift.pending ? null : null}
                   <Button
                     variant="contained"
                     disabled={createShift.pending || !shift.UserID}

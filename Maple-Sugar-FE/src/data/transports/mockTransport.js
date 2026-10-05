@@ -402,24 +402,44 @@ const routes = [
     method: 'POST',
     match: /^\/schedule\/slots$/,
     handler: (unused, { body }) => {
-      if (!body?.AlertID) invalid('A collection task can only be opened from a full-bucket alert.');
-      const alert = db.alerts.find((item) => item.AlertID === Number(body.AlertID));
-      if (!alert || alert.Is_Resolved || alert.Alert_Type !== 'Full Bucket') {
-        invalid('A collection task can only be opened from an unresolved full-bucket alert.');
+      if (!body?.Task) invalid('Name the task.');
+      if (!Array.isArray(body?.BucketIDs) || body.BucketIDs.length === 0) {
+        invalid('Choose at least one bucket.');
       }
-      const node = db.nodes.find((item) => item.NodeID === alert.NodeID);
+      if (!body?.Starts_At || !body?.Ends_At) invalid('Pick a start and an end.');
+      if (Date.parse(body.Ends_At) <= Date.parse(body.Starts_At)) {
+        invalid('The shift must end after it starts.');
+      }
+
+      const buckets = body.BucketIDs.map((id) => {
+        const bucket = db.buckets.find((item) => item.BucketID === Number(id));
+        if (!bucket) invalid('One of those buckets is not on a tree.');
+        const node = db.nodes.find((item) => item.NodeID === bucket.NodeID);
+        return { bucket, node };
+      });
+      const stands = [...new Set(buckets.map((item) => item.node?.Stand).filter(Boolean))];
+      const assigned = [];
+      if (body.UserID) {
+        const user = db.users.find((candidate) => candidate.UserID === Number(body.UserID));
+        if (!user) invalid('Choose a student who already has an account.');
+        assigned.push(user.UserID);
+      }
+
       const slot = {
         SlotID: nextId.slot++,
-        Task: 'Sap Collection',
-        Stand: node?.Stand ?? 'Sugarbush',
-        Starts_At: null,
-        Ends_At: null,
-        Capacity: 1,
-        Assigned_UserIDs: [],
+        Task: body.Task,
+        Stand: stands.join(', ') || 'Sugarbush',
+        Starts_At: body.Starts_At,
+        Ends_At: body.Ends_At,
+        Capacity: Number(body.Capacity) > 0 ? Number(body.Capacity) : 1,
+        Assigned_UserIDs: assigned,
         Is_Complete: false,
-        Alert_ID: alert.AlertID,
-        Node_ID: alert.NodeID,
-        Awaiting_Time: true,
+        Alert_ID: body.AlertID ?? null,
+        Node_ID: buckets[0].node?.NodeID ?? null,
+        Notes: body.Notes ?? '',
+        Bucket_IDs: body.BucketIDs.map(Number),
+        Bucket_Labels: buckets.map((item) => item.bucket.Barcode_ID),
+        Awaiting_Time: false,
       };
       db.scheduleSlots.push(slot);
       return withAssignees(slot);

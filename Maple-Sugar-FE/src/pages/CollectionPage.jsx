@@ -234,7 +234,10 @@ export function CollectionPage() {
 
   return (
     <>
-      <PageHeader title="Collection" />
+      <PageHeader
+        title="Collection"
+        subtitle="Log what you pulled from a tree: weight, Brix, ice, and notes from the round."
+      />
 
       <Grid container spacing={2.5}>
         <Grid size={{ xs: 12, lg: 5 }}>

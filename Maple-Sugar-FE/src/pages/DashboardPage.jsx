@@ -105,13 +105,10 @@ export function DashboardPage() {
 
   return (
     <>
-      <PageHeader title="The Bush" />
-      <Typography color="text.secondary" sx={{ mt: -2, mb: 2, textAlign: 'center' }}>
-        Alumni House trees 1 and 2, nodes 001 and 002.{' '}
-        <Button size="small" onClick={() => navigate('/placement')}>
-          Where the gear lives
-        </Button>
-      </Typography>
+      <PageHeader
+        title="The Bush"
+        subtitle="Live weather and bucket fill for every tree on Deploy."
+      />
 
       <Box sx={{ mb: 3 }}>
         <Card>

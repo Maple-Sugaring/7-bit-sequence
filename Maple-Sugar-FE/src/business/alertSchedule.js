@@ -3,7 +3,17 @@ import { SHIFT_TASKS } from '../services/scheduleService';
 /** Which shift task an alert should open on the schedule form. */
 export function taskForAlert(alertType) {
   if (alertType === 'Low Battery') return 'Battery Swap';
-  if (alertType === 'Signal Loss' || alertType === 'Node Offline' || alertType === 'Freezing') {
+  if (
+    alertType === 'Signal Loss' ||
+    alertType === 'Node Offline' ||
+    alertType === 'Missed Readings' ||
+    alertType === 'Load Cell' ||
+    alertType === 'Unstable Reading' ||
+    alertType === 'Reversed Load Cell' ||
+    alertType === 'Incorrect Reading' ||
+    alertType === 'Untared' ||
+    alertType === 'Freezing'
+  ) {
     return 'Sensor Check';
   }
   if (
@@ -36,7 +46,16 @@ export function noteForAlert(alert) {
   if (alert?.Alert_Type === 'Spoilage') return 'Sap spoiling';
   if (alert?.Alert_Type === 'Tipped') return 'Bucket tipped';
   if (alert?.Alert_Type === 'Low Battery') return 'Low battery';
-  if (alert?.Alert_Type === 'Signal Loss' || alert?.Alert_Type === 'Node Offline') return 'Node not reporting';
+  if (
+    alert?.Alert_Type === 'Signal Loss' ||
+    alert?.Alert_Type === 'Node Offline' ||
+    alert?.Alert_Type === 'Missed Readings'
+  ) {
+    return 'Node not reporting';
+  }
+  if (alert?.Alert_Type === 'Load Cell' || alert?.Alert_Type === 'Reversed Load Cell') return 'Load cell fault';
+  if (alert?.Alert_Type === 'Unstable Reading' || alert?.Alert_Type === 'Incorrect Reading') return 'Check the weight';
+  if (alert?.Alert_Type === 'Untared') return 'Tare the scale';
   return alert?.Alert_Type ?? '';
 }
 

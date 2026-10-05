@@ -128,6 +128,7 @@ export function AlertsPage() {
     <>
       <PageHeader
         title="Notifications"
+        subtitle="Open field alerts for full buckets, spills, ice, offline nodes, and more."
         actions={
           <Stack direction="row" spacing={1}>
             <Button

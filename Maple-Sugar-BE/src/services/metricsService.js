@@ -40,6 +40,7 @@ async function raiseDerivedAlerts(reading, node) {
       // The reading itself is already in history, having just been written.
       history: history.filter((row) => row.MetricID !== reading.MetricID),
       tareWeight,
+      intervalSeconds: node?.Report_Interval_Seconds,
     });
 
     if (!candidates.length) return [];

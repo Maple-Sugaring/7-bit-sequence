@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
@@ -8,16 +9,17 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import dayjs from 'dayjs';
-import { LIVE_FROM, LIVE_NODE_IDS, LIVE_TO, TIME_UNITS, dailyWeightRows, presetRange } from '../business/liveWeight';
+import { LIVE_FROM, LIVE_TO, TIME_UNITS, dailyWeightRows, presetRange } from '../business/liveWeight';
 import { Capability } from '../business/permissions';
 import { ChartCard } from '../components/charts/ChartCard';
 import { WeightChart } from '../components/charts/SeriesChart';
 import { PageHeader } from '../components/common/PageHeader';
+import { EmptyBlock } from '../components/common/StateBlock';
 import { useAuth } from '../context/auth';
-import { useReadings } from '../services/hooks';
+import { useBush, useReadings } from '../services/hooks';
 
 function exportWeights(readings, from, to) {
-  const lines = ['date,node,tree,weight_lb,sugar_percent'];
+  const lines = ['date,node,tree,stand,weight_lb,sugar_percent'];
   for (const row of readings) {
     const date = String(row.Recorded_At).slice(0, 10);
     if (from && date < from) continue;
@@ -27,6 +29,7 @@ function exportWeights(readings, from, to) {
         date,
         row.NodeID,
         `"${row.nodeName ?? ''}"`,
+        `"${row.stand ?? ''}"`,
         row.Weight ?? '',
         row.Sugar_Percent ?? '',
       ].join(','),
@@ -48,8 +51,16 @@ const PRESETS = [
   ['2026', '2026'],
 ];
 
+function nodeLabel(node) {
+  const code = node.Node_Code ? ` · ${node.Node_Code}` : '';
+  return `${node.Node_Name}${code}`;
+}
+
 export function SapDataPage() {
+  const navigate = useNavigate();
   const { can } = useAuth();
+  const canDeploy = can(Capability.DEPLOY_NODES);
+  const bush = useBush();
   const initial = presetRange('7d');
   const [from, setFrom] = useState(dayjs(initial.from));
   const [to, setTo] = useState(dayjs(initial.to));
@@ -57,20 +68,23 @@ export function SapDataPage() {
   const [unit, setUnit] = useState('day');
   const [picked, setPicked] = useState([]);
   const readings = useReadings({ from: LIVE_FROM, to: LIVE_TO });
-  const tracked = useMemo(
-    () => (readings.data ?? []).filter((row) => LIVE_NODE_IDS.includes(row.NodeID)),
-    [readings.data],
-  );
+
   const nodes = useMemo(() => {
-    const byId = new Map();
-    for (const row of tracked) {
-      if (!byId.has(row.NodeID)) {
-        byId.set(row.NodeID, { NodeID: row.NodeID, label: row.nodeName ?? `Node ${row.NodeID}` });
-      }
-    }
-    return [...byId.values()];
-  }, [tracked]);
+    return [...(bush.data ?? [])].sort((a, b) => {
+      const stand = String(a.Stand ?? '').localeCompare(String(b.Stand ?? ''));
+      if (stand) return stand;
+      return String(a.Node_Name ?? '').localeCompare(String(b.Node_Name ?? ''));
+    });
+  }, [bush.data]);
+
+  const boardIds = useMemo(() => new Set(nodes.map((node) => node.NodeID)), [nodes]);
   const selectedIds = picked.length ? picked : nodes.map((node) => node.NodeID);
+
+  const tracked = useMemo(
+    () => (readings.data ?? []).filter((row) => boardIds.has(row.NodeID)),
+    [readings.data, boardIds],
+  );
+
   const weights = useMemo(() => {
     const start = from?.format('YYYY-MM-DD');
     const end = to?.format('YYYY-MM-DD');
@@ -84,18 +98,37 @@ export function SapDataPage() {
     return {
       ranged,
       ...dailyWeightRows(ranged, {
-        nodeIds: selectedIds.length ? selectedIds : LIVE_NODE_IDS,
+        nodeIds: selectedIds.length ? selectedIds : [...boardIds],
         unit,
       }),
     };
-  }, [tracked, selectedIds, from, to, unit]);
+  }, [tracked, selectedIds, from, to, unit, boardIds]);
+
+  const stands = useMemo(() => {
+    const names = [...new Set(nodes.map((node) => node.Stand).filter(Boolean))];
+    return names;
+  }, [nodes]);
+
+  const chartDescription = nodes.length
+    ? `${stands.length === 1 ? stands[0] : 'Deployed trees'} · ${nodes.length} node${nodes.length === 1 ? '' : 's'}. All start selected.`
+    : 'Weight history for every tree registered on Deploy.';
+
+  const emptyTitle = nodes.length === 0
+    ? 'No trees deployed yet'
+    : 'No weight in this range';
+  const emptyDescription = nodes.length === 0
+    ? 'Register a gateway and add nodes on Deploy, then flash the Heltecs. Readings show up here once packets arrive.'
+    : 'Widen the dates, or wait for the next LoRa packet from a selected tree.';
+
+  const loading = bush.loading || readings.loading;
 
   return (
     <>
       <PageHeader
         title="Sugar Woods"
+        subtitle="Chart gallons in each bucket over time, then export a CSV when you need it."
         actions={
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'center' } }}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'center' }, flexWrap: 'wrap', justifyContent: 'center' }}>
             {PRESETS.map(([id, label]) => (
               <Button
                 key={id}
@@ -138,6 +171,7 @@ export function SapDataPage() {
             {can(Capability.EXPORT_DATA) ? (
               <Button
                 variant="outlined"
+                disabled={weights.ranged.length === 0}
                 onClick={() => exportWeights(weights.ranged, from?.format('YYYY-MM-DD'), to?.format('YYYY-MM-DD'))}
               >
                 Export CSV
@@ -146,45 +180,92 @@ export function SapDataPage() {
           </Stack>
         }
       />
-      <Typography color="text.secondary" sx={{ mt: -1, mb: 2, textAlign: 'center' }}>
-        Gallons of sap, from 0 to a full 10 gallon bucket. Pick how fine the time axis is.
-      </Typography>
 
-      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-        <FormGroup sx={{ minWidth: 200 }}>
-          {nodes.map((node) => (
-            <FormControlLabel
-              key={node.NodeID}
-              control={
-                <Checkbox
-                  size="small"
-                  checked={picked.length === 0 || picked.includes(node.NodeID)}
-                  onChange={() =>
-                    setPicked((current) => {
-                      const base = current.length ? current : nodes.map((item) => item.NodeID);
-                      return base.includes(node.NodeID)
-                        ? base.filter((id) => id !== node.NodeID)
-                        : [...base, node.NodeID];
-                    })
-                  }
-                />
-              }
-              label={node.label}
-            />
-          ))}
-        </FormGroup>
-        <Box sx={{ flex: 1 }}>
-          <ChartCard
-            title="2026 weight"
-            description="Nodes 001 and 002. Both start selected."
-            height={420}
-            loading={readings.loading}
-            isEmpty={weights.rows.length === 0}
+      {nodes.length === 0 && !loading ? (
+        <EmptyBlock
+          title="Nothing to chart yet"
+          description="Sugar Woods follows the trees registered on Deploy. Add the Alumni House nodes there, flash them, and weight packets will fill this chart."
+          action={
+            canDeploy ? (
+              <Button variant="contained" onClick={() => navigate('/deploy')}>
+                Open Deploy
+              </Button>
+            ) : null
+          }
+        />
+      ) : (
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+          <Box
+            sx={{
+              minWidth: { md: 240 },
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 2,
+              bgcolor: 'background.paper',
+              p: 2,
+            }}
           >
-            <WeightChart rows={weights.rows} series={weights.series} unit={unit} />
-          </ChartCard>
-        </Box>
-      </Stack>
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              Trees
+            </Typography>
+            {nodes.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                No deployed nodes yet.
+              </Typography>
+            ) : (
+              <FormGroup>
+                {nodes.map((node) => (
+                  <FormControlLabel
+                    key={node.NodeID}
+                    control={
+                      <Checkbox
+                        size="small"
+                        checked={picked.length === 0 || picked.includes(node.NodeID)}
+                        onChange={() =>
+                          setPicked((current) => {
+                            const base = current.length ? current : nodes.map((item) => item.NodeID);
+                            return base.includes(node.NodeID)
+                              ? base.filter((id) => id !== node.NodeID)
+                              : [...base, node.NodeID];
+                          })
+                        }
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography variant="body2">{nodeLabel(node)}</Typography>
+                        {node.Stand ? (
+                          <Typography variant="caption" color="text.secondary">
+                            {node.Stand}
+                          </Typography>
+                        ) : null}
+                      </Box>
+                    }
+                  />
+                ))}
+              </FormGroup>
+            )}
+            {picked.length > 0 ? (
+              <Button size="small" sx={{ mt: 1 }} onClick={() => setPicked([])}>
+                Select all
+              </Button>
+            ) : null}
+          </Box>
+          <Box sx={{ flex: 1 }}>
+            <ChartCard
+              title="2026 weight"
+              description={chartDescription}
+              height={420}
+              loading={loading}
+              isEmpty={weights.rows.length === 0}
+              emptyTitle={emptyTitle}
+              emptyDescription={emptyDescription}
+            >
+              <WeightChart rows={weights.rows} series={weights.series} unit={unit} />
+            </ChartCard>
+          </Box>
+        </Stack>
+      )}
     </>
   );
 }

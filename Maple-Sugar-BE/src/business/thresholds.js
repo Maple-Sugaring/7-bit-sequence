@@ -52,5 +52,17 @@ export const MAX_TEMPERATURE_F = 90;
 
 /** Below this a node's battery warrants a swap. */
 export const LOW_BATTERY_PERCENT = 20;
+/** Weaker than this, the packet is arriving but the link is not trustworthy. */
+export const WEAK_RSSI_DBM = -110;
 /** A tracked node that has not reported for this long is treated as down. */
 export const STALE_AFTER_MINUTES = 45;
+/**
+ * Guang Ce YZC-1B full scale. A gross weight past this is the cell saturating
+ * or a unit error, not a heavier bucket.
+ */
+export const CELL_CAPACITY_LB = 110.23;
+/**
+ * Sap cannot appear this fast between two reports. A larger step is a bad
+ * sample, not a collection. A real empty-to-full bucket still takes hours.
+ */
+export const MAX_STEP_LB = 40;

@@ -18,9 +18,6 @@ const SapDataPage = lazy(() =>
 const NodePage = lazy(() =>
   import('../pages/NodePage').then((module) => ({ default: module.NodePage })),
 );
-const PlacementPage = lazy(() =>
-  import('../pages/PlacementPage').then((module) => ({ default: module.PlacementPage })),
-);
 const AlertsPage = lazy(() =>
   import('../pages/AlertsPage').then((module) => ({ default: module.AlertsPage })),
 );
@@ -42,10 +39,10 @@ const DeployPage = lazy(() =>
 
 const PROTECTED = [
   { path: '/dashboard', element: <DashboardPage />, capability: Capability.VIEW_DASHBOARD },
+  { path: '/deploy', element: <DeployPage />, capability: Capability.DEPLOY_NODES },
   { path: '/table', element: <SapDataPage />, capability: Capability.VIEW_DATA_TABLE },
   { path: '/collection', element: <CollectionPage />, capability: Capability.RECORD_DATA },
   { path: '/nodes/:nodeId', element: <NodePage />, capability: Capability.VIEW_DASHBOARD },
-  { path: '/placement', element: <PlacementPage />, capability: Capability.VIEW_DASHBOARD },
   { path: '/notifications', element: <AlertsPage />, capability: Capability.VIEW_ALERTS },
   { path: '/schedule', element: <SchedulePage />, capability: Capability.VIEW_SCHEDULE },
   {
@@ -54,7 +51,6 @@ const PROTECTED = [
     capability: Capability.MANAGE_SCHEDULE,
   },
   { path: '/admin', element: <AdminPage />, capability: Capability.MANAGE_USERS },
-  { path: '/deploy', element: <DeployPage />, capability: Capability.DEPLOY_NODES },
 ];
 
 function PageFallback() {
@@ -78,7 +74,8 @@ export function AppRoutes() {
       <Route path="/alerts" element={<Navigate to="/notifications" replace />} />
       <Route path="/schedule/manage" element={<Navigate to="/schedule-admin" replace />} />
       <Route path="/guides" element={<Navigate to="/dashboard" replace />} />
-      <Route path="/nodes" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/nodes" element={<Navigate to="/deploy" replace />} />
+      <Route path="/deployed" element={<Navigate to="/deploy" replace />} />
 
       <Route
         element={

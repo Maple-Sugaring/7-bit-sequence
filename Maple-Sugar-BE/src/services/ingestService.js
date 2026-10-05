@@ -8,11 +8,14 @@
 
 import { ApiError, forbidden, invalid, notFound } from '../lib/ApiError.js';
 import { validateReading } from '../business/validation.js';
+import { alertForFault, clearedAlertTypes } from '../business/alerting.js';
 import { cacheNamespaces } from '../cache/cacheKeys.js';
 import { invalidateNamespaces } from '../cache/redisCache.js';
 import * as nodesRepository from '../repositories/nodesRepository.js';
 import * as metricsRepository from '../repositories/metricsRepository.js';
+import * as alertsRepository from '../repositories/alertsRepository.js';
 import * as metricsService from './metricsService.js';
+import { logger } from '../lib/logger.js';
 
 function readingIdentity(reading) {
   return {
@@ -23,11 +26,35 @@ function readingIdentity(reading) {
   };
 }
 
+async function raiseOnce(nodeId, alert) {
+  if (!alert) return;
+  try {
+    if (await alertsRepository.hasOpenAlertOfType(nodeId, alert.Alert_Type)) return;
+    await alertsRepository.createAlert({ ...alert, NodeID: nodeId });
+    await invalidateNamespaces([cacheNamespaces.ALERTS]);
+  } catch (error) {
+    logger.error({ err: error, nodeId, type: alert.Alert_Type }, 'Could not raise node alert');
+  }
+}
+
 async function acceptReading(gateway, reading) {
   const node = await nodesRepository.findNodeForIngest(reading);
   if (!node) throw notFound('Node');
   if (node.GatewayID !== gateway.GatewayID) {
     throw forbidden('That node is not on this gateway.');
+  }
+
+  if (reading.Fault) {
+    await nodesRepository.recordNodeHeartbeat(node.NodeID, {
+      batteryPercent: reading.Battery_Percent ?? null,
+      signalRssi: reading.Signal_Rssi ?? null,
+    });
+    await raiseOnce(node.NodeID, alertForFault(reading.Fault, node.Node_Name));
+    return {
+      Fault: reading.Fault,
+      Duplicate: false,
+      Desired_Interval_Seconds: node.Report_Interval_Seconds ?? null,
+    };
   }
 
   // Air temperature comes from OpenWeather. A sap probe is a separate field, so
@@ -42,6 +69,11 @@ async function acceptReading(gateway, reading) {
   const { errors, isValid } = validateReading(input);
   if (!isValid) {
     const message = errors.Weight ?? errors.Recorded_At ?? errors.Sugar_Percent ?? 'Some fields need attention.';
+    await raiseOnce(node.NodeID, {
+      Alert_Type: 'Incorrect Reading',
+      severity: 'warning',
+      Description: `${node.Node_Name} sent a reading that was rejected: ${message}`,
+    });
     throw invalid(message, errors);
   }
 
@@ -59,6 +91,11 @@ async function acceptReading(gateway, reading) {
   if (existing) return { Reading: existing, Duplicate: true, Desired_Interval_Seconds: desired };
 
   const stored = await metricsService.createMetric(input, null);
+  const cleared = await alertsRepository.resolveOpenByTypes(node.NodeID, clearedAlertTypes(reading));
+  if (cleared) {
+    await invalidateNamespaces([cacheNamespaces.ALERTS]);
+    logger.info({ nodeId: node.NodeID, cleared }, 'Cleared node alerts after a good reading');
+  }
   return { Reading: stored, Duplicate: false, Desired_Interval_Seconds: desired };
 }
 

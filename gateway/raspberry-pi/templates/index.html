@@ -112,7 +112,7 @@
         if (data.radio_status === "error") {
           kind = "error";
           title = "Serial error";
-        } else if (data.rx_count > 0 && age !== null && age < 45) {
+        } else if (data.rx_count > 0 && age !== null && age < 180) {
           kind = "up";
           title = "Link up";
         }

@@ -44,6 +44,6 @@ ingestRouter.post('/', requireGateway, async (req, res) => {
     });
   }
 
-  const created = result.Accepted.some((item) => !item.Duplicate);
+  const created = result.Accepted.some((item) => item.Reading && !item.Duplicate);
   res.status(created ? 201 : 200).json(result);
 });

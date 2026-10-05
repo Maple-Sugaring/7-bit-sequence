@@ -149,15 +149,16 @@ export const scheduleQuery = z.object({
   to: isoDateTime.optional(),
 });
 
-/** An admin assigns a student to buckets at a chosen time. A full bucket is not required. */
+/** Admin opens a shift. Leave UserID empty so students can claim it. */
 export const createSlotBody = z
   .object({
     Task: z.string().trim().min(1, 'Name the task.').max(100),
     Starts_At: isoDateTime,
     Ends_At: isoDateTime,
-    UserID: z.coerce.number().int().positive({ message: 'Choose a student.' }),
+    UserID: z.coerce.number().int().positive({ message: 'Choose a student.' }).nullish(),
     BucketIDs: z.array(z.coerce.number().int().positive()).min(1, 'Choose at least one bucket.'),
     Notes: z.string().max(500).optional().default(''),
+    Capacity: z.coerce.number().int().min(1).max(20).optional().default(1),
   })
   .refine((body) => Date.parse(body.Ends_At) > Date.parse(body.Starts_At), {
     message: 'The shift must end after it starts.',
@@ -171,6 +172,7 @@ export const nodeDetailsBody = z.object({
   Longitude: z.coerce.number().min(-180).max(180),
   Rf_Tag: z.string().trim().max(64).optional(),
   Notes: z.string().trim().max(500).optional(),
+  GatewayID: z.coerce.number().int().positive().optional(),
 });
 
 export const nodeIntervalBody = z.object({
@@ -239,7 +241,8 @@ const ingestReadingObject = z.object({
   Node_Code: z.string().trim().min(1).max(50).optional(),
   LoRa_Device_ID: z.string().trim().min(1).max(64).optional(),
   Recorded_At: isoDateTime,
-  Weight: z.coerce.number(),
+  Weight: z.number().finite().optional(),
+  Fault: z.enum(['load-cell', 'unstable', 'reversed', 'untared']).optional(),
   Sugar_Percent: nullableNumber,
   // Sap probe only. Air temperature is OpenWeather and is not stored from the Pi.
   Sap_Temperature: nullableNumber,
@@ -257,7 +260,10 @@ function withNodeIdentity(schema) {
   );
 }
 
-export const ingestReadingBody = withNodeIdentity(ingestReadingObject);
+export const ingestReadingBody = withNodeIdentity(ingestReadingObject).refine(
+  (reading) => reading.Weight != null || Boolean(reading.Fault),
+  { message: 'A reading needs a weight or a fault.', path: ['Weight'] },
+);
 
 /** A single reading, or a batch the gateway collected from several nodes. */
 export const ingestBody = z.union([
@@ -265,7 +271,10 @@ export const ingestBody = z.union([
     Gateway_Code: gatewayCode,
     Readings: z.array(ingestReadingBody).min(1).max(32),
   }),
-  withNodeIdentity(ingestReadingObject.extend({ Gateway_Code: gatewayCode })),
+  withNodeIdentity(ingestReadingObject.extend({ Gateway_Code: gatewayCode })).refine(
+    (reading) => reading.Weight != null || Boolean(reading.Fault),
+    { message: 'A reading needs a weight or a fault.', path: ['Weight'] },
+  ),
 ]);
 
 export const updateSettingsBody = z.object({

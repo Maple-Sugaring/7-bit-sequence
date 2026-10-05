@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { SEEDED_LORA_IDS, SEEDED_STANDS } from '../../src/db/clearSeed.js';
+import { SEEDED_GATEWAY_CODES, SEEDED_LORA_IDS, SEEDED_STANDS } from '../../src/db/clearSeed.js';
 
 describe('seed cleanup', () => {
   test('covers every fixture node and stand from the seed migration', async () => {
@@ -18,6 +18,9 @@ describe('seed cleanup', () => {
     assert.deepEqual(SEEDED_LORA_IDS, loraIds);
     for (const stand of SEEDED_STANDS) {
       assert.match(sql, new RegExp(stand));
+    }
+    for (const code of SEEDED_GATEWAY_CODES) {
+      assert.equal(sql.includes(code), false, `${code} is still seeded`);
     }
   });
 });

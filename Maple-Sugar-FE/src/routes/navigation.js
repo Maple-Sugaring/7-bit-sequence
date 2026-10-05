@@ -16,6 +16,12 @@ export const NAV_ITEMS = [
     capability: Capability.VIEW_DASHBOARD,
   },
   {
+    to: '/deploy',
+    label: 'Deploy',
+    icon: SettingsInputAntennaIcon,
+    capability: Capability.DEPLOY_NODES,
+  },
+  {
     to: '/schedule',
     label: 'Schedule',
     icon: CalendarMonthIcon,
@@ -50,12 +56,6 @@ export const NAV_ITEMS = [
     label: 'Admin',
     icon: AdminPanelSettingsIcon,
     capability: Capability.MANAGE_USERS,
-  },
-  {
-    to: '/deploy',
-    label: 'Deploy',
-    icon: SettingsInputAntennaIcon,
-    capability: Capability.DEPLOY_NODES,
   },
 ];
 

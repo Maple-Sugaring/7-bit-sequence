@@ -7,7 +7,8 @@ import { logger } from './lib/logger.js';
 import { createApp } from './app.js';
 import { clearSeededData } from './db/clearSeed.js';
 import { runMigrations } from './db/migrate.js';
-import { connectCache, disconnectCache } from './cache/redisCache.js';
+import { cacheNamespaces } from './cache/cacheKeys.js';
+import { connectCache, disconnectCache, invalidateNamespaces } from './cache/redisCache.js';
 import { closePool } from './db/pool.js';
 import { startHousekeeping } from './services/housekeeping.js';
 import { ensureHistoricWeather } from './services/historicWeather.js';
@@ -26,6 +27,7 @@ await ensureHistoricWeather();
 // Not awaited as a hard requirement: the cache is optional by design, and a
 // Redis outage must not stop the API from coming up.
 await connectCache();
+await invalidateNamespaces([cacheNamespaces.GATEWAYS, cacheNamespaces.NODES]);
 
 const app = createApp();
 
