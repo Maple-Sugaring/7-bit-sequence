@@ -52,6 +52,18 @@ export function AuthProvider({ children }) {
     window.localStorage.removeItem(STORAGE_KEY);
   }, []);
 
+  /** Swaps in a fresh user record from the API, keeping the same token. */
+  const refreshUser = useCallback((apiUser) => {
+    setSession((current) => {
+      if (!current) return current;
+      const next = { ...current, user: authService.toSessionUser(apiUser) };
+      if (apiMode === 'mock') {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      }
+      return next;
+    });
+  }, []);
+
   const value = useMemo(() => {
     const role = session?.user?.role ?? null;
 
@@ -64,8 +76,9 @@ export function AuthProvider({ children }) {
       can: (capability) => can(role, capability),
       signIn,
       signOut,
+      refreshUser,
     };
-  }, [session, restoring, signIn, signOut]);
+  }, [session, restoring, signIn, signOut, refreshUser]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

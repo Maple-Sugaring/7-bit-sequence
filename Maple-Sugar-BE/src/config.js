@@ -116,17 +116,18 @@ export const config = {
   // Comma-separated. Promoted to Admin on boot so the role is not baked into SQL.
   bootstrapAdminEmails: list('BOOTSTRAP_ADMIN_EMAILS'),
 
-  // Critical alerts. Both channels stay off until these are set, so a dev
-  // machine never sends mail or texts.
-  smtpUrl: optional('SMTP_URL') || null,
-  alertFrom: optional('ALERT_FROM') || null,
-  alertEmails: list('ALERT_EMAILS'),
-  twilio: {
-    accountSid: optional('TWILIO_ACCOUNT_SID') || null,
-    authToken: optional('TWILIO_AUTH_TOKEN') || null,
-    from: optional('TWILIO_FROM') || null,
+  // Email through Brevo's transactional API. Mail stays off until the key and
+  // a sender verified in Brevo are both set, so a dev machine never sends.
+  brevo: {
+    apiKey: optional('BREVO_API_KEY') || null,
+    sender: optional('MAIL_FROM').toLowerCase() || null,
+    senderName: optional('MAIL_FROM_NAME', 'RIT Maple Sugaring'),
   },
-  alertSmsTo: list('ALERT_SMS_TO'),
+  // Extra critical-alert recipients on top of users who opted in, e.g. a
+  // shared club inbox that has no account.
+  alertEmails: list('ALERT_EMAILS'),
+  // How far ahead of a shift the reminder email goes out.
+  shiftReminderHours: integer('SHIFT_REMINDER_HOURS', 12),
 };
 
 export const sessionTtlSeconds = config.sessionTtlDays * 24 * 60 * 60;

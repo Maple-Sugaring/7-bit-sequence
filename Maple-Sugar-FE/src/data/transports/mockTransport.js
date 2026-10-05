@@ -1,5 +1,6 @@
 import dayjs from 'dayjs';
 import { ApiError } from '../ApiError';
+import { Capability, ROLE_LABELS, can, roleFromId } from '../../business/permissions';
 import * as seed from '../fixtures/seed';
 
 /**
@@ -43,6 +44,39 @@ function notFound(resource) {
 
 function invalid(message, details) {
   throw new ApiError(message, { status: 422, code: 'VALIDATION', details });
+}
+
+/**
+ * After a full reload the in-memory session is gone but AuthProvider restores
+ * the UI from localStorage, so fall back to that stored user.
+ */
+function currentUser() {
+  if (!session) {
+    try {
+      const stored = JSON.parse(window.localStorage.getItem('maple-sugar-session'));
+      const restored = stored && db.users.find((row) => row.UserID === stored.user?.id);
+      if (restored) session = { token: stored.token, user: restored };
+    } catch {
+      // No storage (tests, private mode): stay signed out.
+    }
+  }
+  const user = session && db.users.find((row) => row.UserID === session.user.UserID);
+  if (!user) throw new ApiError('Sign in to continue.', { status: 401, code: 'BAD_CREDENTIALS' });
+  return user;
+}
+
+/** Same shape as GET /profile. Mail is never on in mock mode. */
+function profileOf(user) {
+  const role = roleFromId(user.RoleID);
+  return {
+    ...user,
+    Pronouns: user.Pronouns ?? null,
+    Email_Alerts: user.Email_Alerts ?? user.RoleID === 1,
+    Email_Shifts: user.Email_Shifts ?? true,
+    Role_Label: ROLE_LABELS[role] ?? role,
+    Can_Receive_Alerts: can(role, Capability.VIEW_ALERTS),
+    Mail_Enabled: false,
+  };
 }
 
 function seasonOf(isoDate) {
@@ -581,6 +615,36 @@ const routes = [
       Author: 'You',
       Node_Name: null,
     }),
+  },
+  {
+    method: 'GET',
+    match: /^\/profile$/,
+    handler: () => profileOf(currentUser()),
+  },
+  {
+    method: 'PATCH',
+    match: /^\/profile$/,
+    handler: (unused, { body }) => {
+      const user = currentUser();
+      if (body?.First_Name !== undefined && !String(body.First_Name).trim()) {
+        invalid('Enter your first name.', { First_Name: 'required' });
+      }
+      for (const key of ['First_Name', 'Last_Name', 'Pronouns', 'Email_Alerts', 'Email_Shifts']) {
+        if (body?.[key] !== undefined) user[key] = body[key];
+      }
+      session.user = user;
+      return profileOf(user);
+    },
+  },
+  {
+    method: 'POST',
+    match: /^\/notifications\/test$/,
+    handler: () => {
+      throw new ApiError('Email is off. Set BREVO_API_KEY and MAIL_FROM on the server.', {
+        status: 503,
+        code: 'MAIL_DISABLED',
+      });
+    },
   },
   {
     method: 'GET',

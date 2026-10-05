@@ -219,6 +219,12 @@ export function AdminPage() {
 
   const columns = [
     { field: 'fullName', headerName: 'Name', width: 180 },
+    {
+      field: 'Pronouns',
+      headerName: 'Pronouns',
+      width: 110,
+      valueFormatter: (value) => value || '—',
+    },
     { field: 'Email', headerName: 'Email', width: 220 },
     {
       field: 'RoleID',

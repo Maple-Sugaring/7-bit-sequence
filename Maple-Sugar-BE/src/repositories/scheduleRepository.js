@@ -1,4 +1,4 @@
-import { queryAll, queryOne, transaction } from '../db/pool.js';
+import { query, queryAll, queryOne, transaction } from '../db/pool.js';
 import { invalid, notFound } from '../lib/ApiError.js';
 import { mapScheduleSlot } from './mappers.js';
 
@@ -34,10 +34,12 @@ const SLOT_SELECT = `
          ) as assigned_user_ids,
          -- Assignee display names travel with the slot so the schedule view
          -- does not have to fetch the admin-only user roster just to label a
-         -- shift. Only id/name/email are exposed, never role or account state.
+         -- shift. Only id/name/email/pronouns are exposed, never role or account state.
          coalesce(
            jsonb_agg(
-             jsonb_build_object('userId', a.user_id, 'name', u.full_name, 'email', u.email)
+             jsonb_build_object(
+               'userId', a.user_id, 'name', u.full_name, 'email', u.email, 'pronouns', u.pronouns
+             )
              order by a.assigned_at
            ) filter (where a.user_id is not null),
            '[]'::jsonb
@@ -269,7 +271,11 @@ export async function withdraw(slotId, userId) {
     [slotId, userId],
   );
 
-  return { slot: await findSlotById(slotId), googleEventId: assignment?.google_event_id ?? null };
+  return {
+    slot: await findSlotById(slotId),
+    googleEventId: assignment?.google_event_id ?? null,
+    removed: Boolean(assignment),
+  };
 }
 
 export async function setAssignmentEventId(slotId, userId, eventId) {
@@ -300,4 +306,42 @@ export async function listUpcomingSlotsForUser(userId) {
     [userId],
   );
   return rows.map(mapScheduleSlot);
+}
+
+/**
+ * Claims every assignment whose shift starts within the reminder window and
+ * has not been reminded yet, stamping it in the same statement so two passes
+ * (or two API instances) cannot both send it.
+ *
+ * Signups made inside the window are skipped: their confirmation email went
+ * out minutes ago with the same details.
+ */
+export async function claimDueReminders(windowHours) {
+  const rows = await queryAll(
+    `update schedule_assignments a
+        set reminder_sent_at = CURRENT_TIMESTAMP
+       from schedule_slots s
+      where s.id = a.slot_id
+        and a.reminder_sent_at is null
+        and s.is_complete = false
+        and s.starts_at > CURRENT_TIMESTAMP
+        and s.starts_at <= CURRENT_TIMESTAMP + make_interval(hours => $1)
+        and a.assigned_at < s.starts_at - make_interval(hours => $1)
+      returning a.slot_id, a.user_id`,
+    [windowHours],
+  );
+  return rows.map((row) => ({ slotId: row.slot_id, userId: row.user_id }));
+}
+
+/** Lets a failed reminder be retried on the next pass. */
+export async function releaseReminder(slotId, userId) {
+  await query(
+    'update schedule_assignments set reminder_sent_at = null where slot_id = $1 and user_id = $2',
+    [slotId, userId],
+  );
+}
+
+/** A rescheduled shift deserves a fresh reminder at its new time. */
+export async function resetReminders(slotId) {
+  await query('update schedule_assignments set reminder_sent_at = null where slot_id = $1', [slotId]);
 }

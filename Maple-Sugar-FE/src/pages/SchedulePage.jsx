@@ -22,6 +22,7 @@ import { useAuth } from '../context/auth';
 import { TimePickerDialog } from '../components/schedule/TimePickerDialog';
 import { claimCollectionTime, claimShift, groupByDay, releaseShift } from '../services/scheduleService';
 import { useAction, useSchedule } from '../services/hooks';
+import { withPronouns } from '../services/profileService';
 
 function SlotCard({ slot, canClaim, onClaim, onRelease, onPickTime, pending }) {
   const claimDisabled = !slot.canClaim || pending;
@@ -69,7 +70,12 @@ function SlotCard({ slot, canClaim, onClaim, onRelease, onPickTime, pending }) {
           <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap', gap: 0.75 }}>
             {slot.assigned.length ? (
               slot.assigned.map((person) => (
-                <Chip key={person.userId} label={person.name} size="small" variant="outlined" />
+                <Chip
+                  key={person.userId}
+                  label={withPronouns(person.name, person.pronouns)}
+                  size="small"
+                  variant="outlined"
+                />
               ))
             ) : (
               <Chip label="Unclaimed" size="small" color="warning" variant="outlined" />

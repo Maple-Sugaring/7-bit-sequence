@@ -19,7 +19,10 @@ const USER_COLUMNS = `
   account_expiry,
   google_calendar_id,
   (google_refresh_token is not null) as calendar_connected,
-  invite_pending
+  invite_pending,
+  email_alerts,
+  email_shifts,
+  pronouns
 `;
 
 export async function listRoles() {
@@ -175,6 +178,54 @@ export async function promoteEmailsToAdmin(emails) {
     [JSON.stringify(people)],
   );
   return result.rowCount ?? 0;
+}
+
+/** Admins get critical-alert email unless they opt out; everyone else opts in. */
+const ALERT_OPT_IN = 'coalesce(email_alerts, role_id = 1)';
+
+/**
+ * Who receives critical-alert email: opted-in accounts that can still sign in.
+ * Pending invites count, so a bootstrap admin is covered before first login.
+ */
+export async function listAlertRecipients() {
+  const rows = await queryAll(
+    `select ${USER_COLUMNS}
+       from users
+      where is_active = true
+        and (account_expiry is null or account_expiry >= CURRENT_DATE)
+        and ${ALERT_OPT_IN}`,
+  );
+  return rows.map(mapUser);
+}
+
+/**
+ * What a person may change about themselves. Email is deliberately absent: it
+ * is the Google identity and the invite key, so only an admin changes it.
+ */
+const SELF_EDITABLE_COLUMNS = {
+  First_Name: 'first_name',
+  Last_Name: 'last_name',
+  Pronouns: 'pronouns',
+  Email_Alerts: 'email_alerts',
+  Email_Shifts: 'email_shifts',
+};
+
+export async function updateProfile(id, changes) {
+  const assignments = [];
+  const values = [id];
+  for (const [field, column] of Object.entries(SELF_EDITABLE_COLUMNS)) {
+    if (changes[field] !== undefined) {
+      values.push(changes[field]);
+      assignments.push(`${column} = $${values.length}`);
+    }
+  }
+  if (!assignments.length) return findUserById(id);
+
+  const row = await queryOne(
+    `update users set ${assignments.join(', ')} where id = $1 returning ${USER_COLUMNS}`,
+    values,
+  );
+  return row ? mapUser(row) : null;
 }
 
 export async function deleteUser(id) {

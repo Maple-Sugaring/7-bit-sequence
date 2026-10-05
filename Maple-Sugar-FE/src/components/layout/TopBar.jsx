@@ -6,13 +6,17 @@ import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import MenuIcon from '@mui/icons-material/Menu';
+import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import NotificationsIcon from '@mui/icons-material/Notifications';
+import Tooltip from '@mui/material/Tooltip';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/auth';
 import { useOpenAlertCount } from '../../services/hooks';
 import { MainNav } from './MainNav';
 
 export function TopBar() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const compact = useMediaQuery('(max-width:900px)');
   const [menuOpen, setMenuOpen] = useState(false);
   const alerts = useOpenAlertCount();
@@ -39,7 +43,7 @@ export function TopBar() {
       component="header"
       sx={{
         display: 'grid',
-        gridTemplateColumns: 'auto 1fr auto',
+        gridTemplateColumns: 'auto 1fr auto auto',
         alignItems: 'center',
         gap: 1,
         px: { xs: 1.5, md: 3 },
@@ -80,6 +84,11 @@ export function TopBar() {
           <NotificationsIcon />
         </Badge>
       </IconButton>
+      <Tooltip title={user?.fullName ? `${user.fullName} · Profile` : 'Profile'}>
+        <IconButton aria-label="Your profile" onClick={() => navigate('/profile')} sx={{ color: '#fff' }}>
+          <AccountCircleIcon />
+        </IconButton>
+      </Tooltip>
       <Drawer
         anchor="left"
         open={menuOpen}

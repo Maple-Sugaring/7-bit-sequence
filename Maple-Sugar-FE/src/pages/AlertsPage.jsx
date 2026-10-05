@@ -147,6 +147,9 @@ export function AlertsPage() {
             >
               Notify this phone
             </Button>
+            <Button variant="outlined" onClick={() => navigate('/profile')}>
+              Email settings
+            </Button>
             <Button variant="outlined" onClick={refresh} disabled={loading}>
               Refresh
             </Button>

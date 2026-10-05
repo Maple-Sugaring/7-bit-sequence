@@ -55,6 +55,17 @@ Uses the stored refresh token to call Google Calendar v3.
 
 Admin assignment responds first, then starts `syncSignup` without awaiting it.
 
+## Email (`mailService`, `notificationService`, `shiftNotifications`)
+
+Mail goes through Brevo's transactional API (`POST https://api.brevo.com/v3/smtp/email`) on the free plan (300 emails a day). It is off until `BREVO_API_KEY` and `MAIL_FROM` are both set; `MAIL_FROM` must be a sender verified in Brevo. Each recipient gets their own copy through `messageVersions`. Bodies live in `services/emailTemplates.js`, with times in `America/New_York`.
+
+- Critical alerts: `notifyCriticalAlert` runs after `createAlert` for critical severity plus Full Bucket, Node Offline, Spoilage, and Tipped. Recipients are active, unexpired users with alert email on, plus `ALERT_EMAILS`. Duplicate open alerts are already suppressed, so a node sitting full does not re-mail.
+- Shifts: signup confirmation, admin assignment, removal, time or place change, and cancellation. Each responds first and sends without awaiting. Users with shift email off are skipped.
+- Reminders: housekeeping calls `sendShiftReminders` every 5 minutes. It claims assignments starting within `SHIFT_REMINDER_HOURS` (default 12) in one `UPDATE … RETURNING`, so each is sent once. Signups made inside the window are skipped since their confirmation just went out. A failed send is released for retry.
+- Invites: `POST /users/invite` emails a sign-in link.
+
+Failures are logged and never fail the request behind them.
+
 ## What stays out
 
 `routes/collectionLogs.js`, `routes/journal.js`, `routes/alerts.js`, `routes/settings.js`, and most of `routes/schedule.js` call repositories directly. That is intentional: one table, one rule, no third-party call.

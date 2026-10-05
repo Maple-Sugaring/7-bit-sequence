@@ -1,18 +1,20 @@
 /**
  * Background work the request path does not cover: ambient weather every few
- * minutes, downed-node checks, and replay of readings buffered while Postgres
- * was unreachable.
+ * minutes, downed-node checks, shift reminder emails, and replay of readings
+ * buffered while Postgres was unreachable.
  */
 
 import { logger } from '../lib/logger.js';
 import { ingestReadings } from './ingestService.js';
 import { watchNodes } from './nodeWatch.js';
 import { ingestBuffer } from './readingBuffer.js';
+import { sendShiftReminders } from './shiftNotifications.js';
 import { getLive } from './weatherService.js';
 
 const WEATHER_MS = 10 * 60 * 1000;
 const NODES_MS = 5 * 60 * 1000;
 const BUFFER_MS = 60 * 1000;
+const REMINDERS_MS = 5 * 60 * 1000;
 
 async function safe(label, task) {
   try {
@@ -29,13 +31,15 @@ export function startHousekeeping() {
     () => safe('Ingest buffer replay failed', () => ingestBuffer.flush((batch) => ingestReadings(batch))),
     BUFFER_MS,
   );
+  const reminders = setInterval(() => safe('Shift reminders failed', () => sendShiftReminders()), REMINDERS_MS);
 
-  for (const timer of [weather, nodes, buffer]) timer.unref();
+  for (const timer of [weather, nodes, buffer, reminders]) timer.unref();
 
   const first = setTimeout(() => {
     safe('Live weather poll failed', () => getLive());
     safe('Downed-node check failed', () => watchNodes());
     safe('Ingest buffer replay failed', () => ingestBuffer.flush((batch) => ingestReadings(batch)));
+    safe('Shift reminders failed', () => sendShiftReminders());
   }, 15_000);
   first.unref();
 
@@ -43,6 +47,7 @@ export function startHousekeeping() {
     clearInterval(weather);
     clearInterval(nodes);
     clearInterval(buffer);
+    clearInterval(reminders);
     clearTimeout(first);
   };
 }
