@@ -27,7 +27,7 @@ Sign-in is Google OAuth, limited to invited accounts on `g.rit.edu` and `rit.edu
 | Student | Dashboard, recording, readings table, alerts, claiming shifts |
 | MSS | Dashboard and readings table (with CSV export) for outreach review |
 
-Main routes: `/dashboard`, `/schedule`, `/input`, `/table`, `/notifications`, `/collection`, plus Admin-only `/admin` and `/schedule-admin`. The full list is in [docs/frontend.md](docs/frontend.md).
+Main routes: `/dashboard`, `/schedule`, `/input`, `/table`, `/notifications`, `/collection`, plus Admin-only `/admin` (admins also get shift management on `/schedule`). The full list is in [docs/frontend.md](docs/frontend.md).
 
 ## Quick start
 

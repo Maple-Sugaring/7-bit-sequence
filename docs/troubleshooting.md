@@ -21,7 +21,7 @@
 | Mock login buttons missing | `VITE_API_MODE` is not `mock` (the tracked `Maple-Sugar-FE/.env` sets `http`). Use `.env.local`. Restart Vite. |
 | Mock login buttons visible in a deployed build | The image was built with `VITE_API_MODE=mock`. Rebuild with `http`. |
 | My changes to a Vite env var do nothing in Docker | VITE values are baked at build time. `docker compose build web`. |
-| A fixture node or shift keeps disappearing | By design: `clearSeededData` deletes fixture rows on every API start. Create real ones from Deploy and Schedule Admin. |
+| A fixture node or shift keeps disappearing | By design: `clearSeededData` deletes fixture rows on every API start. Create real ones from Deploy and the Schedule page (admin panel). |
 | CI fails "env sync" | You added or removed an env var read in `config.js` without updating `.env.example` (or vice versa). |
 
 ## Hardware: flashing from the Deploy page

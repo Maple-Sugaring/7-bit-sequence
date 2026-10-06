@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Capability } from '../business/permissions';
 import { AppShell } from '../components/layout/AppShell';
 import { AuthCallbackPage } from '../pages/AuthCallbackPage';
@@ -24,9 +24,6 @@ const AlertsPage = lazy(() =>
 const SchedulePage = lazy(() =>
   import('../pages/SchedulePage').then((module) => ({ default: module.SchedulePage })),
 );
-const ScheduleAdminPage = lazy(() =>
-  import('../pages/ScheduleAdminPage').then((module) => ({ default: module.ScheduleAdminPage })),
-);
 const AdminPage = lazy(() =>
   import('../pages/AdminPage').then((module) => ({ default: module.AdminPage })),
 );
@@ -48,15 +45,22 @@ const PROTECTED = [
   { path: '/nodes/:nodeId', element: <NodePage />, capability: Capability.VIEW_DASHBOARD },
   { path: '/notifications', element: <AlertsPage />, capability: Capability.VIEW_ALERTS },
   { path: '/schedule', element: <SchedulePage />, capability: Capability.VIEW_SCHEDULE },
-  {
-    path: '/schedule-admin',
-    element: <ScheduleAdminPage />,
-    capability: Capability.MANAGE_SCHEDULE,
-  },
   { path: '/admin', element: <AdminPage />, capability: Capability.MANAGE_USERS },
   // Every signed-in role has a profile, so there is no capability gate.
   { path: '/profile', element: <ProfilePage /> },
 ];
+
+// Old schedule-admin links (e.g. from alerts) carry a tree and task in the query.
+function RedirectKeepingSearch({ to }) {
+  const { search } = useLocation();
+  const params = new URLSearchParams(search);
+  if (params.has('task') && !params.has('shiftTask')) {
+    params.set('shiftTask', params.get('task'));
+    params.delete('task');
+  }
+  const query = params.toString();
+  return <Navigate to={`${to}${query ? `?${query}` : ''}`} replace />;
+}
 
 function PageFallback() {
   return (
@@ -77,7 +81,8 @@ export function AppRoutes() {
       <Route path="/input" element={<Navigate to="/collection" replace />} />
       <Route path="/record" element={<Navigate to="/collection" replace />} />
       <Route path="/alerts" element={<Navigate to="/notifications" replace />} />
-      <Route path="/schedule/manage" element={<Navigate to="/schedule-admin" replace />} />
+      <Route path="/schedule/manage" element={<RedirectKeepingSearch to="/schedule" />} />
+      <Route path="/schedule-admin" element={<RedirectKeepingSearch to="/schedule" />} />
       <Route path="/guides" element={<Navigate to="/dashboard" replace />} />
       <Route path="/nodes" element={<Navigate to="/deploy" replace />} />
       <Route path="/deployed" element={<Navigate to="/deploy" replace />} />
