@@ -53,7 +53,7 @@ export function ProtectedRoute({ capability, children }) {
 
   if (!isAuthenticated) {
     // Remember where they were headed so sign-in can return them there.
-    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+    return <Navigate to="/login" replace state={signedOut ? undefined : { from: location.pathname }} />;
   }
 
   if (needed.length > 0 && !needed.some((candidate) => can(candidate))) return <Forbidden />;
