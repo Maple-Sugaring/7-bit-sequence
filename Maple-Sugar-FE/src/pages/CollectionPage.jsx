@@ -26,7 +26,6 @@ import { submitReading } from '../services/metricsService';
 
 function emptyForm() {
   return {
-    Title: '',
     Process_Notes: '',
     NodeID: '',
     Weight: '',
@@ -177,7 +176,6 @@ export function CollectionPage() {
     const batch = form.Batch_Label.trim();
     const notes = form.Process_Notes.trim();
     const entry = {
-      Title: form.Title.trim(),
       Process_Notes: batch ? `Batch ${batch}.\n${notes}` : notes,
       NodeID: form.NodeID || null,
       BucketID: selected?.bucketId ?? null,
@@ -265,13 +263,6 @@ export function CollectionPage() {
                     ))}
                   </Stack>
                 ) : null}
-                <TextField
-                  label="Title"
-                  value={form.Title}
-                  onChange={(event) => update('Title')(event.target.value)}
-                  required
-                  fullWidth
-                />
                 <Autocomplete
                   options={targets ?? []}
                   value={selected}
