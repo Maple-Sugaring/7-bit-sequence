@@ -20,7 +20,9 @@ import Typography from '@mui/material/Typography';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import MoreTimeIcon from '@mui/icons-material/MoreTime';
 import PersonAddAltIcon from '@mui/icons-material/PersonAddAlt';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import { DataGrid } from '@mui/x-data-grid';
+import { ColumnCards } from '../components/common/ColumnCards';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import dayjs from 'dayjs';
 import { ROLE_LABELS } from '../business/permissions';
@@ -217,6 +219,7 @@ export function AdminPage() {
     await refresh();
   });
 
+  const phone = useMediaQuery('(max-width:600px)');
   const columns = [
     { field: 'fullName', headerName: 'Name', width: 180 },
     {
@@ -379,17 +382,27 @@ export function AdminPage() {
         ))}
       </Grid>
 
-      <Card sx={{ height: 560 }}>
-        <DataGrid
+      {phone ? (
+        <ColumnCards
           rows={data?.users ?? []}
           columns={columns}
+          getRowId={(row) => row.UserID}
           loading={loading}
-          disableRowSelectionOnClick
-          pageSizeOptions={[10, 25, 50]}
-          initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
-          sx={{ border: 0 }}
+          emptyLabel="No users yet."
         />
-      </Card>
+      ) : (
+        <Card sx={{ height: 560 }}>
+          <DataGrid
+            rows={data?.users ?? []}
+            columns={columns}
+            loading={loading}
+            disableRowSelectionOnClick
+            pageSizeOptions={[10, 25, 50]}
+            initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
+            sx={{ border: 0 }}
+          />
+        </Card>
+      )}
 
       <ExpiryDialog
         key={expiryUser?.UserID ?? 'none'}
