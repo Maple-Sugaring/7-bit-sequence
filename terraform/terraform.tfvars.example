@@ -1,0 +1,5 @@
+aws_region      = "us-east-1"
+hostname        = "ritmaplesugaring.privatedns.org"
+instance_type   = "t3.medium"
+root_volume_gib = 30
+data_volume_gib = 30

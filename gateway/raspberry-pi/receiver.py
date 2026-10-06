@@ -260,7 +260,7 @@ def run_receiver(store: PacketStore) -> None:
     gateway_code = os.getenv("GATEWAY_CODE", "GW-ALUMNI").strip() or "GW-ALUMNI"
     api_url = os.getenv(
         "MAPLE_API_URL",
-        "https://maplesugaring01.webdev.gccis.rit.edu/api/ingest",
+        "https://ritmaplesugaring.privatedns.org/api/ingest",
     )
     token = os.getenv("GATEWAY_INGEST_TOKEN", "").strip()
 

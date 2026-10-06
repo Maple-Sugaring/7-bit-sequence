@@ -71,6 +71,8 @@ export const config = {
   env: process.env.NODE_ENV ?? 'development',
   isProduction,
   port: integer('PORT', 3000),
+  // One proxy locally (nginx); two on EC2 (Caddy then nginx).
+  trustProxyHops: integer('TRUST_PROXY_HOPS', 1),
   logLevel: optional('LOG_LEVEL', isProduction ? 'info' : 'debug'),
 
   databaseUrl,
