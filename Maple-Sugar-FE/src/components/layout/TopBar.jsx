@@ -12,8 +12,7 @@ import Tooltip from '@mui/material/Tooltip';
 import { useAuth } from '../../context/auth';
 import { useOpenAlertCount } from '../../services/hooks';
 import { MainNav } from './MainNav';
-import { useLocation, useNavigate } from "react-router-dom";
-import { can, Capability } from "../business/permissions";
+import { useNavigate } from "react-router-dom";
 
 
 export function TopBar() {
