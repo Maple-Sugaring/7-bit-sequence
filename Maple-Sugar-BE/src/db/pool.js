@@ -51,6 +51,13 @@ export async function queryAll(text, params) {
   return rows;
 }
 
+/** `queryOne` on a transaction client when one is given, otherwise on the pool. */
+export async function queryOneOn(client, text, params) {
+  if (!client) return queryOne(text, params);
+  const { rows } = await client.query(text, params);
+  return rows[0] ?? null;
+}
+
 /**
  * Runs `handler` inside a transaction, rolling back on any throw. Needed
  * wherever a write spans tables, such as creating a shift and its assignments.

@@ -22,14 +22,49 @@ describe('collection offline queue', () => {
       error.isOffline = true;
       throw error;
     }, store);
-    expect(blocked).toEqual({ flushed: 0, remaining: 1 });
+    expect(blocked).toEqual({ flushed: 0, remaining: 1, rejected: [] });
 
     const sent = [];
     const replayed = await flushCollectionQueue(async (entry) => {
       sent.push(entry);
     }, store);
     expect(sent).toEqual([{ Title: 'North line' }]);
-    expect(replayed).toEqual({ flushed: 1, remaining: 0 });
+    expect(replayed).toEqual({ flushed: 1, remaining: 0, rejected: [] });
     expect(queuedCollections(store)).toHaveLength(0);
+  });
+
+  test('sets aside an entry the server refuses, instead of keeping it forever', async () => {
+    const store = memory();
+    enqueueCollection({ NodeID: 1, Sugar_Percent: 2.1 }, store);
+    enqueueCollection({ NodeID: 2, Weight: 20 }, store);
+
+    const sent = [];
+    const result = await flushCollectionQueue(async (entry) => {
+      if (entry.NodeID === 1) {
+        const error = new Error('Enter the sap weight.');
+        error.status = 422;
+        throw error;
+      }
+      sent.push(entry);
+    }, store);
+
+    expect(sent).toEqual([{ NodeID: 2, Weight: 20 }]);
+    expect(result.flushed).toBe(1);
+    expect(result.remaining).toBe(0);
+    expect(result.rejected).toEqual([{ entry: { NodeID: 1, Sugar_Percent: 2.1 }, message: 'Enter the sap weight.' }]);
+    expect(queuedCollections(store)).toHaveLength(0);
+  });
+
+  test('keeps an entry through a server error that a retry could fix', async () => {
+    const store = memory();
+    enqueueCollection({ NodeID: 1, Weight: 20 }, store);
+
+    const error = new Error('Bad gateway');
+    error.status = 502;
+    const result = await flushCollectionQueue(async () => {
+      throw error;
+    }, store);
+
+    expect(result).toEqual({ flushed: 0, remaining: 1, rejected: [] });
   });
 });

@@ -130,19 +130,31 @@ export async function listBoard() {
            b.status as bucket_status,
            m.weight,
            m.temperature,
-           m.sugar_percent,
+           s.sugar_percent,
+           s.recorded_at as sugar_recorded_at,
            m.ice_present,
            m.sap_flow_rate_lph,
            m.recorded_at
       from node n
       left join buckets b on b.node_id = n.id and b.node_id is not null
       left join lateral (
-        select weight, temperature, sugar_percent, ice_present, sap_flow_rate_lph, recorded_at
+        select weight, temperature, ice_present, sap_flow_rate_lph, recorded_at
           from metrics
          where node_id = n.id
          order by recorded_at desc
          limit 1
       ) m on true
+      -- Sensor rows carry no sugar, so the newest row almost never does. A
+      -- tree's sugar is the last one a student actually measured this season.
+      left join lateral (
+        select sugar_percent, recorded_at
+          from metrics
+         where node_id = n.id
+           and sugar_percent is not null
+           and sap_season(recorded_at) = sap_season(CURRENT_TIMESTAMP)
+         order by recorded_at desc
+         limit 1
+      ) s on true
      where n.tracked
      order by n.stand, n.id
   `);
@@ -166,7 +178,11 @@ export async function listBoard() {
     Bucket_Status: row.bucket_status,
     Weight: row.weight == null ? null : Number(row.weight),
     Temperature: row.temperature == null ? null : Number(row.temperature),
+    // Last measured this sap season, not the latest row's value. Null when no
+    // one has tested this tree yet.
     Sugar_Percent: row.sugar_percent == null ? null : Number(row.sugar_percent),
+    Sugar_Measured_At:
+      row.sugar_recorded_at instanceof Date ? row.sugar_recorded_at.toISOString() : (row.sugar_recorded_at ?? null),
     Sap_Flow_Rate_Lph: row.sap_flow_rate_lph == null ? null : Number(row.sap_flow_rate_lph),
     Ice_Present: Boolean(row.ice_present),
     Recorded_At: row.recorded_at instanceof Date ? row.recorded_at.toISOString() : row.recorded_at,

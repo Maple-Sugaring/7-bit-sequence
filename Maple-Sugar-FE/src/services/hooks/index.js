@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import * as adminService from '../adminService';
 import * as alertService from '../alertService';
+import * as collectionService from '../collectionService';
 import * as dashboardService from '../dashboardService';
 import * as guideService from '../guideService';
 import * as metricsService from '../metricsService';
@@ -39,6 +40,20 @@ export function useRecordingTargets() {
     initialData: [],
   });
 }
+
+export function useRecordCollection() {
+  return useAction(collectionService.recordCollection);
+}
+
+/** What a collection keeps on the phone: the offline queue and the round in progress. */
+export const collectionLocal = {
+  addToQueue: collectionService.queueCollection,
+  queuedCount: collectionService.queuedCollectionCount,
+  flushQueue: collectionService.flushQueuedCollections,
+  loadRound: collectionService.loadActiveRound,
+  saveRound: collectionService.saveActiveRound,
+  newRef: collectionService.newEntryRef,
+};
 
 export function useSubmitReading() {
   return useAction(useCallback((reading) => metricsService.submitReading(reading), []));
