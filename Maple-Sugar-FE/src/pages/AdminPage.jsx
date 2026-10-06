@@ -219,6 +219,12 @@ export function AdminPage() {
 
   const columns = [
     { field: 'fullName', headerName: 'Name', width: 180 },
+    {
+      field: 'Pronouns',
+      headerName: 'Pronouns',
+      width: 110,
+      valueFormatter: (value) => value || '—',
+    },
     { field: 'Email', headerName: 'Email', width: 220 },
     {
       field: 'RoleID',
@@ -319,7 +325,7 @@ export function AdminPage() {
   if (error) {
     return (
       <>
-        <PageHeader title="Admin" />
+        <PageHeader title="Admin" subtitle="Invite accounts, change roles, and lock or extend access." />
         <ErrorBlock error={error} onRetry={refresh} />
       </>
     );
@@ -331,6 +337,7 @@ export function AdminPage() {
     <>
       <PageHeader
         title="Admin"
+        subtitle="Invite accounts, change roles, and lock or extend access."
         actions={
           <Button variant="contained" startIcon={<PersonAddAltIcon />} onClick={() => setInviteOpen(true)}>
             Invite user

@@ -13,10 +13,15 @@
 import {
   BUCKET_CAPACITY_GALLONS,
   BUCKET_CAPACITY_LB,
+  CELL_CAPACITY_LB,
   CRITICAL_EXPOSURE_HOURS,
   FULL_MARGIN_LB,
   LB_PER_GALLON,
+  LOW_BATTERY_PERCENT,
+  MAX_STEP_LB,
   SPOILAGE_THRESHOLD_F,
+  STALE_AFTER_MINUTES,
+  WEAK_RSSI_DBM,
 } from './thresholds.js';
 
 /**
@@ -51,7 +56,7 @@ export function hoursAboveThreshold(readings) {
  *
  * Returns `{ Alert_Type, severity, Description }` objects, or an empty array.
  */
-export function deriveAlerts({ reading, history = [], tareWeight = null }) {
+export function deriveAlerts({ reading, history = [], tareWeight = null, intervalSeconds = null }) {
   const derived = [];
   const nodeLabel = reading.Node_Name ?? `Node ${reading.NodeID}`;
 
@@ -86,9 +91,11 @@ export function deriveAlerts({ reading, history = [], tareWeight = null }) {
       });
     }
 
-    // A load cell reading below the empty bucket's own weight means the bucket
-    // is no longer hanging on it.
-    if (reading.Weight < tareWeight * 0.5) {
+    // A load cell that had the bucket and then reads far below the empty bucket
+    // has lost it. A scale that was tared empty sits near zero on purpose.
+    const previousWeight = history.find((row) => row.Weight != null)?.Weight;
+    const bucketWasOn = previousWeight != null && previousWeight >= tareWeight * 0.8;
+    if (bucketWasOn && reading.Weight < tareWeight * 0.5) {
       derived.push({
         Alert_Type: 'Tipped',
         severity: 'critical',
@@ -99,5 +106,111 @@ export function deriveAlerts({ reading, history = [], tareWeight = null }) {
     }
   }
 
+  if (reading.Weight != null && reading.Weight > CELL_CAPACITY_LB) {
+    derived.push({
+      Alert_Type: 'Incorrect Reading',
+      severity: 'critical',
+      Description:
+        `${nodeLabel} reported ${reading.Weight.toFixed(1)} lb, past the ` +
+        `${CELL_CAPACITY_LB} lb load cell. The sample was not usable.`,
+    });
+  }
+
+  const previous = history.find((row) => row.Weight != null && row.Recorded_At);
+  if (previous && reading.Weight != null && reading.Recorded_At) {
+    const gapMin = (new Date(reading.Recorded_At) - new Date(previous.Recorded_At)) / 60_000;
+    const step = Math.abs(reading.Weight - previous.Weight);
+    if (gapMin >= 0 && gapMin <= 10 && step > MAX_STEP_LB) {
+      derived.push({
+        Alert_Type: 'Incorrect Reading',
+        severity: 'warning',
+        Description:
+          `${nodeLabel} jumped ${step.toFixed(1)} lb in ${gapMin.toFixed(0)} minutes. ` +
+          `Sap cannot move that fast, so this sample was kept but should be checked.`,
+      });
+    }
+
+    const intervalMin = Math.max(1, (intervalSeconds ?? 900) / 60);
+    const missed = gapMin > 0 ? Math.floor(gapMin / intervalMin) - 1 : 0;
+    if (missed >= 1 && gapMin < STALE_AFTER_MINUTES) {
+      derived.push({
+        Alert_Type: 'Missed Readings',
+        severity: 'warning',
+        Description:
+          `${nodeLabel} missed ${missed} report${missed === 1 ? '' : 's'} ` +
+          `before this one (${gapMin.toFixed(0)} minutes since the previous sample).`,
+      });
+    }
+  }
+
+  if (reading.Battery_Percent != null && reading.Battery_Percent < LOW_BATTERY_PERCENT) {
+    derived.push({
+      Alert_Type: 'Low Battery',
+      severity: 'warning',
+      Description: `${nodeLabel} battery is at ${Math.round(reading.Battery_Percent)}%. Swap the pack.`,
+    });
+  }
+
+  if (reading.Signal_Rssi != null && reading.Signal_Rssi < WEAK_RSSI_DBM) {
+    derived.push({
+      Alert_Type: 'Signal Loss',
+      severity: 'warning',
+      Description:
+        `${nodeLabel} was heard at ${Math.round(reading.Signal_Rssi)} dBm. ` +
+        `Check the antenna and the path back to the gateway.`,
+    });
+  }
+
   return derived;
+}
+
+/** How a node-reported fault should be shown. Unknown codes are ignored. */
+export function alertForFault(fault, nodeLabel = 'The node') {
+  switch (fault) {
+    case 'load-cell':
+      return {
+        Alert_Type: 'Load Cell',
+        severity: 'critical',
+        Description: `${nodeLabel} could not read the HX711. Check power and the amplifier wiring.`,
+      };
+    case 'unstable':
+      return {
+        Alert_Type: 'Unstable Reading',
+        severity: 'warning',
+        Description: `${nodeLabel} samples disagreed during one measurement. The weight was not stored.`,
+      };
+    case 'reversed':
+      return {
+        Alert_Type: 'Reversed Load Cell',
+        severity: 'critical',
+        Description: `${nodeLabel} weight went negative. The cell is wired backwards or loaded in tension.`,
+      };
+    case 'untared':
+      return {
+        Alert_Type: 'Untared',
+        severity: 'warning',
+        Description: `${nodeLabel} has not been tared. Hold PRG for 3 seconds with the platform empty.`,
+      };
+    default:
+      return null;
+  }
+}
+
+/**
+ * Alert types a trustworthy weight clears. A fault packet does not clear the
+ * electrical alerts, because the cell is still the thing that failed.
+ */
+export function clearedAlertTypes(reading) {
+  if (reading?.Fault) return [];
+  const clear = ['Node Offline', 'Missed Readings', 'Load Cell', 'Untared'];
+  if (reading?.Battery_Percent == null || reading.Battery_Percent >= LOW_BATTERY_PERCENT) {
+    clear.push('Low Battery');
+  }
+  if (reading?.Signal_Rssi == null || reading.Signal_Rssi >= WEAK_RSSI_DBM) {
+    clear.push('Signal Loss');
+  }
+  if (reading?.Weight != null && reading.Weight >= 0 && reading.Weight <= CELL_CAPACITY_LB) {
+    clear.push('Incorrect Reading', 'Unstable Reading', 'Reversed Load Cell');
+  }
+  return clear;
 }

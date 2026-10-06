@@ -7,7 +7,17 @@ import Typography from '@mui/material/Typography';
 import { EmptyBlock } from '../common/StateBlock';
 
 /** Titled chart container with its own loading and empty states. */
-export function ChartCard({ title, description, action, height = 300, loading, isEmpty, children }) {
+export function ChartCard({
+  title,
+  description,
+  action,
+  height = 300,
+  loading,
+  isEmpty,
+  emptyTitle = 'No data for this range',
+  emptyDescription = 'Try widening the date range or selecting a different season.',
+  children,
+}) {
   return (
     <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <CardHeader
@@ -24,10 +34,7 @@ export function ChartCard({ title, description, action, height = 300, loading, i
         {loading ? (
           <Skeleton variant="rounded" height={height} />
         ) : isEmpty ? (
-          <EmptyBlock
-            title="No data for this range"
-            description="Try widening the date range or selecting a different season."
-          />
+          <EmptyBlock title={emptyTitle} description={emptyDescription} />
         ) : (
           <Box sx={{ height }}>{children}</Box>
         )}

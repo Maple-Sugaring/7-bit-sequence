@@ -38,8 +38,17 @@ body,
   font-weight: 500;
   letter-spacing: -1.68px;
   text-align: center;
-  margin: 32px 0;
+  margin: 32px 0 8px;
   color: #08060d;
+}
+
+.page-header-subtitle{
+  margin: 0 auto 16px;
+  max-width: 42rem;
+  text-align: center;
+  color: #5c5666;
+  font-size: 1rem;
+  line-height: 1.45;
 }
 
 .page-header-actions{

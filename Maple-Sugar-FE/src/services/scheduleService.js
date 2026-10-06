@@ -34,6 +34,7 @@ export async function getSchedule({ from, to, userId } = {}) {
         userId: person.userId,
         name: person.name?.trim() ? person.name.trim() : `User ${person.userId}`,
         email: person.email ?? null,
+        pronouns: person.pronouns ?? null,
       }));
 
       const isMine = userId ? slot.Assigned_UserIDs.includes(userId) : false;

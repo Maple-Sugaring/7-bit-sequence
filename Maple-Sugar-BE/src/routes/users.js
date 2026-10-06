@@ -1,10 +1,12 @@
 import { Router } from 'express';
 import { forbidden, invalid, notFound } from '../lib/ApiError.js';
-import { Capability } from '../business/permissions.js';
+import { Capability, ROLE_LABELS, roleFromId } from '../business/permissions.js';
 import { requireCapability } from '../middleware/authenticate.js';
 import { cacheKeys, cacheNamespaces, TTL } from '../cache/cacheKeys.js';
 import { invalidateNamespaces, readThrough } from '../cache/redisCache.js';
 import * as usersRepository from '../repositories/usersRepository.js';
+import { inviteEmail } from '../services/emailTemplates.js';
+import { sendQuietly } from '../services/mailService.js';
 import { idParam, inviteUserBody, updateUserBody } from './schemas.js';
 
 export const usersRouter = Router();
@@ -26,8 +28,9 @@ usersRouter.get('/', requireCapability(Capability.MANAGE_USERS), async (req, res
 
 /**
  * Creates the account an invited person will later claim by signing in with
- * Google. Nothing is emailed: the account simply exists, and their first Google
- * sign-in links to it.
+ * Google, and emails them a sign-in link when mail is configured. The email is
+ * a courtesy: the account exists either way, and their first Google sign-in
+ * links to it.
  */
 usersRouter.post('/invite', requireCapability(Capability.MANAGE_USERS), async (req, res) => {
   const body = inviteUserBody.parse(req.body);
@@ -52,6 +55,16 @@ usersRouter.post('/invite', requireCapability(Capability.MANAGE_USERS), async (r
 
   await invalidateNamespaces([cacheNamespaces.USERS]);
   res.status(201).json(user);
+
+  const inviterName = `${req.user.First_Name} ${req.user.Last_Name}`.trim();
+  void sendQuietly({
+    to: user,
+    ...inviteEmail({
+      roleLabel: ROLE_LABELS[roleFromId(user.RoleID)] ?? 'a member',
+      inviterName,
+    }),
+    tags: ['invite'],
+  });
 });
 
 usersRouter.patch('/:id', requireCapability(Capability.MANAGE_USERS), async (req, res) => {

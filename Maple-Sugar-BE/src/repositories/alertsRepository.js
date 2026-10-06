@@ -1,4 +1,6 @@
-import { queryAll, queryOne } from '../db/pool.js';
+import { query, queryAll, queryOne } from '../db/pool.js';
+import { logger } from '../lib/logger.js';
+import { notifyCriticalAlert } from '../services/notificationService.js';
 import { mapAlert } from './mappers.js';
 
 const ALERT_COLUMNS = `
@@ -43,7 +45,12 @@ export async function createAlert({ NodeID, Alert_Type, Description, severity = 
      returning ${ALERT_COLUMNS}`,
     [NodeID, Alert_Type, severity, Description],
   );
-  return mapAlert(row);
+  const alert = mapAlert(row);
+  // Delivery is best-effort. A mail outage must not roll back the alert row.
+  void notifyCriticalAlert({ ...alert, severity, Alert_Type }).catch((error) => {
+    logger.error({ err: error, alertId: alert.AlertID }, 'Critical notification failed');
+  });
+  return alert;
 }
 
 /**
@@ -71,4 +78,43 @@ export async function setResolved(id, isResolved) {
     [id, isResolved],
   );
   return row ? mapAlert(row) : null;
+}
+
+/** Closes every open alert of the given types on one node. */
+export async function resolveOpenByTypes(nodeId, types) {
+  if (!types?.length) return 0;
+  const result = await query(
+    `update alerts
+        set is_resolved = true
+      where node_id = $1
+        and is_resolved = false
+        and alert_type = any($2::text[])`,
+    [nodeId, types],
+  );
+  return result.rowCount ?? 0;
+}
+
+/**
+ * Claims open alerts that outlived the escalation window, stamping them in the
+ * same statement so each is escalated once even across two API instances.
+ * Only alerts that notified someone in the first place qualify: critical
+ * severity, or one of the always-notify types.
+ */
+export async function claimAlertsForEscalation(minutes, alwaysNotifyTypes) {
+  const rows = await queryAll(
+    `update alerts
+        set escalated_at = CURRENT_TIMESTAMP
+      where is_resolved = false
+        and escalated_at is null
+        and created_at <= CURRENT_TIMESTAMP - make_interval(mins => $1)
+        and (severity = 'critical' or alert_type = any($2::text[]))
+      returning ${ALERT_COLUMNS}`,
+    [minutes, alwaysNotifyTypes],
+  );
+  return rows.map((row) => ({ ...mapAlert(row), severity: row.severity }));
+}
+
+/** Lets an escalation that failed to send be retried on the next pass. */
+export async function releaseEscalation(id) {
+  await query('update alerts set escalated_at = null where id = $1', [id]);
 }

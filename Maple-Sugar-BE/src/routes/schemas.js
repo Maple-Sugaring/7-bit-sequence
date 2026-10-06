@@ -53,6 +53,29 @@ export const updateMetricBody = z
   })
   .refine((body) => Object.keys(body).length > 0, { message: 'Nothing to update.' });
 
+export const createGatewayBody = z.object({
+  Gateway_Code: z
+    .string()
+    .trim()
+    .min(1, 'Name the gateway.')
+    .max(50)
+    .regex(/^[A-Za-z0-9_-]+$/, 'Use letters, numbers, dashes, or underscores.'),
+  Gateway_Name: z.string().trim().min(1, 'Give the gateway a label.').max(100),
+});
+
+export const createNodeBody = z.object({
+  Node_Name: z.string().trim().min(1, 'Name the tree.').max(100),
+  Stand: z.string().trim().min(1, 'Name the stand.').max(50),
+  Latitude: z.coerce.number().min(-90).max(90),
+  Longitude: z.coerce.number().min(-180).max(180),
+  Tare_Weight: z.coerce.number().min(0).max(30).optional(),
+  Barcode_ID: z.string().trim().max(50).optional(),
+  Tree_Species: z.string().trim().max(50).optional(),
+  Rf_Tag: z.string().trim().max(64).optional(),
+  Notes: z.string().trim().max(500).optional(),
+  GatewayID: z.coerce.number().int().positive().optional(),
+});
+
 export const updateNodeBody = z.object({
   Status_Code: z.coerce.number().int().min(0).max(3).optional(),
   Node_Name: z.string().min(1).max(100).optional(),
@@ -126,20 +149,39 @@ export const scheduleQuery = z.object({
   to: isoDateTime.optional(),
 });
 
-/** An admin assigns a student to buckets at a chosen time. A full bucket is not required. */
+/** Admin opens a shift. Leave UserID empty so students can claim it. */
 export const createSlotBody = z
   .object({
     Task: z.string().trim().min(1, 'Name the task.').max(100),
     Starts_At: isoDateTime,
     Ends_At: isoDateTime,
-    UserID: z.coerce.number().int().positive({ message: 'Choose a student.' }),
+    UserID: z.coerce.number().int().positive({ message: 'Choose a student.' }).nullish(),
     BucketIDs: z.array(z.coerce.number().int().positive()).min(1, 'Choose at least one bucket.'),
     Notes: z.string().max(500).optional().default(''),
+    Capacity: z.coerce.number().int().min(1).max(20).optional().default(1),
   })
   .refine((body) => Date.parse(body.Ends_At) > Date.parse(body.Starts_At), {
     message: 'The shift must end after it starts.',
     path: ['Ends_At'],
   });
+
+export const nodeDetailsBody = z.object({
+  Node_Name: z.string().trim().min(1, 'Name the tree.').max(100),
+  Stand: z.string().trim().min(1, 'Name the stand.').max(50),
+  Latitude: z.coerce.number().min(-90).max(90),
+  Longitude: z.coerce.number().min(-180).max(180),
+  Rf_Tag: z.string().trim().max(64).optional(),
+  Notes: z.string().trim().max(500).optional(),
+  GatewayID: z.coerce.number().int().positive().optional(),
+});
+
+export const nodeIntervalBody = z.object({
+  Report_Interval_Minutes: z.coerce
+    .number()
+    .int()
+    .min(1, 'Use at least 1 minute.')
+    .max(1440, 'Use a day or less.'),
+});
 
 export const nodeActionBody = z.object({
   Action: z.enum(['collect', 'maintenance', 'online']),
@@ -199,8 +241,12 @@ const ingestReadingObject = z.object({
   Node_Code: z.string().trim().min(1).max(50).optional(),
   LoRa_Device_ID: z.string().trim().min(1).max(64).optional(),
   Recorded_At: isoDateTime,
-  Weight: z.coerce.number(),
+  Weight: z.number().finite().optional(),
+  Fault: z.enum(['load-cell', 'unstable', 'reversed', 'untared']).optional(),
   Sugar_Percent: nullableNumber,
+  // Sap probe only. Air temperature is OpenWeather and is not stored from the Pi.
+  Sap_Temperature: nullableNumber,
+  Sap_Flow_Rate_Lph: nullableNumber,
   Weather_Conditions: z.string().max(50).nullish(),
   Ice_Present: z.boolean().optional().default(false),
   Battery_Percent: z.union([z.coerce.number().min(0).max(100), z.null()]).optional(),
@@ -214,7 +260,10 @@ function withNodeIdentity(schema) {
   );
 }
 
-export const ingestReadingBody = withNodeIdentity(ingestReadingObject);
+export const ingestReadingBody = withNodeIdentity(ingestReadingObject).refine(
+  (reading) => reading.Weight != null || Boolean(reading.Fault),
+  { message: 'A reading needs a weight or a fault.', path: ['Weight'] },
+);
 
 /** A single reading, or a batch the gateway collected from several nodes. */
 export const ingestBody = z.union([
@@ -222,7 +271,10 @@ export const ingestBody = z.union([
     Gateway_Code: gatewayCode,
     Readings: z.array(ingestReadingBody).min(1).max(32),
   }),
-  withNodeIdentity(ingestReadingObject.extend({ Gateway_Code: gatewayCode })),
+  withNodeIdentity(ingestReadingObject.extend({ Gateway_Code: gatewayCode })).refine(
+    (reading) => reading.Weight != null || Boolean(reading.Fault),
+    { message: 'A reading needs a weight or a fault.', path: ['Weight'] },
+  ),
 ]);
 
 export const updateSettingsBody = z.object({
@@ -232,3 +284,22 @@ export const updateSettingsBody = z.object({
     .min(1, 'Use at least 1 minute.')
     .max(1440, 'Use a day or less.'),
 });
+
+/** Blank pronouns clear the field rather than storing an empty string. */
+export const updateProfileBody = z
+  .object({
+    First_Name: z.string().trim().min(1, 'Enter your first name.').max(100).optional(),
+    Last_Name: z.string().trim().max(100).optional(),
+    Pronouns: z
+      .string()
+      .trim()
+      .max(40, 'Keep pronouns under 40 characters.')
+      .nullish()
+      .transform((value) => (value ? value : value === undefined ? undefined : null)),
+    Email_Alerts: z.boolean().optional(),
+    Email_Shifts: z.boolean().optional(),
+  })
+  .strict()
+  .refine((body) => Object.values(body).some((value) => value !== undefined), {
+    message: 'Nothing to change.',
+  });

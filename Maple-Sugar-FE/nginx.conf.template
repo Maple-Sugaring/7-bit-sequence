@@ -29,6 +29,13 @@ server {
         access_log off;
     }
 
+    # The browser flasher downloads these by name. A cached image would
+    # write last week's firmware onto the next board.
+    location /firmware/ {
+        add_header Cache-Control "no-cache, must-revalidate";
+        include /etc/nginx/security-headers.conf;
+    }
+
     # index.html must never be cached, or clients keep loading the old asset
     # manifest after a deploy.
     location = /index.html {

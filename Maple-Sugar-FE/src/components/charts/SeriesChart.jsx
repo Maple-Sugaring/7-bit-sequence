@@ -43,6 +43,54 @@ export function DailyTemperatureChart({ rows }) {
   );
 }
 
+function weightTick(unit) {
+  if (unit === 'second') return 'HH:mm:ss';
+  if (unit === 'minute') return 'HH:mm';
+  if (unit === 'hour') return 'MMM D HH:mm';
+  return 'MMM D';
+}
+
+export function WeightChart({ rows, series, unit = 'day' }) {
+  const format = weightTick(unit);
+  const tick = (value) => dayjs(value).format(format);
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <LineChart data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+        <CartesianGrid stroke="#D0D3D4" vertical={false} />
+        <XAxis dataKey="Date" tickFormatter={tick} minTickGap={28} tick={{ fontSize: 12 }} />
+        <YAxis
+          width={56}
+          unit=" gal"
+          domain={[0, (max) => Math.max(10, Math.ceil(max))]}
+          tick={{ fontSize: 12 }}
+        />
+        <Tooltip
+          labelFormatter={tick}
+          formatter={(value, name, item) => {
+            const pounds = item?.payload?.[`${item.dataKey}-lb`];
+            const gallons = Number(value).toFixed(1);
+            const scale = pounds == null ? `${gallons} gal` : `${gallons} gal · ${Number(pounds).toFixed(1)} lb`;
+            return [scale, name];
+          }}
+        />
+        <Legend />
+        {series.map((item, index) => (
+          <Line
+            key={item.key}
+            type="monotone"
+            dataKey={item.key}
+            name={item.name}
+            stroke={TREE_COLORS[index % TREE_COLORS.length]}
+            dot={false}
+            strokeWidth={2}
+            connectNulls
+          />
+        ))}
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
 export function DailyFlowChart({ rows }) {
   return (
     <ResponsiveContainer width="100%" height="100%">

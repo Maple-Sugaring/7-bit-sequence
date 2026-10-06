@@ -6,6 +6,8 @@ import * as guideService from '../guideService';
 import * as metricsService from '../metricsService';
 import * as nodeService from '../nodeService';
 import * as journalService from '../journalService';
+import * as notificationService from '../notificationService';
+import * as profileService from '../profileService';
 import * as scheduleService from '../scheduleService';
 import * as settingsService from '../settingsService';
 import * as weatherService from '../weatherService';
@@ -81,6 +83,14 @@ export function useSapCompare(year) {
   });
 }
 
+export function useGateways() {
+  return useAsync(useCallback(() => nodeService.listGateways(), []), { initialData: [] });
+}
+
+export function useNodes() {
+  return useAsync(useCallback(() => nodeService.listNodes(), []), { initialData: [] });
+}
+
 export function useBush() {
   return useAsync(useCallback(() => nodeService.getBoard(), []), { initialData: [] });
 }
@@ -91,6 +101,18 @@ export function useJournal() {
 
 export function useSettings() {
   return useAsync(useCallback(() => settingsService.getSettings(), []), { initialData: null });
+}
+
+export function useProfile() {
+  return useAsync(useCallback(() => profileService.getProfile(), []));
+}
+
+export function useSaveProfile() {
+  return useAction(profileService.saveProfile);
+}
+
+export function useSendTestEmail() {
+  return useAction(notificationService.sendTestEmail);
 }
 
 export function useUsers() {

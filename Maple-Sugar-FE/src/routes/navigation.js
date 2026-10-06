@@ -3,6 +3,7 @@ import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import EditCalendarIcon from '@mui/icons-material/EditCalendar';
 import RestoreIcon from '@mui/icons-material/Restore';
 import ParkIcon from '@mui/icons-material/Park';
+import SettingsInputAntennaIcon from '@mui/icons-material/SettingsInputAntenna';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import { can, Capability } from '../business/permissions';
 
@@ -12,6 +13,12 @@ export const NAV_ITEMS = [
     label: 'The Bush',
     icon: RestoreIcon,
     capability: Capability.VIEW_DASHBOARD,
+  },
+  {
+    to: '/deploy',
+    label: 'Deploy',
+    icon: SettingsInputAntennaIcon,
+    capability: Capability.DEPLOY_NODES,
   },
   {
     to: '/schedule',

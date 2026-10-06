@@ -9,12 +9,14 @@ import { ROLE_LABELS, isAccountUsable, roleFromId } from '../business/permission
  * account-lifecycle rule before handing a session to the UI.
  */
 
-function toSessionUser(user) {
+/** Also used after a profile save, so the top bar picks up a new name. */
+export function toSessionUser(user) {
   return {
     id: user.UserID,
     firstName: user.First_Name,
     lastName: user.Last_Name,
     fullName: `${user.First_Name} ${user.Last_Name}`.trim(),
+    pronouns: user.Pronouns ?? null,
     email: user.Email,
     role: roleFromId(user.RoleID),
     accountExpiry: user.Account_Expiry,

@@ -181,35 +181,16 @@ export const users = [
   },
 ];
 
-export const gateways = [
-  {
-    GatewayID: 1,
-    Gateway_Name: 'Alumni House Pi',
-    Last_Seen: '2026-09-11T13:58:00Z',
-    Status: 'Online',
-  },
-  {
-    GatewayID: 2,
-    Gateway_Name: 'Sugar Shack Pi',
-    Last_Seen: '2026-09-11T13:57:00Z',
-    Status: 'Online',
-  },
-  {
-    GatewayID: 3,
-    Gateway_Name: 'Hill Bottom Relay',
-    Last_Seen: '2026-09-11T04:12:00Z',
-    Status: 'Offline',
-  },
-];
+export const gateways = [];
 
 // `tempOffset` is a microclimate adjustment in Fahrenheit. A low hollow traps
 // warm air on a sunny afternoon while an exposed ridge stays several degrees
 // colder, which is why two stands can disagree about whether sap is spoiling.
 const STANDS = [
-  { name: 'Hill Bottom', gateway: 1, lat: 43.0832, lon: -77.6789, tempOffset: 2 },
-  { name: 'Rabbi House', gateway: 1, lat: 43.0847, lon: -77.6801, tempOffset: 0.5 },
-  { name: 'Sugar Shack', gateway: 2, lat: 43.0819, lon: -77.6764, tempOffset: -1 },
-  { name: 'North Ridge', gateway: 3, lat: 43.0865, lon: -77.6822, tempOffset: -4 },
+  { name: 'Hill Bottom', lat: 43.0832, lon: -77.6789, tempOffset: 2 },
+  { name: 'Rabbi House', lat: 43.0847, lon: -77.6801, tempOffset: 0.5 },
+  { name: 'Sugar Shack', lat: 43.0819, lon: -77.6764, tempOffset: -1 },
+  { name: 'North Ridge', offline: true, lat: 43.0865, lon: -77.6822, tempOffset: -4 },
 ];
 
 // Status_Code mirrors the firmware enum on the ESP32.
@@ -223,7 +204,7 @@ export const NODE_STATUS = {
 export const nodes = STANDS.flatMap((stand, standIndex) =>
   Array.from({ length: 4 }, (unused, treeIndex) => {
     const id = standIndex * 4 + treeIndex + 1;
-    const offline = stand.gateway === 3 && treeIndex > 1;
+    const offline = stand.offline && treeIndex > 1;
     const degraded = !offline && rand() < 0.18;
 
     return {
@@ -231,7 +212,7 @@ export const nodes = STANDS.flatMap((stand, standIndex) =>
       LoRa_Device_ID: `E8:9F:6D:${(0x10 + id).toString(16).toUpperCase()}:A2:${(0x40 + id)
         .toString(16)
         .toUpperCase()}`,
-      GatewayID: stand.gateway,
+      GatewayID: null,
       Node_Name: `${stand.name} - Tree ${treeIndex + 1}`,
       Status_Code: offline ? 0 : degraded ? 2 : 1,
       Battery_Percent: round(offline ? between(2, 14) : between(38, 100), 1),

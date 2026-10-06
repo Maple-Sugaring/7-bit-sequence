@@ -35,6 +35,8 @@ import { usersRouter } from './routes/users.js';
 import { scheduleRouter } from './routes/schedule.js';
 import { weatherRouter } from './routes/weather.js';
 import { journalRouter } from './routes/journal.js';
+import { notificationsRouter } from './routes/notifications.js';
+import { profileRouter } from './routes/profile.js';
 import { settingsRouter } from './routes/settings.js';
 
 export function createApp() {
@@ -108,6 +110,8 @@ export function createApp() {
   app.use('/weather', weatherRouter);
   app.use('/journal', journalRouter);
   app.use('/settings', settingsRouter);
+  app.use('/notifications', notificationsRouter);
+  app.use('/profile', profileRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

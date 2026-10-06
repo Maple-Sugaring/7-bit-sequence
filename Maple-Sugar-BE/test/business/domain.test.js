@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import {
+  alertForFault,
+  clearedAlertTypes,
   deriveAlerts,
   hoursAboveThreshold,
 } from '../../src/business/alerting.js';
@@ -188,10 +190,54 @@ describe('spoilage alerts', () => {
 
     const tipped = deriveAlerts({
       reading: { NodeID: 4, Weight: tare * 0.4, Recorded_At: '2026-03-10T18:00:00.000Z' },
+      history: [{ Weight: tare + 4, Recorded_At: '2026-03-10T17:00:00.000Z' }],
       tareWeight: tare,
     });
     assert.equal(tipped[0].Alert_Type, 'Tipped');
     assert.equal(tipped[0].severity, 'critical');
+
+    const emptyScale = deriveAlerts({
+      reading: { NodeID: 4, Weight: 0, Recorded_At: '2026-03-10T18:00:00.000Z' },
+      history: [{ Weight: 0.1, Recorded_At: '2026-03-10T17:00:00.000Z' }],
+      tareWeight: tare,
+    });
+    assert.equal(emptyScale.some((alert) => alert.Alert_Type === 'Tipped'), false);
+  });
+
+  test('flags a weak link, a dead battery, a missed gap, and an impossible step', () => {
+    const battery = deriveAlerts({
+      reading: { NodeID: 4, Node_Name: 'North maple', Weight: 8, Battery_Percent: 12, Recorded_At: '2026-03-10T18:00:00.000Z' },
+    });
+    assert.equal(battery[0].Alert_Type, 'Low Battery');
+
+    const signal = deriveAlerts({
+      reading: { NodeID: 4, Node_Name: 'North maple', Weight: 8, Signal_Rssi: -118, Recorded_At: '2026-03-10T18:00:00.000Z' },
+    });
+    assert.equal(signal[0].Alert_Type, 'Signal Loss');
+
+    const missed = deriveAlerts({
+      reading: { NodeID: 4, Node_Name: 'North maple', Weight: 8, Recorded_At: '2026-03-10T18:05:00.000Z' },
+      history: [{ Weight: 7.5, Recorded_At: '2026-03-10T18:00:00.000Z' }],
+      intervalSeconds: 60,
+    });
+    assert.equal(missed.some((alert) => alert.Alert_Type === 'Missed Readings'), true);
+
+    const step = deriveAlerts({
+      reading: { NodeID: 4, Node_Name: 'North maple', Weight: 70, Recorded_At: '2026-03-10T18:02:00.000Z' },
+      history: [{ Weight: 8, Recorded_At: '2026-03-10T18:00:00.000Z' }],
+    });
+    assert.equal(step.some((alert) => alert.Alert_Type === 'Incorrect Reading'), true);
+
+    const hung = deriveAlerts({
+      reading: { NodeID: 4, Node_Name: 'North maple', Weight: 12, Recorded_At: '2026-03-10T18:02:00.000Z' },
+      history: [{ Weight: 3, Recorded_At: '2026-03-10T18:00:00.000Z' }],
+    });
+    assert.equal(hung.some((alert) => alert.Alert_Type === 'Incorrect Reading'), false);
+
+    assert.equal(alertForFault('load-cell', 'North maple').Alert_Type, 'Load Cell');
+    assert.equal(alertForFault('not-a-fault'), null);
+    assert.ok(clearedAlertTypes({ Weight: 4, Battery_Percent: 90, Signal_Rssi: -40 }).includes('Load Cell'));
+    assert.deepEqual(clearedAlertTypes({ Fault: 'load-cell' }), []);
   });
 });
 
