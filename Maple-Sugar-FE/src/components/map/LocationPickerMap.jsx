@@ -10,15 +10,15 @@ function ClickToPlace({ onChange }) {
   return null;
 }
 
-// Recenters when the value is set from outside the map (Use my location, or
-// opening an existing node), but not while the pin is being dragged or clicked.
+// Center a newly selected point, including one inside the current map bounds.
 function Follow({ value }) {
   const map = useMap();
+  const lat = value?.lat;
+  const lon = value?.lon;
   useEffect(() => {
-    if (!value) return;
-    const target = [value.lat, value.lon];
-    if (!map.getBounds().contains(target)) map.setView(target, Math.max(map.getZoom(), 17));
-  }, [map, value]);
+    if (lat == null || lon == null) return;
+    map.setView([lat, lon], Math.max(map.getZoom(), 17));
+  }, [map, lat, lon]);
   return null;
 }
 

@@ -29,7 +29,7 @@ Open http://localhost:8081 and pick a role. Press Ctrl+C to stop; the container 
 - A full page reload resets anything you changed, because the data lives in the browser's memory. The login survives a reload.
 - `/api` returns 502 in this container. That is expected; mock mode never calls it.
 
-Without Docker: `cd Maple-Sugar-FE && npm install && npm run dev`. The tracked `.env` on this branch already sets `VITE_API_MODE=mock`.
+Without Docker: set `VITE_API_MODE=mock` in `Maple-Sugar-FE/.env.local`, then run `cd Maple-Sugar-FE && npm install && npm run dev`. The tracked `.env` defaults to the real API.
 
 ### What each login shows
 
