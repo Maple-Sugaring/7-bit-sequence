@@ -88,7 +88,19 @@ authRouter.get('/google/callback', async (req, res) => {
     const profile = await exchangeCodeForProfile(code);
     const user = await resolveGoogleUser(profile);
 
-    setAuthCookies(res, await sessionService.issueSession(user, requestMeta(req)));
+    let issuedSession;
+    try {
+      issuedSession = await sessionService.issueSession(user, requestMeta(req));
+    } catch (error) {
+      logger.error({ err: error, userId: user.UserID }, 'Session issuance after OAuth succeeded failed');
+      loginUrl.searchParams.set(
+        'error',
+        'Google sign-in succeeded, but your app session could not be created. Please try again.',
+      );
+      return res.redirect(loginUrl.toString());
+    }
+
+    setAuthCookies(res, issuedSession);
     logger.info({ userId: user.UserID }, 'Session established');
 
     if (profile.refreshToken) {
