@@ -1,0 +1,68 @@
+#!/bin/bash
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y ca-certificates curl unzip python3 docker.io docker-compose-v2
+curl --fail --silent --show-error https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o /tmp/awscli.zip
+unzip -q /tmp/awscli.zip -d /tmp/awscli-install
+/tmp/awscli-install/aws/install
+install -d -m 700 /opt/maple/config /opt/maple/bin /opt/maple/releases
+install -d /srv/maple
+
+# Nitro exposes the separately attached EBS device by its volume serial.
+device=/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${volume_id}
+for attempt in $(seq 1 120); do
+  [ -b "$device" ] && break
+  sleep 5
+done
+[ -b "$device" ] || { echo 'Persistent EBS volume was not attached'; exit 1; }
+if ! blkid "$device" >/dev/null; then mkfs.ext4 "$device"; fi
+uuid=$(blkid -s UUID -o value "$device")
+grep -q "$uuid" /etc/fstab || echo "UUID=$uuid /srv/maple ext4 defaults 0 2" >> /etc/fstab
+mount /srv/maple
+install -d /srv/maple/postgres /srv/maple/caddy-data /srv/maple/caddy-config
+install -d /etc/systemd/system/docker.service.d
+cat > /etc/systemd/system/docker.service.d/maple-storage.conf <<'CONF'
+[Unit]
+RequiresMountsFor=/srv/maple
+CONF
+cat > /etc/docker/daemon.json <<'CONF'
+{"log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"3"}}
+CONF
+
+printf '%s' '${deploy_script}' | base64 --decode > /opt/maple/bin/deploy.sh
+printf '%s' '${backup_script}' | base64 --decode > /opt/maple/bin/backup.sh
+chmod 700 /opt/maple/bin/*.sh
+cat > /opt/maple/config/host.env <<'CONF'
+AWS_REGION=${region}
+PUBLIC_HOSTNAME=${hostname}
+PARAMETER_PATH=${parameter}
+BACKUP_BUCKET=${backup_bucket}
+CONF
+chmod 600 /opt/maple/config/host.env
+cat > /etc/systemd/system/maple-backup.service <<'CONF'
+[Unit]
+Description=Maple PostgreSQL logical backup to private S3
+Requires=docker.service
+After=docker.service
+[Service]
+Type=oneshot
+ExecStart=/opt/maple/bin/backup.sh
+CONF
+cat > /etc/systemd/system/maple-backup.timer <<'CONF'
+[Unit]
+Description=Nightly Maple database backup
+[Timer]
+OnCalendar=*-*-* 03:00:00 America/New_York
+Persistent=true
+RandomizedDelaySec=300
+[Install]
+WantedBy=timers.target
+CONF
+systemctl daemon-reload
+systemctl enable docker
+systemctl restart docker
+systemctl enable --now maple-backup.timer
+# Ubuntu AWS images have the SSM agent preinstalled as a snap.
+snap start amazon-ssm-agent || systemctl start amazon-ssm-agent
+touch /opt/maple/config/bootstrap-complete

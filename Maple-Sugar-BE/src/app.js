@@ -44,7 +44,7 @@ export function createApp() {
 
   // Behind nginx: needed for req.protocol and the client IP to be the real ones,
   // which `secure` cookies and rate limiting depend on.
-  app.set('trust proxy', 1);
+  app.set('trust proxy', config.trustProxyHops);
   app.disable('x-powered-by');
 
   app.use(

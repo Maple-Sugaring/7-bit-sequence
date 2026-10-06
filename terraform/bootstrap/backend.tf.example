@@ -1,0 +1,11 @@
+# After first apply, copy this to backend_override.tf (ignored by Git), then
+# migrate the local bootstrap state to the new S3 bucket using terraform init.
+terraform {
+  backend "s3" {
+    bucket = "maple-sugar-tfstate-ACCOUNT_ID-us-east-1"
+    key = "bootstrap/terraform.tfstate"
+    region = "us-east-1"
+    encrypt = true
+    use_lockfile = true
+  }
+}
