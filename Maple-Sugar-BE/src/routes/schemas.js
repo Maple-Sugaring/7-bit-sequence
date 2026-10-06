@@ -308,3 +308,22 @@ export const updateSettingsBody = z.object({
     .min(1, 'Use at least 1 minute.')
     .max(1440, 'Use a day or less.'),
 });
+
+/** Blank pronouns clear the field rather than storing an empty string. */
+export const updateProfileBody = z
+  .object({
+    First_Name: z.string().trim().min(1, 'Enter your first name.').max(100).optional(),
+    Last_Name: z.string().trim().max(100).optional(),
+    Pronouns: z
+      .string()
+      .trim()
+      .max(40, 'Keep pronouns under 40 characters.')
+      .nullish()
+      .transform((value) => (value ? value : value === undefined ? undefined : null)),
+    Email_Alerts: z.boolean().optional(),
+    Email_Shifts: z.boolean().optional(),
+  })
+  .strict()
+  .refine((body) => Object.values(body).some((value) => value !== undefined), {
+    message: 'Nothing to change.',
+  });

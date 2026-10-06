@@ -1,5 +1,6 @@
 import dayjs from 'dayjs';
 import { ApiError } from '../ApiError';
+import { Capability, ROLE_LABELS, can, roleFromId } from '../../business/permissions';
 import * as seed from '../fixtures/seed';
 
 /**
@@ -19,15 +20,21 @@ const db = {
   alerts: structuredClone(seed.alerts),
   collectionLogs: structuredClone(seed.collectionLogs),
   scheduleSlots: structuredClone(seed.scheduleSlots),
+  journal: structuredClone(seed.journal),
   guides: structuredClone(seed.guides),
 };
 
+// A reduce, not Math.max(...ids): the readings table is large enough that
+// spreading it into arguments is wasteful, and an empty table must not give -Infinity.
+const maxId = (rows, key) => rows.reduce((max, row) => Math.max(max, row[key] ?? 0), 0);
+
 let nextId = {
-  metric: Math.max(...db.metrics.map((m) => m.MetricID)) + 1,
-  alert: Math.max(...db.alerts.map((a) => a.AlertID)) + 1,
-  user: Math.max(...db.users.map((u) => u.UserID)) + 1,
-  slot: Math.max(...db.scheduleSlots.map((s) => s.SlotID)) + 1,
-  log: Math.max(...db.collectionLogs.map((l) => l.LogID)) + 1,
+  metric: maxId(db.metrics, 'MetricID') + 1,
+  alert: maxId(db.alerts, 'AlertID') + 1,
+  user: maxId(db.users, 'UserID') + 1,
+  slot: maxId(db.scheduleSlots, 'SlotID') + 1,
+  log: maxId(db.collectionLogs, 'LogID') + 1,
+  journal: maxId(db.journal, 'EntryID') + 1,
 };
 
 let session = null;
@@ -48,6 +55,51 @@ function hasPoint(body) {
 
 function invalid(message, details) {
   throw new ApiError(message, { status: 422, code: 'VALIDATION', details });
+}
+
+/**
+ * After a full reload the in-memory session is gone but AuthProvider restores
+ * the UI from localStorage, so fall back to that stored user.
+ */
+function currentUser() {
+  if (!session) {
+    try {
+      const stored = JSON.parse(window.localStorage.getItem('maple-sugar-session'));
+      const restored = stored && db.users.find((row) => row.UserID === stored.user?.id);
+      if (restored) session = { token: stored.token, user: restored };
+    } catch {
+      // No storage (tests, private mode): stay signed out.
+    }
+  }
+  const user = session && db.users.find((row) => row.UserID === session.user.UserID);
+  if (!user) throw new ApiError('Sign in to continue.', { status: 401, code: 'BAD_CREDENTIALS' });
+  return user;
+}
+
+/** currentUser for writes that only stamp an author: null instead of a 401. */
+function signedInUser() {
+  try {
+    return currentUser();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Same shape as GET /profile. The demo shows the app as deployed, so mail is
+ * on and the admin's test email succeeds; see POST /notifications/test.
+ */
+function profileOf(user) {
+  const role = roleFromId(user.RoleID);
+  return {
+    ...user,
+    Pronouns: user.Pronouns ?? null,
+    Email_Alerts: user.Email_Alerts ?? user.RoleID === 1,
+    Email_Shifts: user.Email_Shifts ?? true,
+    Role_Label: ROLE_LABELS[role] ?? role,
+    Can_Receive_Alerts: can(role, Capability.VIEW_ALERTS),
+    Mail_Enabled: true,
+  };
 }
 
 function seasonOf(isoDate) {
@@ -75,9 +127,62 @@ function withAssignees(slot) {
       userId: id,
       name: user ? `${user.First_Name} ${user.Last_Name}`.trim() : `User ${id}`,
       email: user?.Email ?? null,
+      pronouns: user?.Pronouns ?? null,
     };
   });
   return { ...slot, Assignees: assignees, Awaiting_Time: slot.Awaiting_Time ?? !slot.Starts_At };
+}
+
+/**
+ * One row per tracked node: its bucket plus its newest reading, whoever sent
+ * it. Same fields and ordering as the backend's listBoard query, so The Bush,
+ * the tree page, Sugar Woods, Collection and Schedule Admin all read it.
+ */
+function boardRows() {
+  const latest = new Map();
+  for (const row of db.metrics) {
+    const known = latest.get(row.NodeID);
+    if (!known || Date.parse(row.Recorded_At) > Date.parse(known.Recorded_At)) {
+      latest.set(row.NodeID, row);
+    }
+  }
+
+  return db.nodes
+    .filter((node) => node.Tracked)
+    .map((node) => {
+      const bucket = db.buckets.find((candidate) => candidate.NodeID === node.NodeID) ?? null;
+      const reading = latest.get(node.NodeID) ?? null;
+      return {
+        NodeID: node.NodeID,
+        Node_Name: node.Node_Name,
+        Stand: node.Stand,
+        Status_Code: node.Status_Code,
+        Battery_Percent: node.Battery_Percent ?? null,
+        Signal_Rssi: node.Signal_Rssi ?? null,
+        Last_Seen: node.Last_Seen ?? null,
+        Node_Code: node.Node_Code ?? null,
+        Report_Interval_Seconds: node.Report_Interval_Seconds ?? null,
+        Location: node.Location ?? null,
+        Rf_Tag: node.Rf_Tag ?? null,
+        Notes: node.Notes ?? null,
+        BucketID: bucket?.BucketID ?? null,
+        Barcode_ID: bucket?.Barcode_ID ?? null,
+        Tare_Weight: bucket?.Tare_Weight ?? null,
+        Bucket_Status: bucket?.Status ?? null,
+        Weight: reading?.Weight ?? null,
+        Temperature: reading?.Temperature ?? null,
+        Sugar_Percent: reading?.Sugar_Percent ?? null,
+        Sap_Flow_Rate_Lph: reading?.Sap_Flow_Rate_Lph ?? null,
+        Ice_Present: Boolean(reading?.Ice_Present),
+        Recorded_At: reading?.Recorded_At ?? null,
+      };
+    })
+    .sort((a, b) => String(a.Stand).localeCompare(String(b.Stand)) || a.NodeID - b.NodeID);
+}
+
+/** Display name for a journal author, matching what the backend joins in. */
+function authorName(user) {
+  return user ? `${user.First_Name} ${user.Last_Name}`.trim() : null;
 }
 
 const routes = [
@@ -180,6 +285,7 @@ const routes = [
 
   // ---- Nodes ------------------------------------------------------------
   { method: 'GET', match: /^\/nodes$/, handler: () => db.nodes },
+  { method: 'GET', match: /^\/nodes\/board$/, handler: () => boardRows() },
   {
     method: 'GET',
     match: /^\/nodes\/board$/,
@@ -198,6 +304,7 @@ const routes = [
       const node = {
         NodeID: id,
         Node_Code: `NODE-${String(id).padStart(3, '0')}`,
+        GatewayID: body?.GatewayID ? Number(body.GatewayID) : null,
         Node_Name: body?.Node_Name ?? `Tree ${id}`,
         Stand: body?.Stand ?? '',
         Location: { lat: Number(body?.Latitude), lon: Number(body?.Longitude) },
@@ -208,8 +315,82 @@ const routes = [
         Battery_Percent: null,
         Signal_Rssi: null,
         Last_Seen: null,
+        Report_Interval_Seconds: 900,
       };
       db.nodes.push(node);
+
+      // The backend gives every new node a bucket so it can be weighed.
+      const bucketId = Math.max(0, ...db.buckets.map((item) => item.BucketID)) + 1;
+      db.buckets.push({
+        BucketID: bucketId,
+        Barcode_ID: `BKT-${String(bucketId).padStart(3, '0')}`,
+        NodeID: id,
+        Status: 'At Tree',
+        Tare_Weight: Number(body?.Tare_Weight) > 0 ? Number(body.Tare_Weight) : 2.2,
+      });
+      return node;
+    },
+  },
+  {
+    method: 'POST',
+    match: /^\/nodes\/(\d+)\/actions$/,
+    handler: ([id], { body }) => {
+      const node = db.nodes.find((candidate) => candidate.NodeID === Number(id));
+      if (!node) notFound('Node');
+
+      if (body?.Action === 'maintenance') {
+        node.Status_Code = 3;
+        return node;
+      }
+      if (body?.Action === 'online') {
+        node.Status_Code = 1;
+        return node;
+      }
+      if (body?.Action !== 'collect') invalid('Choose collect, maintenance or online.');
+
+      // Collecting empties the bucket: a reading at tare weight, a journal
+      // note, and any open "needs collecting" alerts for this tree close.
+      const bucket = db.buckets.find((candidate) => candidate.NodeID === node.NodeID) ?? null;
+      const tare = bucket?.Tare_Weight ?? 2;
+      const user = signedInUser();
+      const now = dayjs().toISOString();
+
+      db.metrics.push({
+        MetricID: nextId.metric++,
+        NodeID: node.NodeID,
+        BucketID: bucket?.BucketID ?? null,
+        Recorded_By_UserID: user?.UserID ?? null,
+        Recorded_At: now,
+        Weight: tare,
+        Temperature: null,
+        Sugar_Percent: null,
+        Weather_Conditions: 'Collected',
+        Ice_Present: false,
+        Sap_Flow_Rate_Lph: null,
+      });
+      db.journal.push({
+        EntryID: nextId.journal++,
+        UserID: user?.UserID ?? null,
+        Author: authorName(user),
+        NodeID: node.NodeID,
+        Node_Name: node.Node_Name,
+        BucketID: bucket?.BucketID ?? null,
+        Collected_At: now,
+        Title: `Collected ${node.Node_Name}`,
+        Process_Notes: String(body?.Notes ?? '').trim() || 'Bucket emptied from the bush dashboard.',
+        Weight_Lb: tare,
+        Sugar_Percent: null,
+        Ice_Present: false,
+      });
+      for (const alert of db.alerts) {
+        if (
+          alert.NodeID === node.NodeID &&
+          !alert.Is_Resolved &&
+          ['Full Bucket', 'Collection Needed'].includes(alert.Alert_Type)
+        ) {
+          alert.Is_Resolved = true;
+        }
+      }
       return node;
     },
   },
@@ -237,6 +418,7 @@ const routes = [
       if (!node) notFound('Node');
       node.Node_Name = body?.Node_Name ?? node.Node_Name;
       node.Stand = body?.Stand ?? node.Stand;
+      if (body?.GatewayID !== undefined) node.GatewayID = body.GatewayID ? Number(body.GatewayID) : null;
       node.Location = { lat: Number(body?.Latitude), lon: Number(body?.Longitude) };
       node.Rf_Tag = body?.Rf_Tag || null;
       node.Notes = body?.Notes || null;
@@ -310,7 +492,7 @@ const routes = [
         MetricID: nextId.metric++,
         NodeID: Number(body.NodeID),
         BucketID: body.BucketID ? Number(body.BucketID) : null,
-        Recorded_By_UserID: session?.user?.UserID ?? null,
+        Recorded_By_UserID: signedInUser()?.UserID ?? null,
         Recorded_At: body.Recorded_At ?? dayjs().toISOString(),
         Weight: body.Weight != null ? Number(body.Weight) : null,
         Temperature: body.Temperature != null ? Number(body.Temperature) : null,
@@ -374,7 +556,7 @@ const routes = [
       const row = {
         LogID: nextId.log++,
         BucketID: Number(body.BucketID),
-        UserID: session?.user?.UserID ?? null,
+        UserID: signedInUser()?.UserID ?? null,
         NodeID: Number(body.NodeID),
         Collected_At: body.Collected_At ?? dayjs().toISOString(),
         Volume_Collected: Number(body.Volume_Collected),
@@ -519,7 +701,7 @@ const routes = [
       const slot = db.scheduleSlots.find((candidate) => candidate.SlotID === Number(id));
       if (!slot) notFound('Shift');
 
-      const userId = Number(body?.userId ?? session?.user?.UserID);
+      const userId = Number(body?.userId ?? signedInUser()?.UserID);
       if (!userId) invalid('No user to sign up.');
 
       if (slot.Assigned_UserIDs.includes(userId)) {
@@ -553,7 +735,7 @@ const routes = [
       const slot = db.scheduleSlots.find((candidate) => candidate.SlotID === Number(id));
       if (!slot) notFound('Shift');
 
-      const userId = Number(body?.userId ?? session?.user?.UserID);
+      const userId = Number(body?.userId ?? signedInUser()?.UserID);
       slot.Assigned_UserIDs = slot.Assigned_UserIDs.filter((assigned) => assigned !== userId);
       return withAssignees(slot);
     },
@@ -561,21 +743,22 @@ const routes = [
   {
     method: 'GET',
     match: /^\/schedule\/availability$/,
+    // Open two-hour windows over the next four days, labelled the way the
+    // backend labels them ("Tue, Oct 6 · 8:00 AM – 10:00 AM").
     handler: () => ({
       Time_Zone: 'America/New_York',
       Busy: [],
-      Windows: [
-        {
-          Starts_At: dayjs().add(1, 'day').hour(8).minute(0).second(0).toISOString(),
-          Ends_At: dayjs().add(1, 'day').hour(10).minute(0).second(0).toISOString(),
-          Label: 'Tomorrow · 8:00 AM – 10:00 AM',
-        },
-        {
-          Starts_At: dayjs().add(1, 'day').hour(14).minute(0).second(0).toISOString(),
-          Ends_At: dayjs().add(1, 'day').hour(16).minute(0).second(0).toISOString(),
-          Label: 'Tomorrow · 2:00 PM – 4:00 PM',
-        },
-      ],
+      Windows: [1, 2, 3, 4].flatMap((offset) =>
+        [8, 14].map((hour) => {
+          const start = dayjs().add(offset, 'day').hour(hour).minute(0).second(0).millisecond(0);
+          const end = start.add(2, 'hour');
+          return {
+            Starts_At: start.toISOString(),
+            Ends_At: end.toISOString(),
+            Label: `${start.format('ddd, MMM D')} · ${start.format('h:mm A')} – ${end.format('h:mm A')}`,
+          };
+        }),
+      ),
     }),
   },
   {
@@ -587,7 +770,7 @@ const routes = [
       slot.Starts_At = body.Starts_At;
       slot.Ends_At = body.Ends_At;
       slot.Awaiting_Time = false;
-      const userId = session?.user?.UserID;
+      const userId = signedInUser()?.UserID;
       if (userId && !slot.Assigned_UserIDs.includes(userId)) slot.Assigned_UserIDs.push(userId);
       return withAssignees(slot);
     },
@@ -604,30 +787,72 @@ const routes = [
   {
     method: 'GET',
     match: /^\/weather\/live$/,
-    handler: () => ({
-      Configured: false,
-      Message: 'Live weather is available when the API is running with an OpenWeather key.',
-    }),
+    handler: () => seed.buildLiveWeather(),
   },
   {
+    // Like the backend: admins read every note, students only their own, and
+    // MSS members (who cannot record collections) get none.
     method: 'GET',
     match: /^\/journal$/,
-    handler: () => [],
+    handler: () => {
+      const user = signedInUser();
+      if (!user || user.RoleID === seed.ROLE_MSS) return [];
+
+      return db.journal
+        .filter((entry) => user.RoleID === seed.ROLE_ADMIN || entry.UserID === user.UserID)
+        .sort((a, b) => Date.parse(b.Collected_At) - Date.parse(a.Collected_At));
+    },
   },
   {
     method: 'POST',
     match: /^\/journal$/,
-    handler: (unused, { body }) => ({
-      EntryID: 1,
-      Title: body.Title,
-      Process_Notes: body.Process_Notes,
-      Ice_Present: Boolean(body.Ice_Present),
-      Weight_Lb: body.Weight,
-      Sugar_Percent: body.Sugar_Percent,
-      Collected_At: body.Collected_At,
-      Author: 'You',
-      Node_Name: null,
-    }),
+    handler: (unused, { body }) => {
+      const user = signedInUser();
+      const node = body?.NodeID ? db.nodes.find((item) => item.NodeID === Number(body.NodeID)) : null;
+
+      const entry = {
+        EntryID: nextId.journal++,
+        UserID: user?.UserID ?? null,
+        Author: authorName(user),
+        NodeID: node?.NodeID ?? null,
+        Node_Name: node?.Node_Name ?? null,
+        BucketID: body?.BucketID ? Number(body.BucketID) : null,
+        Collected_At: body?.Collected_At ?? dayjs().toISOString(),
+        Title: body?.Title || (node ? `Collected ${node.Node_Name}` : 'Collection note'),
+        Process_Notes: body?.Process_Notes ?? '',
+        Weight_Lb: body?.Weight ?? null,
+        Sugar_Percent: body?.Sugar_Percent ?? null,
+        Ice_Present: Boolean(body?.Ice_Present),
+      };
+      db.journal.push(entry);
+      return entry;
+    },
+  },
+  {
+    method: 'GET',
+    match: /^\/profile$/,
+    handler: () => profileOf(currentUser()),
+  },
+  {
+    method: 'PATCH',
+    match: /^\/profile$/,
+    handler: (unused, { body }) => {
+      const user = currentUser();
+      if (body?.First_Name !== undefined && !String(body.First_Name).trim()) {
+        invalid('Enter your first name.', { First_Name: 'required' });
+      }
+      for (const key of ['First_Name', 'Last_Name', 'Pronouns', 'Email_Alerts', 'Email_Shifts']) {
+        if (body?.[key] !== undefined) user[key] = body[key];
+      }
+      session.user = user;
+      return profileOf(user);
+    },
+  },
+  {
+    method: 'POST',
+    match: /^\/notifications\/test$/,
+    // The demo has mail "on", so the admin's check succeeds. Nothing is sent.
+    handler: () => ({ sent: true, to: currentUser().Email }),
   },
   {
     method: 'GET',
@@ -660,6 +885,22 @@ export async function request({ method = 'GET', path, query, body }) {
     status: 404,
     code: 'NO_MOCK_ROUTE',
   });
+}
+
+/**
+ * Hybrid mode: mirror the real API's signed-in user into the mock so notes and
+ * readings are attributed to them. Offset ids keep it clear of the seeded roster.
+ */
+export function adoptUser(real) {
+  const UserID = 100000 + real.UserID;
+  const existing = db.users.find((candidate) => candidate.UserID === UserID);
+  const user = Object.assign(existing ?? {}, real, { UserID, Is_Active: true });
+  if (!existing) db.users.push(user);
+  session = { token: 'hybrid', user };
+}
+
+export function forgetUser() {
+  session = null;
 }
 
 export function setAuthToken() {

@@ -55,6 +55,23 @@ Uses the stored refresh token to call Google Calendar v3.
 
 Admin assignment responds first, then starts `syncSignup` without awaiting it.
 
+## Email (`mailService`, `notificationService`, `shiftNotifications`)
+
+Mail goes through Brevo's transactional API (`POST https://api.brevo.com/v3/smtp/email`) on the free plan (300 emails a day). It is off until `BREVO_API_KEY` and `MAIL_FROM` are both set; `MAIL_FROM` must be a sender verified in Brevo. Each recipient gets their own copy through `messageVersions`. Bodies live in `services/emailTemplates.js`, with times in `America/New_York`.
+
+- Critical alerts: `notifyCriticalAlert` runs after `createAlert` for critical severity plus Full Bucket, Node Offline, Spoilage, and Tipped. Each channel is independent and turns on with its own settings:
+  - Brevo email to active, unexpired users with alert email on, plus `ALERT_EMAILS`.
+  - SMTP email (`SMTP_URL`, `ALERT_FROM`) to `ALERT_EMAILS`, used only while Brevo is off, so a deployment that predates Brevo keeps alerting after the upgrade.
+  - Twilio SMS to `ALERT_SMS_TO` (FR-006), with or without email.
+
+  A failing channel is logged and does not stop the others. Duplicate open alerts are already suppressed, so a node sitting full does not re-send.
+- Escalation (FR-025): housekeeping calls `escalateStaleAlerts` every minute. An alert of those kinds still unresolved after `ALERT_ESCALATION_MINUTES` (default 30, `0` turns it off) is claimed in one `UPDATE … RETURNING` (`alerts.escalated_at`), so it escalates once. It goes out again marked `ESCALATED` to every active, unexpired admin even if they muted alert email, plus the usual recipients, `ALERT_EMAILS`, and SMS. A failed send is released for retry.
+- Shifts: signup confirmation, admin assignment, removal, time or place change, and cancellation. Each responds first and sends without awaiting. Users with shift email off, or whose account is inactive or expired, are skipped. The assignment email only promises a reminder when the shift starts further out than `SHIFT_REMINDER_HOURS`.
+- Reminders: housekeeping calls `sendShiftReminders` every 5 minutes. It claims assignments starting within `SHIFT_REMINDER_HOURS` (default 12) in one `UPDATE … RETURNING`, so each is sent once. Signups made inside the window are skipped since their confirmation just went out. A failed send is released for retry.
+- Invites: `POST /users/invite` emails a sign-in link.
+
+Failures are logged and never fail the request behind them.
+
 ## What stays out
 
 `routes/collectionLogs.js`, `routes/journal.js`, `routes/alerts.js`, `routes/settings.js`, and most of `routes/schedule.js` call repositories directly. That is intentional: one table, one rule, no third-party call.

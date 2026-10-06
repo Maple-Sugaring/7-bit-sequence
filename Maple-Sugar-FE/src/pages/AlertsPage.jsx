@@ -12,7 +12,19 @@ import Stack from '@mui/material/Stack';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
+import AcUnitIcon from '@mui/icons-material/AcUnit';
+import AgricultureIcon from '@mui/icons-material/Agriculture';
+import BatteryAlertIcon from '@mui/icons-material/BatteryAlert';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlined';
+import FlagIcon from '@mui/icons-material/Flag';
+import Inventory2Icon from '@mui/icons-material/Inventory2';
+import ScreenRotationIcon from '@mui/icons-material/ScreenRotation';
+import SensorsOffIcon from '@mui/icons-material/SensorsOff';
+import SignalIcon from '@mui/icons-material/SignalCellularConnectedNoInternet0Bar';
+import ThermostatIcon from '@mui/icons-material/Thermostat';
+import UmbrellaIcon from '@mui/icons-material/Umbrella';
+import WaterDropIcon from '@mui/icons-material/WaterDrop';
+import WifiOffIcon from '@mui/icons-material/WifiOff';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ReplayIcon from '@mui/icons-material/Replay';
 import TaskAltIcon from '@mui/icons-material/TaskAlt';
@@ -25,6 +37,23 @@ import { dateTime, relativeMinutes } from '../components/common/format';
 import { useAuth } from '../context/auth';
 import { ESCALATION_MINUTES, groupByType, reopenAlert, resolveAlert } from '../services/alertService';
 import { useAction, useAlerts } from '../services/hooks';
+
+/** One glyph per alert type for the summary cards; unknown types fall back to the severity icon. */
+const TYPE_ICON = {
+  Spoilage: ThermostatIcon,
+  Tipped: ScreenRotationIcon,
+  'Node Offline': WifiOffIcon,
+  'Extreme Cold': AcUnitIcon,
+  'Hard Freeze': AcUnitIcon,
+  'Full Bucket': Inventory2Icon,
+  'Collection Needed': AgricultureIcon,
+  'Low Battery': BatteryAlertIcon,
+  'Heavy Precipitation': UmbrellaIcon,
+  'Missed Readings': SensorsOffIcon,
+  'Sap Run': WaterDropIcon,
+  'Signal Loss': SignalIcon,
+  Flagged: FlagIcon,
+};
 
 const SEVERITY_ICON = {
   error: ErrorOutlineIcon,
@@ -147,6 +176,9 @@ export function AlertsPage() {
             >
               Notify this phone
             </Button>
+            <Button variant="outlined" onClick={() => navigate('/profile')}>
+              Email settings
+            </Button>
             <Button variant="outlined" onClick={refresh} disabled={loading}>
               Refresh
             </Button>
@@ -172,13 +204,21 @@ export function AlertsPage() {
       ) : null}
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        {groups.map((group) => (
+        {groups.map((group) => {
+          const TypeIcon = TYPE_ICON[group.type] ?? SEVERITY_ICON[group.severity] ?? InfoOutlinedIcon;
+          return (
           <Grid size={{ xs: 6, sm: 4, md: 2 }} key={group.type}>
             <Card sx={{ height: '100%' }}>
               <CardContent sx={{ '&:last-child': { pb: 2 } }}>
-                <Typography variant="caption" color="text.secondary" display="block" noWrap>
-                  {group.type}
-                </Typography>
+                <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
+                  <TypeIcon
+                    fontSize="small"
+                    sx={{ color: group.open ? `${group.severity}.main` : 'text.disabled' }}
+                  />
+                  <Typography variant="caption" color="text.secondary" noWrap>
+                    {group.type}
+                  </Typography>
+                </Stack>
                 <Typography variant="h4" component="p" color={group.open ? `${group.severity}.main` : 'text.primary'}>
                   {group.open}
                 </Typography>
@@ -188,7 +228,8 @@ export function AlertsPage() {
               </CardContent>
             </Card>
           </Grid>
-        ))}
+          );
+        })}
       </Grid>
 
       <Tabs value={tab} onChange={(unused, next) => setTab(next)} sx={{ mb: 2 }}>

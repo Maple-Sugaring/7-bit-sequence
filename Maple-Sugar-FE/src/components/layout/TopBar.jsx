@@ -6,13 +6,18 @@ import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import MenuIcon from '@mui/icons-material/Menu';
+import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import NotificationsIcon from '@mui/icons-material/Notifications';
-import { useNavigate } from 'react-router-dom';
+import Tooltip from '@mui/material/Tooltip';
+import { useAuth } from '../../context/auth';
 import { useOpenAlertCount } from '../../services/hooks';
 import { MainNav } from './MainNav';
+import { useNavigate } from "react-router-dom";
+
 
 export function TopBar() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const compact = useMediaQuery('(max-width:900px)');
   const [menuOpen, setMenuOpen] = useState(false);
   const alerts = useOpenAlertCount();
@@ -38,40 +43,40 @@ export function TopBar() {
     <Box
       component="header"
       sx={{
-        display: 'grid',
-        gridTemplateColumns: 'auto 1fr auto',
-        alignItems: 'center',
+        display: "grid",
+        gridTemplateColumns: "auto 1fr auto",
+        alignItems: "center",
         gap: 1,
         px: { xs: 1.5, md: 3 },
         py: 1,
-        bgcolor: '#000',
-        color: '#fff',
-        borderBottom: '4px solid #F76902',
+        bgcolor: "#000",
+        color: "#fff",
+        borderBottom: "4px solid #F76902",
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-        {compact ? (
-          <IconButton aria-label="Open menu" onClick={() => setMenuOpen(true)} sx={{ color: '#fff' }}>
-            <MenuIcon />
-          </IconButton>
-        ) : null}
-        <Typography
-          component="button"
-          onClick={() => navigate('/dashboard')}
-          sx={{
-            border: 0,
-            bgcolor: 'transparent',
-            color: '#fff',
-            font: 'inherit',
-            fontWeight: 650,
-            fontSize: 18,
-            letterSpacing: '-0.02em',
-            cursor: 'pointer',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          Maple Sugaring
-        </Typography>
+      {compact ? (
+        <IconButton aria-label="Open menu" onClick={() => setMenuOpen(true)} sx={{ color: '#fff' }}>
+          <MenuIcon />
+        </IconButton>
+      ) : null}
+      <Typography
+        component="button"
+        onClick={() => navigate("/dashboard")}
+        sx={{
+          border: 0,
+          bgcolor: "transparent",
+          color: "#fff",
+          font: "inherit",
+          fontWeight: 650,
+          fontSize: 18,
+          letterSpacing: "-0.02em",
+          cursor: "pointer",
+          whiteSpace: "nowrap",
+        }}
+      >
+        Maple Sugaring
+      </Typography>
       </Box>
       {compact ? null : <MainNav />}
       {compact ? <Box /> : null}
@@ -80,6 +85,11 @@ export function TopBar() {
           <NotificationsIcon />
         </Badge>
       </IconButton>
+      <Tooltip title={user?.fullName ? `${user.fullName} · Profile` : 'Profile'}>
+        <IconButton aria-label="Your profile" onClick={() => navigate('/profile')} sx={{ color: '#fff' }}>
+          <AccountCircleIcon />
+        </IconButton>
+      </Tooltip>
       <Drawer
         anchor="left"
         open={menuOpen}

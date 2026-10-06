@@ -71,6 +71,8 @@ export const config = {
   env: process.env.NODE_ENV ?? 'development',
   isProduction,
   port: integer('PORT', 3000),
+  // One proxy locally (nginx); two on EC2 (Caddy then nginx).
+  trustProxyHops: integer('TRUST_PROXY_HOPS', 1),
   logLevel: optional('LOG_LEVEL', isProduction ? 'info' : 'debug'),
 
   databaseUrl,
@@ -116,17 +118,32 @@ export const config = {
   // Comma-separated. Promoted to Admin on boot so the role is not baked into SQL.
   bootstrapAdminEmails: list('BOOTSTRAP_ADMIN_EMAILS'),
 
-  // Critical alerts. Both channels stay off until these are set, so a dev
-  // machine never sends mail or texts.
+  // Email through Brevo's transactional API. Mail stays off until the key and
+  // a sender verified in Brevo are both set, so a dev machine never sends.
+  brevo: {
+    apiKey: optional('BREVO_API_KEY') || null,
+    sender: optional('MAIL_FROM').toLowerCase() || null,
+    senderName: optional('MAIL_FROM_NAME', 'RIT Maple Sugaring'),
+  },
+  // Extra critical-alert recipients on top of users who opted in, e.g. a
+  // shared club inbox that has no account.
+  alertEmails: list('ALERT_EMAILS'),
+  // Deployments that predate Brevo keep working: with no Brevo key, critical
+  // alerts still go to ALERT_EMAILS over this SMTP relay.
   smtpUrl: optional('SMTP_URL') || null,
   alertFrom: optional('ALERT_FROM') || null,
-  alertEmails: list('ALERT_EMAILS'),
+  // Critical-alert SMS (FR-006). Off until every Twilio value and a number are set.
   twilio: {
     accountSid: optional('TWILIO_ACCOUNT_SID') || null,
     authToken: optional('TWILIO_AUTH_TOKEN') || null,
     from: optional('TWILIO_FROM') || null,
   },
   alertSmsTo: list('ALERT_SMS_TO'),
+  // An alert still unresolved after this long is sent again to every active
+  // admin (FR-025). 0 turns escalation off.
+  alertEscalationMinutes: integer('ALERT_ESCALATION_MINUTES', 30),
+  // How far ahead of a shift the reminder email goes out.
+  shiftReminderHours: integer('SHIFT_REMINDER_HOURS', 12),
 };
 
 export const sessionTtlSeconds = config.sessionTtlDays * 24 * 60 * 60;

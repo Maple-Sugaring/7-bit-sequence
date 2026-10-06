@@ -52,6 +52,10 @@ export function mapUser(row) {
     Google_Calendar_ID: row.google_calendar_id ?? null,
     Calendar_Connected: Boolean(row.calendar_connected),
     Invite_Pending: row.invite_pending ?? false,
+    // Null in the column means "my role's default": admins on, others off.
+    Email_Alerts: row.email_alerts ?? row.role_id === 1,
+    Email_Shifts: row.email_shifts ?? true,
+    Pronouns: row.pronouns ?? null,
   };
 }
 

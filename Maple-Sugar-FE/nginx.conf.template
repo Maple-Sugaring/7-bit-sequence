@@ -2,6 +2,11 @@
 # only substitutes variables that actually exist in the environment. That is
 # why ${API_UPSTREAM} is filled in while nginx's own $uri and $host are not.
 
+map $http_x_forwarded_proto $maple_forwarded_proto {
+    default $scheme;
+    https https;
+}
+
 server {
     listen 80;
     # The image only auto-adds an IPv6 listener to its own stock config, not a
@@ -58,7 +63,7 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto $maple_forwarded_proto;
 
         proxy_read_timeout 60s;
     }
