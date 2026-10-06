@@ -41,6 +41,32 @@ export async function findByTokenHash(tokenHash) {
  */
 export async function rotate({ oldId, userId, familyId, tokenHash, expiresAt, userAgent, ip }) {
   return transaction(async (client) => {
+    // Serialize refreshes for this token. A second request waits here, then
+    // sees the first request's revoked row and cannot mint another successor.
+    const { rows: oldRows } = await client.query(
+      `select id, family_id, revoked_at, replaced_by, expires_at
+         from sessions
+        where id = $1
+        for update`,
+      [oldId],
+    );
+    const old = oldRows[0];
+    if (!old) return { reason: 'invalid' };
+
+    if (old.revoked_at || old.replaced_by) {
+      await client.query(
+        `update sessions
+            set revoked_at = CURRENT_TIMESTAMP
+          where family_id = $1 and revoked_at is null`,
+        [old.family_id],
+      );
+      return { reason: 'reuse' };
+    }
+
+    if (new Date(old.expires_at).getTime() <= Date.now()) {
+      return { reason: 'expired' };
+    }
+
     const { rows } = await client.query(
       `insert into sessions (user_id, family_id, token_hash, expires_at, user_agent, created_ip)
        values ($1, $2, $3, $4, $5, $6)
@@ -56,7 +82,7 @@ export async function rotate({ oldId, userId, familyId, tokenHash, expiresAt, us
         where id = $1`,
       [oldId, next.id],
     );
-    return next;
+    return { session: next };
   });
 }
 
