@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { mock, after, before, beforeEach, describe, test } from 'node:test';
 
 import '../env.js';
-import { signSessionToken } from '../../src/auth/jwt.js';
+import { signAccessToken } from '../../src/auth/jwt.js';
 import { pool, closePool } from '../../src/db/pool.js';
 
 /** Stand-in for Postgres: a users table for sessions plus one gateway row. */
@@ -95,7 +95,7 @@ beforeEach(() => {
 
 function token(id, role_id) {
   users.set(id, userRow(id, role_id));
-  return signSessionToken({ UserID: id, Email: `u${id}@rit.edu`, RoleID: role_id });
+  return signAccessToken({ UserID: id, Email: `u${id}@rit.edu`, RoleID: role_id });
 }
 
 async function send(path, { method = 'GET', tok, body } = {}) {
