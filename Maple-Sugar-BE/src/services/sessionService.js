@@ -73,7 +73,7 @@ export async function rotateSession(presentedToken, { userAgent, ip } = {}) {
   }
 
   const refreshToken = generateRefreshToken();
-  await sessionsRepository.rotate({
+  const rotated = await sessionsRepository.rotate({
     oldId: row.id,
     userId: user.UserID,
     familyId: row.family_id,
@@ -82,6 +82,16 @@ export async function rotateSession(presentedToken, { userAgent, ip } = {}) {
     userAgent,
     ip,
   });
+
+  // Another request may have rotated this token while this request loaded the
+  // session and account. The repository serializes the operation and reports
+  // reuse/expiry without issuing a second successor.
+  if (rotated.reason) {
+    if (rotated.reason === 'reuse') {
+      logger.warn({ userId: row.user_id, familyId: row.family_id }, 'Refresh token reuse detected');
+    }
+    return { reason: rotated.reason };
+  }
 
   return { accessToken: signAccessToken(user), refreshToken, user };
 }
