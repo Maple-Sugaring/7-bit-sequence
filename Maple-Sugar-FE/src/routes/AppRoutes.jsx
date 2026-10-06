@@ -33,6 +33,9 @@ const AdminPage = lazy(() =>
 const CollectionPage = lazy(() =>
   import('../pages/CollectionPage').then((module) => ({ default: module.CollectionPage })),
 );
+const ProfilePage = lazy(() =>
+  import('../pages/ProfilePage').then((module) => ({ default: module.ProfilePage })),
+);
 const DeployPage = lazy(() =>
   import('../pages/DeployPage').then((module) => ({ default: module.DeployPage })),
 );
@@ -51,6 +54,8 @@ const PROTECTED = [
     capability: Capability.MANAGE_SCHEDULE,
   },
   { path: '/admin', element: <AdminPage />, capability: Capability.MANAGE_USERS },
+  // Every signed-in role has a profile, so there is no capability gate.
+  { path: '/profile', element: <ProfilePage /> },
 ];
 
 function PageFallback() {

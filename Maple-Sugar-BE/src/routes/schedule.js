@@ -6,6 +6,7 @@ import { cacheKeys, cacheNamespaces, TTL } from '../cache/cacheKeys.js';
 import { invalidateNamespaces, readThrough } from '../cache/redisCache.js';
 import * as scheduleRepository from '../repositories/scheduleRepository.js';
 import * as calendarService from '../services/calendarService.js';
+import * as shiftNotifications from '../services/shiftNotifications.js';
 import { claimTimeBody, createSlotBody, idParam, scheduleQuery, slotUserBody, updateSlotBody } from './schemas.js';
 import { queryAll } from '../db/pool.js';
 import * as usersRepository from '../repositories/usersRepository.js';
@@ -93,7 +94,24 @@ scheduleRouter.post('/slots', requireCapability(Capability.MANAGE_SCHEDULE), asy
   await invalidateNamespaces([cacheNamespaces.SCHEDULE]);
   res.status(201).json(assigned);
   void calendarService.syncSignup(body.UserID, assigned);
+  void shiftNotifications.notifyShiftAssigned(body.UserID, assigned, {
+    byAdmin: body.UserID !== req.user.UserID,
+  });
 });
+
+function sameInstant(a, b) {
+  return (a == null && b == null) || (a != null && b != null && Date.parse(a) === Date.parse(b));
+}
+
+/** Only what an assignee would act on; a capacity bump is not worth an email. */
+function slotDetailsChanged(before, after) {
+  return (
+    before.Task !== after.Task ||
+    before.Stand !== after.Stand ||
+    !sameInstant(before.Starts_At, after.Starts_At) ||
+    !sameInstant(before.Ends_At, after.Ends_At)
+  );
+}
 
 scheduleRouter.patch('/slots/:id', requireCapability(Capability.MANAGE_SCHEDULE), async (req, res) => {
   const id = idParam.parse(req.params.id);
@@ -118,12 +136,20 @@ scheduleRouter.patch('/slots/:id', requireCapability(Capability.MANAGE_SCHEDULE)
     await calendarService.syncSlotChange(slot);
   }
 
+  if (slotDetailsChanged(existing, slot)) {
+    if (!sameInstant(existing.Starts_At, slot.Starts_At)) {
+      await scheduleRepository.resetReminders(id);
+    }
+    void shiftNotifications.notifyShiftChanged(slot);
+  }
+
   res.json(slot);
 });
 
 scheduleRouter.delete('/slots/:id', requireCapability(Capability.MANAGE_SCHEDULE), async (req, res) => {
   const id = idParam.parse(req.params.id);
 
+  const existing = await scheduleRepository.findSlotById(id);
   const assignments = await scheduleRepository.listAssignments(id);
   const removed = await scheduleRepository.deleteSlot(id);
   if (!removed) throw notFound('Shift');
@@ -131,6 +157,13 @@ scheduleRouter.delete('/slots/:id', requireCapability(Capability.MANAGE_SCHEDULE
   await invalidateNamespaces([cacheNamespaces.SCHEDULE]);
   await calendarService.syncSlotDelete(assignments);
   res.status(204).end();
+  // A shift nobody had picked a time for was never on anyone's plans.
+  if (existing?.Starts_At) {
+    void shiftNotifications.notifyShiftCancelled(
+      existing,
+      assignments.map((assignment) => assignment.userId),
+    );
+  }
 });
 
 /**
@@ -189,6 +222,7 @@ scheduleRouter.post('/slots/:id/claim-time', requireCapability(Capability.CLAIM_
   await invalidateNamespaces([cacheNamespaces.SCHEDULE, cacheNamespaces.ALERTS]);
   await calendarService.syncSignup(userId, updated);
   res.json(updated);
+  void shiftNotifications.notifyShiftAssigned(userId, updated);
 });
 
 scheduleRouter.post('/slots/:id/signup', requireCapability(Capability.CLAIM_SHIFT), async (req, res) => {
@@ -202,15 +236,19 @@ scheduleRouter.post('/slots/:id/signup', requireCapability(Capability.CLAIM_SHIF
   await invalidateNamespaces([cacheNamespaces.SCHEDULE]);
   await calendarService.syncSignup(userId, slot);
   res.json(slot);
+  void shiftNotifications.notifyShiftAssigned(userId, slot, { byAdmin: userId !== req.user.UserID });
 });
 
 scheduleRouter.post('/slots/:id/withdraw', requireCapability(Capability.CLAIM_SHIFT), async (req, res) => {
   const id = idParam.parse(req.params.id);
   const userId = resolveTargetUser(req);
 
-  const { slot, googleEventId } = await scheduleRepository.withdraw(id, userId);
+  const { slot, googleEventId, removed } = await scheduleRepository.withdraw(id, userId);
 
   await invalidateNamespaces([cacheNamespaces.SCHEDULE]);
   await calendarService.syncWithdraw(userId, googleEventId);
   res.json(slot);
+  if (removed) {
+    void shiftNotifications.notifyShiftRemoved(userId, slot, { byAdmin: userId !== req.user.UserID });
+  }
 });

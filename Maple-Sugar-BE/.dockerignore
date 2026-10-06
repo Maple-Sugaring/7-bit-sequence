@@ -1,4 +1,6 @@
 node_modules
+# iCloud skips *.nosync; node_modules is a symlink into it on synced Desktops.
+node_modules.nosync
 .git
 .gitignore
 .vscode

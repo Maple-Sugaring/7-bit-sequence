@@ -93,3 +93,28 @@ export async function resolveOpenByTypes(nodeId, types) {
   );
   return result.rowCount ?? 0;
 }
+
+/**
+ * Claims open alerts that outlived the escalation window, stamping them in the
+ * same statement so each is escalated once even across two API instances.
+ * Only alerts that notified someone in the first place qualify: critical
+ * severity, or one of the always-notify types.
+ */
+export async function claimAlertsForEscalation(minutes, alwaysNotifyTypes) {
+  const rows = await queryAll(
+    `update alerts
+        set escalated_at = CURRENT_TIMESTAMP
+      where is_resolved = false
+        and escalated_at is null
+        and created_at <= CURRENT_TIMESTAMP - make_interval(mins => $1)
+        and (severity = 'critical' or alert_type = any($2::text[]))
+      returning ${ALERT_COLUMNS}`,
+    [minutes, alwaysNotifyTypes],
+  );
+  return rows.map((row) => ({ ...mapAlert(row), severity: row.severity }));
+}
+
+/** Lets an escalation that failed to send be retried on the next pass. */
+export async function releaseEscalation(id) {
+  await query('update alerts set escalated_at = null where id = $1', [id]);
+}
