@@ -53,15 +53,39 @@ export const updateMetricBody = z
   })
   .refine((body) => Object.keys(body).length > 0, { message: 'Nothing to update.' });
 
+const registeredGatewayCode = z
+  .string()
+  .trim()
+  .min(1, 'Name the gateway.')
+  .max(50)
+  .regex(/^[A-Za-z0-9_-]+$/, 'Use letters, numbers, dashes, or underscores.');
+const gatewayName = z.string().trim().min(1, 'Give the gateway a label.').max(100);
+const latitude = z.coerce.number().min(-90).max(90);
+const longitude = z.coerce.number().min(-180).max(180);
+
 export const createGatewayBody = z.object({
-  Gateway_Code: z
-    .string()
-    .trim()
-    .min(1, 'Name the gateway.')
-    .max(50)
-    .regex(/^[A-Za-z0-9_-]+$/, 'Use letters, numbers, dashes, or underscores.'),
-  Gateway_Name: z.string().trim().min(1, 'Give the gateway a label.').max(100),
+  Gateway_Code: registeredGatewayCode,
+  Gateway_Name: gatewayName,
+  Notes: z.string().trim().max(500).optional(),
+  Latitude: latitude.optional(),
+  Longitude: longitude.optional(),
 });
+
+// A gateway is placed by both coordinates or by neither. Notes and Location may
+// be cleared by sending an empty string / null.
+export const updateGatewayBody = z
+  .object({
+    Gateway_Code: registeredGatewayCode.optional(),
+    Gateway_Name: gatewayName.optional(),
+    Notes: z.string().trim().max(500).nullable().optional(),
+    Latitude: latitude.nullable().optional(),
+    Longitude: longitude.nullable().optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, { message: 'Nothing to update.' })
+  .refine((body) => (body.Latitude == null) === (body.Longitude == null), {
+    message: 'Give both latitude and longitude, or neither.',
+    path: ['Latitude'],
+  });
 
 export const createNodeBody = z.object({
   Node_Name: z.string().trim().min(1, 'Name the tree.').max(100),

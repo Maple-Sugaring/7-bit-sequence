@@ -102,6 +102,14 @@ export function createGateway(body) {
   return nodesRepository.createGateway(body);
 }
 
+export function updateGateway(gatewayId, body) {
+  return nodesRepository.updateGateway(gatewayId, body);
+}
+
+export function deleteGateway(gatewayId) {
+  return nodesRepository.deleteGateway(gatewayId);
+}
+
 export function listNodes() {
   return nodesRepository.listNodes();
 }

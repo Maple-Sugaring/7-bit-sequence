@@ -1,0 +1,22 @@
+# Hybrid sponsor demo: sensor screens stay on mock data, while sign-in,
+# schedule, Google Calendar and email use the real API.
+#
+#   docker compose -p maple-demo -f docker-compose.yml -f docker-compose.demo.yml up -d --build
+#
+# The -p name gives this stack its own database volume and containers, so it
+# never touches the normal stack on :8080. See Maple-Sugar-BE/demo/README.md.
+services:
+  web:
+    build:
+      args:
+        VITE_API_MODE: hybrid
+    # !override replaces the base 8080 mapping instead of adding a second one.
+    ports: !override
+      - "8082:80"
+
+  api:
+    environment:
+      # The browser reaches the stack on :8082, and Google must have
+      # http://localhost:8082/api/auth/google/callback registered.
+      PUBLIC_API_URL: http://localhost:8082/api
+      PUBLIC_WEB_URL: http://localhost:8082
