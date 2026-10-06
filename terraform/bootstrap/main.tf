@@ -86,7 +86,7 @@ resource "aws_iam_role_policy" "terraform" {
     Statement = [
       { Effect = "Allow", Action = ["ec2:*"], Resource = "*", Condition = { StringEquals = { "aws:RequestedRegion" = var.aws_region } } },
       { Effect = "Allow", Action = ["s3:*"], Resource = ["arn:aws:s3:::maple-sugar-*-${local.account}-${var.aws_region}", "arn:aws:s3:::maple-sugar-*-${local.account}-${var.aws_region}/*"] },
-      { Effect = "Allow", Action = ["iam:GetRole", "iam:CreateRole", "iam:DeleteRole", "iam:TagRole", "iam:UntagRole", "iam:UpdateAssumeRolePolicy", "iam:ListRolePolicies", "iam:GetRolePolicy", "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:ListAttachedRolePolicies", "iam:AttachRolePolicy", "iam:DetachRolePolicy"], Resource = "arn:aws:iam::${local.account}:role/maple-sugar-ec2" },
+      { Effect = "Allow", Action = ["iam:GetRole", "iam:CreateRole", "iam:DeleteRole", "iam:TagRole", "iam:UntagRole", "iam:UpdateAssumeRolePolicy", "iam:ListRolePolicies", "iam:GetRolePolicy", "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:ListAttachedRolePolicies", "iam:ListInstanceProfilesForRole", "iam:AttachRolePolicy", "iam:DetachRolePolicy"], Resource = "arn:aws:iam::${local.account}:role/maple-sugar-ec2" },
       { Effect = "Allow", Action = ["iam:CreateInstanceProfile", "iam:DeleteInstanceProfile", "iam:GetInstanceProfile", "iam:TagInstanceProfile", "iam:UntagInstanceProfile", "iam:AddRoleToInstanceProfile", "iam:RemoveRoleFromInstanceProfile"], Resource = "arn:aws:iam::${local.account}:instance-profile/maple-sugar-ec2" },
       { Effect = "Allow", Action = ["iam:PassRole"], Resource = "arn:aws:iam::${local.account}:role/maple-sugar-ec2", Condition = { StringEquals = { "iam:PassedToService" = "ec2.amazonaws.com" } } }
     ]

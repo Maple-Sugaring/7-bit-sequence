@@ -38,6 +38,8 @@ import, container restarts, and a complete EC2 reboot:
 - Public frontend and `/api/health` returned 200 over verified HTTPS.
 - Postgres and Redis health checks passed.
 - Authenticated idempotent ingest returned 200; missing credentials returned 401.
+- OAuth redirect and secure cookie checks passed, and an authenticated
+  application session returned 200.
 - Scheduled backups are active at 03:00 America/New_York with seven-day S3
   expiration. An encrypted S3 backup was downloaded and successfully restored
   into a scratch database; key table counts matched and the scratch DB was removed.
@@ -51,10 +53,13 @@ import, container restarts, and a complete EC2 reboot:
   ingest returned 200 for a duplicate sample. The receiver was listening on
   `/dev/ttyUSB0`; no new radio packets arrived during the verification window.
 
-The backend suite passed 153 of 154 tests. The remaining SMTP notification test
-fails in both local Windows Node 24 and Linux Node 22; SMTP implementation was
-not changed by this deployment. Terraform validation, environment consistency,
-backend lint, production Compose validation, and deployed stack checks passed.
+All pull request checks passed, including 154 of 154 backend tests, frontend
+checks, backend lint, environment consistency, and Terraform validation.
+Actionlint, production Compose validation, and deployed stack checks passed.
+The initial local SMTP test failure was caused by missing `nodemailer` in the
+existing local dependency installation; the clean CI dependency install passed.
+Nodemailer was updated to 10.0.15 to resolve the production audit findings;
+the production dependency audit now reports zero advisories.
 
 GitHub Actions deployment jobs are restricted to `main` and become runnable
 after this branch is merged. One-time infrastructure deployment and migration
