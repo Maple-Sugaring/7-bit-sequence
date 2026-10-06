@@ -7,6 +7,7 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import FormGroup from '@mui/material/FormGroup';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import dayjs from 'dayjs';
 import { LIVE_FROM, LIVE_TO, TIME_UNITS, dailyWeightRows, presetRange } from '../business/liveWeight';
@@ -58,6 +59,7 @@ function nodeLabel(node) {
 
 export function SapDataPage() {
   const navigate = useNavigate();
+  const phone = useMediaQuery('(max-width:600px)');
   const { can } = useAuth();
   const canDeploy = can(Capability.DEPLOY_NODES);
   const bush = useBush();
@@ -128,7 +130,7 @@ export function SapDataPage() {
         title="Sugar Woods"
         subtitle="Chart gallons in each bucket over time, then export a CSV when you need it."
         actions={
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'center' }, flexWrap: 'wrap', justifyContent: 'center' }}>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center', justifyContent: 'center', width: '100%' }}>
             {PRESETS.map(([id, label]) => (
               <Button
                 key={id}
@@ -157,6 +159,7 @@ export function SapDataPage() {
                 setFrom(value);
               }}
               slotProps={{ textField: { size: 'small' } }}
+              sx={{ flex: { xs: '1 1 140px', sm: '0 1 auto' }, minWidth: 0 }}
             />
             <DatePicker
               label="To"
@@ -167,17 +170,19 @@ export function SapDataPage() {
                 setTo(value);
               }}
               slotProps={{ textField: { size: 'small' } }}
+              sx={{ flex: { xs: '1 1 140px', sm: '0 1 auto' }, minWidth: 0 }}
             />
             {can(Capability.EXPORT_DATA) ? (
               <Button
                 variant="outlined"
+                sx={{ flex: { xs: '1 1 100%', sm: '0 0 auto' } }}
                 disabled={weights.ranged.length === 0}
                 onClick={() => exportWeights(weights.ranged, from?.format('YYYY-MM-DD'), to?.format('YYYY-MM-DD'))}
               >
                 Export CSV
               </Button>
             ) : null}
-          </Stack>
+          </Box>
         }
       />
 
@@ -251,11 +256,11 @@ export function SapDataPage() {
               </Button>
             ) : null}
           </Box>
-          <Box sx={{ flex: 1 }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
             <ChartCard
               title="2026 weight"
               description={chartDescription}
-              height={420}
+              height={phone ? 300 : 420}
               loading={loading}
               isEmpty={weights.rows.length === 0}
               emptyTitle={emptyTitle}

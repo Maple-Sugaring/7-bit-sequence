@@ -1,19 +1,22 @@
 footer{
     background-color: black;
+    border-top: 4px solid #F76902;
 }
 
 .fbox{
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 16px;
     padding: 20px 40px;
     box-sizing: border-box;
 }
 
-.fbox > p{
-    color: #F76902;
-    font-size: 20px;
+.fbox p{
+    color: #d0d3d4;
+    font-size: 14px;
     margin: 0;
+    text-wrap: balance;
 }
 
 .footer-logo{
@@ -21,3 +24,10 @@ footer{
     object-fit: contain;
 }
 
+@media (max-width: 600px){
+    .fbox{
+        flex-direction: column;
+        padding: 16px;
+        text-align: center;
+    }
+}
