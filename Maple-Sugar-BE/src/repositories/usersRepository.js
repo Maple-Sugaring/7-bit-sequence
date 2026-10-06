@@ -199,6 +199,22 @@ export async function listAlertRecipients() {
 }
 
 /**
+ * Escalation audience: every admin who can still sign in, whether or not they
+ * muted routine alert email. An alert nobody resolved is the case a mute should
+ * not hide.
+ */
+export async function listActiveAdmins() {
+  const rows = await queryAll(
+    `select ${USER_COLUMNS}
+       from users
+      where is_active = true
+        and (account_expiry is null or account_expiry >= CURRENT_DATE)
+        and role_id = 1`,
+  );
+  return rows.map(mapUser);
+}
+
+/**
  * What a person may change about themselves. Email is deliberately absent: it
  * is the Google identity and the invite key, so only an admin changes it.
  */

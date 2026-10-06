@@ -126,6 +126,20 @@ export const config = {
   // Extra critical-alert recipients on top of users who opted in, e.g. a
   // shared club inbox that has no account.
   alertEmails: list('ALERT_EMAILS'),
+  // Deployments that predate Brevo keep working: with no Brevo key, critical
+  // alerts still go to ALERT_EMAILS over this SMTP relay.
+  smtpUrl: optional('SMTP_URL') || null,
+  alertFrom: optional('ALERT_FROM') || null,
+  // Critical-alert SMS (FR-006). Off until every Twilio value and a number are set.
+  twilio: {
+    accountSid: optional('TWILIO_ACCOUNT_SID') || null,
+    authToken: optional('TWILIO_AUTH_TOKEN') || null,
+    from: optional('TWILIO_FROM') || null,
+  },
+  alertSmsTo: list('ALERT_SMS_TO'),
+  // An alert still unresolved after this long is sent again to every active
+  // admin (FR-025). 0 turns escalation off.
+  alertEscalationMinutes: integer('ALERT_ESCALATION_MINUTES', 30),
   // How far ahead of a shift the reminder email goes out.
   shiftReminderHours: integer('SHIFT_REMINDER_HOURS', 12),
 };

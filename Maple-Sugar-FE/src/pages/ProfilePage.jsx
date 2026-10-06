@@ -223,6 +223,15 @@ export function ProfilePage() {
   const { data, loading, error, refresh } = useProfile();
   const preferences = useSaveProfile();
   const [overrides, setOverrides] = useState({});
+  const [seenData, setSeenData] = useState(data);
+
+  // Overrides only bridge the gap until the server answers. A fresh fetch is
+  // newer than anything saved here, so it replaces them; otherwise a role,
+  // expiry, or preference changed elsewhere stays hidden until the page reopens.
+  if (data !== seenData) {
+    setSeenData(data);
+    setOverrides({});
+  }
 
   const profile = data ? { ...data, ...overrides } : null;
 

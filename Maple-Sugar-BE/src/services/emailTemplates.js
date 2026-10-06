@@ -96,9 +96,11 @@ function shiftDetails(slot) {
 
 const scheduleAction = { label: 'Open the schedule', get href() { return link('/schedule'); } };
 
-export function criticalAlertEmail(alert) {
+/** `escalatedAfterMinutes` marks the repeat sent when nobody has resolved the alert. */
+export function criticalAlertEmail(alert, { escalatedAfterMinutes = null } = {}) {
   const where = alert.Node_Name ?? (alert.NodeID == null ? 'the sugarbush' : `node ${alert.NodeID}`);
-  const subject = `Maple Sugaring alert: ${alert.Alert_Type} at ${where}`;
+  const escalated = escalatedAfterMinutes != null;
+  const subject = `${escalated ? 'ESCALATED: ' : ''}Maple Sugaring alert: ${alert.Alert_Type} at ${where}`;
   const details = [
     ['Alert', alert.Alert_Type],
     ['Where', where],
@@ -109,15 +111,36 @@ export function criticalAlertEmail(alert) {
     subject,
     ...layout({
       heading: `${alert.Alert_Type} at ${where}`,
-      paragraphs: [alert.Description || 'A sensor raised a critical alert.', 'Someone should check on it soon.'],
+      paragraphs: [
+        alert.Description || 'A sensor raised a critical alert.',
+        escalated
+          ? `Nobody has resolved this alert in ${escalatedAfterMinutes} minutes. Please check on it now.`
+          : 'Someone should check on it soon.',
+      ],
       details,
       action: { label: 'View alerts', href: link('/notifications') },
     }),
   };
 }
 
+/**
+ * The reminder job skips anyone assigned after the reminder window has opened
+ * (their confirmation just went out), so only promise one when this shift
+ * starts further out than SHIFT_REMINDER_HOURS. A shift with no time yet gets
+ * no promise either way.
+ */
+function reminderLine(slot, now) {
+  if (!slot.Starts_At) return null;
+  const hoursAway = (new Date(slot.Starts_At).getTime() - now.getTime()) / 3_600_000;
+  if (hoursAway > config.shiftReminderHours) {
+    return `We will send a reminder about ${config.shiftReminderHours} hours before it starts.`;
+  }
+  return 'This shift starts soon, so we will not send a separate reminder.';
+}
+
 /** Covers a self signup (confirmation) and an admin assigning someone. */
-export function shiftAssignedEmail(slot, { byAdmin = false } = {}) {
+export function shiftAssignedEmail(slot, { byAdmin = false, now = new Date() } = {}) {
+  const reminder = reminderLine(slot, now);
   return {
     subject: `${byAdmin ? 'You were assigned' : 'You signed up for'}: ${slot.Task}, ${formatShiftWindow(slot.Starts_At, slot.Ends_At)}`,
     ...layout({
@@ -126,7 +149,7 @@ export function shiftAssignedEmail(slot, { byAdmin = false } = {}) {
         byAdmin
           ? 'An administrator put you on this shift.'
           : 'Thanks for signing up. Here are the details.',
-        `We will send a reminder about ${config.shiftReminderHours} hours before it starts.`,
+        ...(reminder ? [reminder] : []),
       ],
       details: shiftDetails(slot),
       action: scheduleAction,

@@ -2,13 +2,20 @@ import '../env.js';
 
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
+import { createServer as createTcpServer } from 'node:net';
 import { after, before, beforeEach, describe, mock, test } from 'node:test';
 
 import { signSessionToken } from '../../src/auth/jwt.js';
 import { config } from '../../src/config.js';
 import { closePool, pool } from '../../src/db/pool.js';
 import * as alertsRepository from '../../src/repositories/alertsRepository.js';
-import { sendShiftReminders } from '../../src/services/shiftNotifications.js';
+import { shiftAssignedEmail } from '../../src/services/emailTemplates.js';
+import { escalateStaleAlerts, notifyCriticalAlert } from '../../src/services/notificationService.js';
+import {
+  notifyShiftAssigned,
+  notifyShiftChanged,
+  sendShiftReminders,
+} from '../../src/services/shiftNotifications.js';
 
 /**
  * Every email the API sends, end to end: real routes and services, a fake
@@ -59,6 +66,8 @@ function reset() {
     nextAlertId: 1,
     dueReminders: [],
     released: [],
+    staleAlerts: [],
+    releasedAlerts: [],
   };
 }
 
@@ -113,6 +122,9 @@ function fakeQuery(text, params = []) {
       ),
     );
   }
+  if (sql.includes('from users') && sql.includes('and role_id = 1')) {
+    return rows([...db.users.values()].filter((user) => user.is_active && user.role_id === 1));
+  }
   if (sql.includes('update users set')) {
     const user = db.users.get(Number(params[0]));
     const columns = /(first_name|last_name|pronouns|email_alerts|email_shifts) = \$(\d+)/g;
@@ -157,6 +169,16 @@ function fakeQuery(text, params = []) {
         created_at: '2026-10-05T14:00:00.000Z',
       },
     ]);
+  }
+
+  if (sql.includes('set escalated_at = CURRENT_TIMESTAMP')) {
+    const stale = db.staleAlerts;
+    db.staleAlerts = [];
+    return rows(stale);
+  }
+  if (sql.includes('set escalated_at = null')) {
+    db.releasedAlerts.push(params[0]);
+    return rows([]);
   }
 
   // reminders
@@ -232,10 +254,18 @@ function fakeQuery(text, params = []) {
 // ------------------------------------------------------------ captured mail
 
 let outbox;
+let texts;
 let brevoStatus;
+let twilioStatus;
 
 /** One entry per delivered copy: { to, subject, tags }. */
 function captureBrevo(url, init) {
+  if (String(url).startsWith('https://api.twilio.com/')) {
+    if (twilioStatus !== 201) return Promise.resolve(new Response('{"message":"down"}', { status: twilioStatus }));
+    const form = new URLSearchParams(String(init.body));
+    texts.push({ to: form.get('To'), body: form.get('Body') });
+    return Promise.resolve(new Response('{"sid":"SM1"}', { status: 201 }));
+  }
   if (String(url) !== BREVO_URL) return realFetch(url, init);
   const body = JSON.parse(init.body);
   if (brevoStatus !== 201) {
@@ -284,14 +314,26 @@ after(async () => {
   config.brevo.apiKey = null;
   config.brevo.sender = null;
   config.alertEmails = [];
+  resetLegacyChannels();
   await new Promise((resolve) => server.close(resolve));
   await closePool();
 });
 
+function resetLegacyChannels() {
+  config.smtpUrl = null;
+  config.alertFrom = null;
+  config.twilio = { accountSid: null, authToken: null, from: null };
+  config.alertSmsTo = [];
+  config.alertEscalationMinutes = 30;
+}
+
 beforeEach(() => {
   reset();
   outbox = [];
+  texts = [];
   brevoStatus = 201;
+  twilioStatus = 201;
+  resetLegacyChannels();
   config.brevo.apiKey = 'xkeysib-test';
   config.brevo.sender = 'ritmaplesugaring@gmail.com';
   config.alertEmails = [];
@@ -612,5 +654,267 @@ describe('mail turned off', () => {
     assert.equal(test.status, 503);
     assert.equal(test.json.code, 'MAIL_DISABLED');
     assert.equal((await call(STUDENT, 'GET', '/profile')).json.Mail_Enabled, false);
+  });
+});
+
+// -------------------------------------------- deployments that predate Brevo
+
+function enableTwilio() {
+  config.twilio = { accountSid: 'AC123', authToken: 'secret', from: '+15855550000' };
+  config.alertSmsTo = ['+15855550100', '+15855550101'];
+}
+
+/** Just enough SMTP to accept one message and hand back what it sent. */
+async function startFakeSmtp() {
+  const messages = [];
+  const server = createTcpServer((socket) => {
+    let body = null;
+    socket.write('220 fake ESMTP\r\n');
+    socket.on('data', (chunk) => {
+      const text = chunk.toString();
+      if (body !== null) {
+        body += text;
+        if (body.includes('\r\n.\r\n')) {
+          messages.push(body);
+          body = null;
+          socket.write('250 queued\r\n');
+        }
+        return;
+      }
+      for (const line of text.split('\r\n').filter(Boolean)) {
+        const command = line.slice(0, 4).toUpperCase();
+        if (command === 'EHLO') socket.write('250 fake\r\n');
+        else if (command === 'DATA') {
+          socket.write('354 go\r\n');
+          body = '';
+        } else if (command === 'QUIT') {
+          socket.write('221 bye\r\n');
+          socket.end();
+        } else socket.write('250 ok\r\n');
+      }
+    });
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return { messages, port: server.address().port, close: () => new Promise((resolve) => server.close(resolve)) };
+}
+
+describe('critical alerts on deployments that predate Brevo', () => {
+  test('SMTP_URL still mails ALERT_EMAILS while Brevo is off', async () => {
+    const smtp = await startFakeSmtp();
+    try {
+      config.brevo.apiKey = null;
+      config.smtpUrl = `smtp://127.0.0.1:${smtp.port}`;
+      config.alertFrom = 'maple-alerts@rit.edu';
+      config.alertEmails = ['club@rit.edu'];
+
+      await alertsRepository.createAlert({ NodeID: 1, Alert_Type: 'Spoilage', severity: 'critical' });
+      for (let i = 0; i < 40 && !smtp.messages.length; i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+
+      assert.equal(smtp.messages.length, 1);
+      assert.match(smtp.messages[0], /To: club@rit\.edu/);
+      assert.match(smtp.messages[0], /Subject: Maple Sugaring alert: Spoilage at Alumni 1/);
+      assert.deepEqual(outbox, [], 'Brevo is off, so nothing goes through it');
+    } finally {
+      await smtp.close();
+    }
+  });
+
+  test('SMS goes to every ALERT_SMS_TO number, with Brevo on or off', async () => {
+    enableTwilio();
+    await alertsRepository.createAlert({ NodeID: 1, Alert_Type: 'Full Bucket', severity: 'warning', Description: 'A-1 is full.' });
+    await settle();
+    assert.deepEqual(texts.map((text) => text.to).sort(), ['+15855550100', '+15855550101']);
+    assert.match(texts[0].body, /Full Bucket at Alumni 1\. A-1 is full\./);
+    assert.equal(outbox.length, 1, 'the admin still gets the Brevo email');
+
+    texts = [];
+    outbox = [];
+    config.brevo.apiKey = null;
+    await alertsRepository.createAlert({ NodeID: 1, Alert_Type: 'Spoilage', severity: 'critical' });
+    await settle();
+    assert.equal(texts.length, 2);
+    assert.deepEqual(outbox, []);
+  });
+
+  test('routine warnings send no SMS', async () => {
+    enableTwilio();
+    await alertsRepository.createAlert({ NodeID: 1, Alert_Type: 'Low Battery', severity: 'warning' });
+    await settle();
+    assert.deepEqual(texts, []);
+  });
+
+  test('a Twilio outage does not stop the email', async () => {
+    enableTwilio();
+    twilioStatus = 500;
+    await notifyCriticalAlert({ AlertID: 1, NodeID: 1, Alert_Type: 'Spoilage', severity: 'critical' });
+    assert.deepEqual(sent(), [{ to: 'ada@rit.edu', subject: 'Maple Sugaring alert: Spoilage at Alumni 1' }]);
+  });
+});
+
+// ------------------------------------------------------ expired accounts
+
+/** The API-facing shape the notify functions receive. */
+function mappedSlot(slot) {
+  return {
+    Task: slot.task,
+    Stand: slot.stand,
+    Starts_At: slot.starts_at,
+    Ends_At: slot.ends_at,
+    Assigned_UserIDs: [...slot.assigned],
+  };
+}
+
+describe('expired accounts get no shift email', () => {
+  const expired = () => {
+    const user = userRow({
+      id: 5,
+      first_name: 'Ex',
+      last_name: 'Pired',
+      email: 'ex@g.rit.edu',
+      account_expiry: '2020-01-01T00:00:00.000Z',
+    });
+    db.users.set(user.id, user);
+    return user;
+  };
+
+  test('assignment, change, and reminder all skip them', async () => {
+    const user = expired();
+    const slot = addSlot({ assigned: [user.id, STUDENT.id] });
+    db.dueReminders = [
+      { slotId: slot.id, userId: user.id },
+      { slotId: slot.id, userId: STUDENT.id },
+    ];
+
+    const mapped = mappedSlot(slot);
+    await notifyShiftAssigned(user.id, mapped, { byAdmin: true });
+    await notifyShiftChanged(mapped);
+    assert.equal(await sendShiftReminders(), 1);
+
+    assert.deepEqual(
+      sent().map((mail) => mail.to),
+      ['sam@g.rit.edu', 'sam@g.rit.edu'],
+      'only the active student is mailed, for the change and the reminder',
+    );
+  });
+
+  test('an account that expires later today or in the future still gets mail', async () => {
+    const user = expired();
+    user.account_expiry = '2099-01-01T00:00:00.000Z';
+    await notifyShiftAssigned(user.id, mappedSlot(addSlot()));
+    assert.deepEqual(sent().map((mail) => mail.to), ['ex@g.rit.edu']);
+  });
+});
+
+// ------------------------------------------------- reminder promise honesty
+
+describe('the assignment email only promises a reminder it will send', () => {
+  const NOW = new Date('2026-10-05T12:00:00.000Z');
+  const at = (hoursAway) => ({
+    Task: 'Collect sap',
+    Stand: 'Alumni',
+    Starts_At: new Date(NOW.getTime() + hoursAway * 3_600_000).toISOString(),
+    Ends_At: new Date(NOW.getTime() + (hoursAway + 2) * 3_600_000).toISOString(),
+  });
+  const reminderWindow = () => config.shiftReminderHours;
+
+  test('a shift further out than the reminder window promises one', () => {
+    const { text } = shiftAssignedEmail(at(reminderWindow() + 1), { now: NOW });
+    assert.match(text, new RegExp(`reminder about ${reminderWindow()} hours before`));
+  });
+
+  test('a shift inside the window says no separate reminder is coming', () => {
+    for (const hours of [reminderWindow() - 1, 1]) {
+      const { text } = shiftAssignedEmail(at(hours), { now: NOW, byAdmin: true });
+      assert.doesNotMatch(text, /We will send a reminder/);
+      assert.match(text, /starts soon, so we will not send a separate reminder/);
+    }
+  });
+
+  test('a shift with no time yet promises nothing either way', () => {
+    const { text } = shiftAssignedEmail({ Task: 'Collect sap', Stand: 'Alumni', Starts_At: null }, { now: NOW });
+    assert.doesNotMatch(text, /reminder/i);
+  });
+});
+
+// ----------------------------------------------------- escalation (FR-025)
+
+describe('alert escalation after the window (FR-025)', () => {
+  const alertRow = (overrides = {}) => ({
+    id: 7,
+    node_id: 1,
+    alert_type: 'Spoilage',
+    severity: 'critical',
+    message: 'Sap is spoiling.',
+    is_resolved: false,
+    created_at: '2026-10-05T14:00:00.000Z',
+    ...overrides,
+  });
+
+  test('re-sends to admins who muted routine alerts, plus opted-in users and ALERT_EMAILS', async () => {
+    db.users.get(ADMIN.id).email_alerts = false; // muted, but still escalated to
+    db.users.get(OTHER_STUDENT.id).email_alerts = true;
+    config.alertEmails = ['club@rit.edu'];
+    db.staleAlerts = [alertRow()];
+
+    assert.equal(await escalateStaleAlerts(), 1);
+
+    const subject = 'ESCALATED: Maple Sugaring alert: Spoilage at Alumni 1';
+    assert.deepEqual(sent(), [
+      { to: 'ada@rit.edu', subject },
+      { to: 'club@rit.edu', subject },
+      { to: 'kim@g.rit.edu', subject },
+    ]);
+    assert.match(outbox[0].text, /Nobody has resolved this alert in 30 minutes/);
+    assert.ok(outbox.every((mail) => mail.tags.includes('escalated')));
+    assert.deepEqual(db.releasedAlerts, []);
+  });
+
+  test('an inactive or expired admin is not escalated to', async () => {
+    db.users.get(ADMIN.id).is_active = false;
+    db.staleAlerts = [alertRow()];
+    await escalateStaleAlerts();
+    assert.deepEqual(sent(), []);
+  });
+
+  test('texts the on-call numbers too, marked escalated', async () => {
+    enableTwilio();
+    db.staleAlerts = [alertRow()];
+    await escalateStaleAlerts();
+    assert.equal(texts.length, 2);
+    assert.match(texts[0].body, /^ESCALATED, unresolved 30 min: Maple Sugaring Spoilage at Alumni 1/);
+  });
+
+  test('nothing due means nothing sent', async () => {
+    assert.equal(await escalateStaleAlerts(), 0);
+    assert.deepEqual(sent(), []);
+  });
+
+  test('a failed send is released so the next pass retries it', async () => {
+    db.staleAlerts = [alertRow({ id: 9 })];
+    brevoStatus = 500;
+    assert.equal(await escalateStaleAlerts(), 0);
+    assert.deepEqual(db.releasedAlerts, [9]);
+  });
+
+  test('0 minutes turns escalation off without touching the table', async () => {
+    config.alertEscalationMinutes = 0;
+    db.staleAlerts = [alertRow()];
+    assert.equal(await escalateStaleAlerts(), 0);
+    assert.equal(db.staleAlerts.length, 1, 'nothing was claimed');
+    assert.deepEqual(sent(), []);
+  });
+
+  test('the claim query only takes unresolved, unescalated, old, notify-worthy alerts', async () => {
+    const queries = [];
+    const original = pool.query.mock.calls.length;
+    await escalateStaleAlerts();
+    for (const call of pool.query.mock.calls.slice(original)) queries.push(String(call.arguments[0]));
+    const claim = queries.find((sql) => sql.includes('escalated_at = CURRENT_TIMESTAMP'));
+    assert.match(claim, /is_resolved = false/);
+    assert.match(claim, /escalated_at is null/);
+    assert.match(claim, /make_interval\(mins => \$1\)/);
+    assert.match(claim, /severity = 'critical' or alert_type = any/);
   });
 });

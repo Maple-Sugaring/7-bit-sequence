@@ -4,9 +4,11 @@
  *
  * Every export is best-effort and never throws, matching calendarService: the
  * schedule is the source of truth and a Brevo outage must not block a signup.
- * Users who turned shift email off, or whose account is inactive, are skipped.
+ * Users who turned shift email off, or whose account is inactive or expired
+ * (so they can no longer sign in), are skipped.
  */
 
+import { isAccountUsable } from '../business/permissions.js';
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 import * as scheduleRepository from '../repositories/scheduleRepository.js';
@@ -22,7 +24,7 @@ import { isMailEnabled, sendEmail, sendQuietly } from './mailService.js';
 
 async function recipient(userId) {
   const user = await usersRepository.findUserById(userId);
-  if (!user || !user.Is_Active || !user.Email_Shifts) return null;
+  if (!user || !isAccountUsable(user) || !user.Email_Shifts) return null;
   return user;
 }
 
