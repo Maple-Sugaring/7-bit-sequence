@@ -152,6 +152,8 @@ export const gateways = [
     Gateway_Name: 'Alumni House Gateway',
     Status: 'Online',
     Last_Seen: ago(1),
+    Notes: 'Mounted in the Alumni House attic window. Powered by the building UPS.',
+    Location: { lat: STANDS[0].lat, lon: STANDS[0].lon },
   },
   {
     GatewayID: 2,
@@ -159,6 +161,8 @@ export const gateways = [
     Gateway_Name: 'Chabad House Gateway',
     Status: 'Online',
     Last_Seen: ago(2),
+    Notes: 'On the back porch under the eave. Wi-Fi from the house.',
+    Location: { lat: STANDS[1].lat, lon: STANDS[1].lon },
   },
   {
     GatewayID: 3,
@@ -166,6 +170,8 @@ export const gateways = [
     Gateway_Name: 'Red Barn Gateway',
     Status: 'Online',
     Last_Seen: ago(1),
+    Notes: 'Inside the barn loft, above the tool room.',
+    Location: { lat: STANDS[2].lat, lon: STANDS[2].lon },
   },
   {
     GatewayID: 4,
@@ -173,6 +179,7 @@ export const gateways = [
     Gateway_Name: 'Spare Pi (bench)',
     Status: 'Offline',
     Last_Seen: ago(3 * 1440),
+    Notes: 'Spare unit kept in the lab for testing and swaps.',
   },
 ];
 

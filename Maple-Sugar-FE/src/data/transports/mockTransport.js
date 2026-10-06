@@ -287,16 +287,6 @@ const routes = [
   { method: 'GET', match: /^\/nodes$/, handler: () => db.nodes },
   { method: 'GET', match: /^\/nodes\/board$/, handler: () => boardRows() },
   {
-    method: 'GET',
-    match: /^\/nodes\/board$/,
-    // The real board joins each node to its bucket and latest reading.
-    handler: () =>
-      db.nodes.map((node) => {
-        const bucket = db.buckets.find((item) => item.NodeID === node.NodeID);
-        return { ...node, BucketID: bucket?.BucketID ?? null, Barcode_ID: bucket?.Barcode_ID ?? null };
-      }),
-  },
-  {
     method: 'POST',
     match: /^\/nodes$/,
     handler: (_match, { body }) => {
