@@ -1,4 +1,5 @@
 import * as httpTransport from './transports/httpTransport';
+import * as hybridTransport from './transports/hybridTransport';
 import * as mockTransport from './transports/mockTransport';
 
 /**
@@ -8,7 +9,8 @@ import * as mockTransport from './transports/mockTransport';
  */
 
 const mode = import.meta.env.VITE_API_MODE ?? 'mock';
-const transport = mode === 'http' ? httpTransport : mockTransport;
+// `hybrid` keeps sensor data mock but sends calendar, email and schedule to the real API.
+const transport = { http: httpTransport, hybrid: hybridTransport }[mode] ?? mockTransport;
 
 export const apiMode = mode;
 

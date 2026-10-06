@@ -877,6 +877,22 @@ export async function request({ method = 'GET', path, query, body }) {
   });
 }
 
+/**
+ * Hybrid mode: mirror the real API's signed-in user into the mock so notes and
+ * readings are attributed to them. Offset ids keep it clear of the seeded roster.
+ */
+export function adoptUser(real) {
+  const UserID = 100000 + real.UserID;
+  const existing = db.users.find((candidate) => candidate.UserID === UserID);
+  const user = Object.assign(existing ?? {}, real, { UserID, Is_Active: true });
+  if (!existing) db.users.push(user);
+  session = { token: 'hybrid', user };
+}
+
+export function forgetUser() {
+  session = null;
+}
+
 export function setAuthToken() {
   // The mock transport tracks its session object directly; nothing to do.
 }
