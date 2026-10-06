@@ -37,8 +37,11 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
+  const [signedOut, setSignedOut] = useState(false);
+
   const signIn = useCallback(async (credentials) => {
     const next = await authService.signIn(credentials);
+    setSignedOut(false);
     setSession(next);
     if (apiMode === 'mock') {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
@@ -48,6 +51,7 @@ export function AuthProvider({ children }) {
 
   const signOut = useCallback(async () => {
     await authService.signOut().catch(() => {});
+    setSignedOut(true);
     setSession(null);
     window.localStorage.removeItem(STORAGE_KEY);
   }, []);
