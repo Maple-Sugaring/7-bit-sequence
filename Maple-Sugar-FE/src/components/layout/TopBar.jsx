@@ -46,9 +46,6 @@ export function TopBar() {
         display: "grid",
         gridTemplateColumns: "auto 1fr auto",
         alignItems: "center",
-        display: 'grid',
-        gridTemplateColumns: 'auto 1fr auto auto',
-        alignItems: 'center',
         gap: 1,
         px: { xs: 1.5, md: 3 },
         py: 1,
@@ -57,6 +54,12 @@ export function TopBar() {
         borderBottom: "4px solid #F76902",
       }}
     >
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+      {compact ? (
+        <IconButton aria-label="Open menu" onClick={() => setMenuOpen(true)} sx={{ color: '#fff' }}>
+          <MenuIcon />
+        </IconButton>
+      ) : null}
       <Typography
         component="button"
         onClick={() => navigate("/dashboard")}
@@ -74,48 +77,6 @@ export function TopBar() {
       >
         Maple Sugaring
       </Typography>
-      <MainNav />
-      {canViewAlerts ? (
-        <IconButton
-          aria-label="Notifications"
-          aria-current={onAlerts ? "page" : undefined}
-          onClick={() => navigate("/notifications")}
-          sx={{
-            color: "#fff",
-            bgcolor: onAlerts ? "#F76902" : "transparent",
-            "&hover": {
-              bgcolor: onAlerts ? "#C75300" : "rgba(255,255,255,0.08",
-            },
-          }}
-        >
-          <NotificationsIcon />
-        </IconButton>
-      ) : (
-        <Box />
-      )}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-        {compact ? (
-          <IconButton aria-label="Open menu" onClick={() => setMenuOpen(true)} sx={{ color: '#fff' }}>
-            <MenuIcon />
-          </IconButton>
-        ) : null}
-        <Typography
-          component="button"
-          onClick={() => navigate('/dashboard')}
-          sx={{
-            border: 0,
-            bgcolor: 'transparent',
-            color: '#fff',
-            font: 'inherit',
-            fontWeight: 650,
-            fontSize: 18,
-            letterSpacing: '-0.02em',
-            cursor: 'pointer',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          Maple Sugaring
-        </Typography>
       </Box>
       {compact ? null : <MainNav />}
       {compact ? <Box /> : null}
