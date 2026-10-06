@@ -11,6 +11,7 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import dayjs from 'dayjs';
 import { LIVE_FROM, LIVE_TO, TIME_UNITS, dailyWeightRows, presetRange } from '../business/liveWeight';
+import { exportFileName, exportRows, buildPdf, toCsv } from '../business/weightExport';
 import { Capability } from '../business/permissions';
 import { ChartCard } from '../components/charts/ChartCard';
 import { WeightChart } from '../components/charts/SeriesChart';
@@ -19,30 +20,18 @@ import { EmptyBlock } from '../components/common/StateBlock';
 import { useAuth } from '../context/auth';
 import { useBush, useReadings } from '../services/hooks';
 
-function exportWeights(readings, from, to) {
-  const lines = ['date,node,tree,stand,weight_lb,sugar_percent'];
-  for (const row of readings) {
-    const date = String(row.Recorded_At).slice(0, 10);
-    if (from && date < from) continue;
-    if (to && date > to) continue;
-    lines.push(
-      [
-        date,
-        row.NodeID,
-        `"${row.nodeName ?? ''}"`,
-        `"${row.stand ?? ''}"`,
-        row.Weight ?? '',
-        row.Sugar_Percent ?? '',
-      ].join(','),
-    );
-  }
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+function download(blob, name) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `sugar-woods-${from ?? 'start'}-to-${to ?? 'end'}.csv`;
+  link.download = name;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function exportCsv(readings, from, to) {
+  const csv = toCsv(exportRows(readings, from, to));
+  download(new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8' }), exportFileName(from, to, 'csv'));
 }
 
 const PRESETS = [
@@ -60,7 +49,7 @@ function nodeLabel(node) {
 export function SapDataPage() {
   const navigate = useNavigate();
   const phone = useMediaQuery('(max-width:600px)');
-  const { can } = useAuth();
+  const { can, user } = useAuth();
   const canDeploy = can(Capability.DEPLOY_NODES);
   const bush = useBush();
   const initial = presetRange('7d');
@@ -69,6 +58,7 @@ export function SapDataPage() {
   const [preset, setPreset] = useState('7d');
   const [unit, setUnit] = useState('day');
   const [picked, setPicked] = useState([]);
+  const [pdfState, setPdfState] = useState({ busy: false, error: '' });
   const readings = useReadings({ from: LIVE_FROM, to: LIVE_TO });
 
   const nodes = useMemo(() => {
@@ -128,7 +118,7 @@ export function SapDataPage() {
     <>
       <PageHeader
         title="Sugar Woods"
-        subtitle="Chart gallons in each bucket over time, then export a CSV when you need it."
+        subtitle="Chart gallons in each bucket over time, then export a CSV or PDF when you need it."
         actions={
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center', justifyContent: 'center', width: '100%' }}>
             {PRESETS.map(([id, label]) => (
@@ -177,14 +167,45 @@ export function SapDataPage() {
                 variant="outlined"
                 sx={{ flex: { xs: '1 1 100%', sm: '0 0 auto' } }}
                 disabled={weights.ranged.length === 0}
-                onClick={() => exportWeights(weights.ranged, from?.format('YYYY-MM-DD'), to?.format('YYYY-MM-DD'))}
+                onClick={() => exportCsv(weights.ranged, from?.format('YYYY-MM-DD'), to?.format('YYYY-MM-DD'))}
               >
                 Export CSV
+              </Button>
+            ) : null}
+            {can(Capability.EXPORT_DATA) ? (
+              <Button
+                variant="outlined"
+                sx={{ flex: { xs: '1 1 100%', sm: '0 0 auto' } }}
+                disabled={weights.ranged.length === 0 || pdfState.busy}
+                onClick={async () => {
+                  const start = from?.format('YYYY-MM-DD');
+                  const end = to?.format('YYYY-MM-DD');
+                  setPdfState({ busy: true, error: '' });
+                  try {
+                    const doc = await buildPdf(exportRows(weights.ranged, start, end), {
+                      from: start,
+                      to: end,
+                      user: user?.fullName ?? user?.email,
+                    });
+                    download(doc.output('blob'), exportFileName(start, end, 'pdf'));
+                    setPdfState({ busy: false, error: '' });
+                  } catch {
+                    setPdfState({ busy: false, error: 'Could not create the PDF. Try again.' });
+                  }
+                }}
+              >
+                {pdfState.busy ? 'Preparing PDF…' : 'Export PDF'}
               </Button>
             ) : null}
           </Box>
         }
       />
+
+      {pdfState.error ? (
+        <Typography color="error" role="alert" sx={{ mb: 1 }}>
+          {pdfState.error}
+        </Typography>
+      ) : null}
 
       {nodes.length === 0 && !loading ? (
         <EmptyBlock
