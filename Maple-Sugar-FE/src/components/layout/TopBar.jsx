@@ -9,10 +9,11 @@ import MenuIcon from '@mui/icons-material/Menu';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import Tooltip from '@mui/material/Tooltip';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/auth';
 import { useOpenAlertCount } from '../../services/hooks';
 import { MainNav } from './MainNav';
+import { useNavigate } from "react-router-dom";
+
 
 export function TopBar() {
   const navigate = useNavigate();
@@ -42,40 +43,40 @@ export function TopBar() {
     <Box
       component="header"
       sx={{
-        display: 'grid',
-        gridTemplateColumns: 'auto 1fr auto auto',
-        alignItems: 'center',
+        display: "grid",
+        gridTemplateColumns: "auto 1fr auto",
+        alignItems: "center",
         gap: 1,
         px: { xs: 1.5, md: 3 },
         py: 1,
-        bgcolor: '#000',
-        color: '#fff',
-        borderBottom: '4px solid #F76902',
+        bgcolor: "#000",
+        color: "#fff",
+        borderBottom: "4px solid #F76902",
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-        {compact ? (
-          <IconButton aria-label="Open menu" onClick={() => setMenuOpen(true)} sx={{ color: '#fff' }}>
-            <MenuIcon />
-          </IconButton>
-        ) : null}
-        <Typography
-          component="button"
-          onClick={() => navigate('/dashboard')}
-          sx={{
-            border: 0,
-            bgcolor: 'transparent',
-            color: '#fff',
-            font: 'inherit',
-            fontWeight: 650,
-            fontSize: 18,
-            letterSpacing: '-0.02em',
-            cursor: 'pointer',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          Maple Sugaring
-        </Typography>
+      {compact ? (
+        <IconButton aria-label="Open menu" onClick={() => setMenuOpen(true)} sx={{ color: '#fff' }}>
+          <MenuIcon />
+        </IconButton>
+      ) : null}
+      <Typography
+        component="button"
+        onClick={() => navigate("/dashboard")}
+        sx={{
+          border: 0,
+          bgcolor: "transparent",
+          color: "#fff",
+          font: "inherit",
+          fontWeight: 650,
+          fontSize: 18,
+          letterSpacing: "-0.02em",
+          cursor: "pointer",
+          whiteSpace: "nowrap",
+        }}
+      >
+        Maple Sugaring
+      </Typography>
       </Box>
       {compact ? null : <MainNav />}
       {compact ? <Box /> : null}
