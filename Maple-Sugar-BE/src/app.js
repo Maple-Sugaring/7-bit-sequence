@@ -31,6 +31,7 @@ import { metricsRouter } from './routes/metrics.js';
 import { ingestRouter } from './routes/ingest.js';
 import { alertsRouter } from './routes/alerts.js';
 import { collectionLogsRouter } from './routes/collectionLogs.js';
+import { collectionsRouter } from './routes/collections.js';
 import { usersRouter } from './routes/users.js';
 import { scheduleRouter } from './routes/schedule.js';
 import { weatherRouter } from './routes/weather.js';
@@ -105,6 +106,7 @@ export function createApp() {
   app.use('/ingest', ingestRouter);
   app.use('/alerts', alertsRouter);
   app.use('/collection-logs', collectionLogsRouter);
+  app.use('/collections', collectionsRouter);
   app.use('/users', usersRouter);
   app.use('/schedule', scheduleRouter);
   app.use('/weather', weatherRouter);

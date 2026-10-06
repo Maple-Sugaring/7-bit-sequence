@@ -14,7 +14,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import dayjs from 'dayjs';
-import { estimatedSyrupGallons } from '../business/sugarContent';
+import { basisLabel, bushAverageSugar, syrupEstimate } from '../business/sugarContent';
 import { Capability } from '../business/permissions';
 import { LIVE_FROM, LIVE_TO, TIME_UNITS, bucketGallons, bucketPercent, dailyWeightRows } from '../business/liveWeight';
 import { ChartCard } from '../components/charts/ChartCard';
@@ -82,6 +82,11 @@ export function NodePage() {
   const status = STATUS[node?.Status_Code] ?? STATUS[1];
   const gallons = node ? bucketGallons(node.Weight, node.Tare_Weight ?? 0) : null;
   const fill = node ? bucketPercent(node.Weight, node.Tare_Weight ?? 0) : null;
+  const estimate = syrupEstimate({
+    sapGallons: gallons,
+    tree: node?.Sugar_Percent,
+    bush: bushAverageSugar(bush.data),
+  });
   const weights = dailyWeightRows(history.data ?? [], { nodeIds: [Number(nodeId)], unit });
   const intervalMinutes = node?.Report_Interval_Seconds == null
     ? 15
@@ -152,10 +157,7 @@ export function NodePage() {
                   : gallons > 10
                     ? `${gallons.toFixed(1)} gal · past 10 gal because the sap froze`
                     : `${gallons.toFixed(1)} of 10 gal`}
-                {gallons == null
-                  ? ''
-                  : ` · ${estimatedSyrupGallons(gallons, node?.Sugar_Percent).toFixed(2)} gal syrup`}
-                {gallons == null ? '' : node?.Sugar_Percent != null ? ` · ${node.Sugar_Percent}% sugar` : ' · 40:1'}
+                {estimate ? ` · about ${estimate.syrupGallons.toFixed(2)} gal syrup, using ${basisLabel(estimate)}` : ''}
                 {node?.Recorded_At ? ` · ${dateTime(node.Recorded_At)}` : ''}
               </Typography>
             </CardContent>

@@ -21,7 +21,10 @@ const isoDateTime = z.string().refine((value) => !Number.isNaN(Date.parse(value)
   message: 'Must be a valid date and time.',
 });
 
-const nullableNumber = z.union([z.coerce.number(), z.null()]).optional();
+// null is tried first. z.coerce.number() runs Number(null), which is 0, so with
+// the order reversed an explicit null became 0: a blank sugar reading turned
+// into "0% sugar" and was rejected, and an unknown battery turned into 0%.
+const nullableNumber = z.union([z.null(), z.coerce.number()]).optional();
 
 export const metricsQuery = z.object({
   nodeId: z.coerce.number().int().positive().optional(),
@@ -136,6 +139,22 @@ export const createCollectionLogBody = z.object({
   Volume_Collected: z.coerce.number().positive(),
   Collected_At: isoDateTime.optional(),
   Quality_Notes: z.string().max(2000).optional().default(''),
+});
+
+/**
+ * One collection from the round form. Weight is gross pounds off the scale.
+ * Sugar_Percent is only sent when the student tested the sap; null means not
+ * tested. Client_Ref is made on the phone so a retried upload is recognized.
+ */
+export const createCollectionBody = z.object({
+  NodeID: z.coerce.number().int().positive({ message: 'Select the tree you collected from.' }),
+  Weight: nullableNumber,
+  Sugar_Percent: nullableNumber,
+  Ice_Present: z.boolean().optional().default(false),
+  Collected_At: isoDateTime.optional(),
+  Notes: z.string().trim().max(8000).optional().default(''),
+  Round_Label: z.string().trim().max(100).nullish(),
+  Client_Ref: z.uuid().nullish(),
 });
 
 export const inviteUserBody = z.object({

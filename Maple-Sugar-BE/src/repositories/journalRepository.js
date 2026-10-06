@@ -1,4 +1,4 @@
-import { queryAll, queryOne } from '../db/pool.js';
+import { queryAll, queryOneOn } from '../db/pool.js';
 
 function iso(value) {
   if (value == null) return null;
@@ -25,12 +25,14 @@ function mapEntry(row) {
     Weight_Lb: num(row.weight_lb),
     Sugar_Percent: num(row.sugar_percent),
     Ice_Present: Boolean(row.ice_present),
+    Round_Label: row.round_label ?? null,
   };
 }
 
 const SELECT = `
   select j.id, j.user_id, j.node_id, j.bucket_id, j.collected_at, j.title,
          j.process_notes, j.weight_lb, j.sugar_percent, j.ice_present,
+         j.round_label,
          u.full_name as author_name,
          n.node_name
     from collection_journal j
@@ -49,12 +51,20 @@ export async function listEntries(userId) {
   return rows.map(mapEntry);
 }
 
-export async function createEntry(entry) {
-  const row = await queryOne(
+/** The entry a phone already uploaded under this reference, if any. */
+export async function findByClientRef(clientRef, client = null) {
+  const row = await queryOneOn(client, `${SELECT} where j.client_ref = $1`, [clientRef]);
+  return row ? mapEntry(row) : null;
+}
+
+/** `client` is a transaction client when the entry is one write among several. */
+export async function createEntry(entry, client = null) {
+  const row = await queryOneOn(
+    client,
     `insert into collection_journal
        (user_id, node_id, bucket_id, collected_at, title, process_notes,
-        weight_lb, sugar_percent, ice_present)
-     values ($1, $2, $3, coalesce($4, CURRENT_TIMESTAMP), $5, $6, $7, $8, $9)
+        weight_lb, sugar_percent, ice_present, round_label, client_ref)
+     values ($1, $2, $3, coalesce($4, CURRENT_TIMESTAMP), $5, $6, $7, $8, $9, $10, $11)
      returning id`,
     [
       entry.UserID,
@@ -66,8 +76,10 @@ export async function createEntry(entry) {
       entry.Weight ?? null,
       entry.Sugar_Percent ?? null,
       Boolean(entry.Ice_Present),
+      entry.Round_Label ?? null,
+      entry.Client_Ref ?? null,
     ],
   );
-  const saved = await queryOne(`${SELECT} where j.id = $1`, [row.id]);
+  const saved = await queryOneOn(client, `${SELECT} where j.id = $1`, [row.id]);
   return mapEntry(saved);
 }

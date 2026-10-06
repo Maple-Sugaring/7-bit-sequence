@@ -1,6 +1,8 @@
 import dayjs from 'dayjs';
 import { ApiError } from '../ApiError';
 import { Capability, ROLE_LABELS, can, roleFromId } from '../../business/permissions';
+import { sapGallonsFor } from '../../business/collectionRound';
+import { validateCollectionEntry } from '../../business/validation';
 import * as seed from '../fixtures/seed';
 
 /**
@@ -139,6 +141,15 @@ function withAssignees(slot) {
  * the tree page, Sugar Woods, Collection and Schedule Admin all read it.
  */
 function boardRows() {
+  const season = seasonOf(dayjs());
+  // Sensor rows carry no sugar, so a tree's sugar is the last one a student
+  // measured this sap season, not the newest row's value.
+  const tested = new Map();
+  for (const row of db.metrics) {
+    if (row.Sugar_Percent == null || seasonOf(row.Recorded_At) !== season) continue;
+    const known = tested.get(row.NodeID);
+    if (!known || Date.parse(row.Recorded_At) > Date.parse(known.Recorded_At)) tested.set(row.NodeID, row);
+  }
   const latest = new Map();
   for (const row of db.metrics) {
     const known = latest.get(row.NodeID);
@@ -171,7 +182,8 @@ function boardRows() {
         Bucket_Status: bucket?.Status ?? null,
         Weight: reading?.Weight ?? null,
         Temperature: reading?.Temperature ?? null,
-        Sugar_Percent: reading?.Sugar_Percent ?? null,
+        Sugar_Percent: tested.get(node.NodeID)?.Sugar_Percent ?? null,
+        Sugar_Measured_At: tested.get(node.NodeID)?.Recorded_At ?? null,
         Sap_Flow_Rate_Lph: reading?.Sap_Flow_Rate_Lph ?? null,
         Ice_Present: Boolean(reading?.Ice_Present),
         Recorded_At: reading?.Recorded_At ?? null,
@@ -554,6 +566,89 @@ const routes = [
       };
       db.collectionLogs.push(row);
       return row;
+    },
+  },
+
+  // ---- Collections ------------------------------------------------------
+  // Mirrors POST /collections: one request writes the reading, the collection
+  // log, and the journal entry, and a repeat of a Client_Ref returns the first.
+  {
+    method: 'POST',
+    match: /^\/collections$/,
+    handler: (unused, { body }) => {
+      const user = currentUser();
+      if (!can(roleFromId(user.RoleID), Capability.RECORD_DATA)) {
+        throw new ApiError('Your role does not allow that.', { status: 403, code: 'FORBIDDEN' });
+      }
+
+      const node = db.nodes.find((candidate) => candidate.NodeID === Number(body?.NodeID));
+      if (!node) notFound('Tree');
+
+      const existing = body.Client_Ref && db.journal.find((entry) => entry.Client_Ref === body.Client_Ref);
+      if (existing) return { Entry: existing, Log: null, Duplicate: true };
+
+      const bucket = db.buckets.find((candidate) => candidate.NodeID === node.NodeID) ?? null;
+      const { errors, isValid } = validateCollectionEntry(
+        { ...body, Recorded_At: body.Collected_At },
+        { tareWeight: bucket?.Tare_Weight ?? null },
+      );
+      if (!isValid) invalid(Object.values(errors)[0], errors);
+
+      const collectedAt = body.Collected_At ?? dayjs().toISOString();
+      const weight = Number(body.Weight);
+      const sugar = body.Sugar_Percent == null ? null : Number(body.Sugar_Percent);
+      const notes = body.Notes ?? '';
+
+      db.metrics.push({
+        MetricID: nextId.metric++,
+        NodeID: node.NodeID,
+        BucketID: bucket?.BucketID ?? null,
+        Recorded_By_UserID: user.UserID,
+        Recorded_At: collectedAt,
+        Weight: weight,
+        Temperature: null,
+        Sugar_Percent: sugar,
+        Weather_Conditions: null,
+        Ice_Present: Boolean(body.Ice_Present),
+      });
+
+      const log = {
+        LogID: nextId.log++,
+        BucketID: bucket?.BucketID ?? null,
+        UserID: user.UserID,
+        NodeID: node.NodeID,
+        Collected_At: collectedAt,
+        Volume_Collected: Math.round(sapGallonsFor(weight, bucket?.Tare_Weight ?? 0) * 100) / 100,
+        Quality_Notes: notes,
+      };
+      db.collectionLogs.push(log);
+
+      const entry = {
+        EntryID: nextId.journal++,
+        UserID: user.UserID,
+        Author: authorName(user),
+        NodeID: node.NodeID,
+        Node_Name: node.Node_Name,
+        BucketID: bucket?.BucketID ?? null,
+        Collected_At: collectedAt,
+        Title: `Collected ${node.Node_Name}`,
+        Process_Notes: notes,
+        Weight_Lb: weight,
+        Sugar_Percent: sugar,
+        Ice_Present: Boolean(body.Ice_Present),
+        Round_Label: body.Round_Label ?? null,
+        Client_Ref: body.Client_Ref ?? null,
+      };
+      db.journal.push(entry);
+
+      // Emptying the bucket closes its full-bucket alerts, as the real API does.
+      for (const alert of db.alerts) {
+        if (alert.NodeID === node.NodeID && ['Full Bucket', 'Collection Needed'].includes(alert.Alert_Type)) {
+          alert.Is_Resolved = true;
+        }
+      }
+
+      return { Entry: entry, Log: log, Duplicate: false };
     },
   },
 
