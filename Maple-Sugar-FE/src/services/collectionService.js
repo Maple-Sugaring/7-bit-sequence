@@ -1,4 +1,5 @@
 import * as collectionsRepository from '../data/repositories/collectionsRepository';
+import * as journalRepository from '../data/repositories/journalRepository';
 import { newClientRef } from '../data/clientRef';
 import { enqueueCollection, flushCollectionQueue, queuedCollections } from '../data/offlineQueue';
 import { loadRound, saveRound } from '../data/roundStore';
@@ -30,6 +31,9 @@ export function toRequest(entry) {
 }
 
 export function recordCollection(entry) {
+  // The former form allowed a note without a weight. Its offline entries must
+  // still be uploaded after the new endpoint starts requiring a weight.
+  if (entry.Title && entry.Weight == null) return journalRepository.createEntry(entry);
   return collectionsRepository.createCollection(toRequest(entry));
 }
 

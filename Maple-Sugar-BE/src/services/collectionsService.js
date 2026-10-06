@@ -9,6 +9,7 @@
  */
 
 import { invalid, notFound } from '../lib/ApiError.js';
+import { logger } from '../lib/logger.js';
 import { COLLECTION_ALERT_TYPES, collectionTitle, collectionVolumeGallons, validateCollection } from '../business/collections.js';
 import { transaction } from '../db/pool.js';
 import { cacheNamespaces } from '../cache/cacheKeys.js';
@@ -99,6 +100,9 @@ export async function recordCollection(body, user) {
         client,
       );
 
+      // The bucket and its alert must change in the same transaction.
+      await alertsRepository.resolveOpenByTypes(node.NodeID, COLLECTION_ALERT_TYPES, client);
+
       return { entry, log, duplicate: false };
     });
   } catch (error) {
@@ -110,16 +114,16 @@ export async function recordCollection(body, user) {
   }
 
   if (!saved.duplicate) {
-    // Nothing clears a full-bucket alert when the bucket is emptied by hand.
-    // Left open, it would escalate to every admin about a bucket that is empty.
-    await alertsRepository.resolveOpenByTypes(node.NodeID, COLLECTION_ALERT_TYPES);
     await invalidateNamespaces([
       cacheNamespaces.METRICS,
       cacheNamespaces.COLLECTION_LOGS,
       cacheNamespaces.DASHBOARD,
       cacheNamespaces.ALERTS,
       cacheNamespaces.NODES,
-    ]);
+    ]).catch((error) => {
+      // Cache failure cannot turn a committed collection into a failed request.
+      logger.error({ err: error, nodeId: node.NodeID }, 'Collection cache invalidation failed');
+    });
   }
 
   return { Entry: saved.entry, Log: saved.log, Duplicate: saved.duplicate };

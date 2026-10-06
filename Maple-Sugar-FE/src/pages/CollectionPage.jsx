@@ -83,14 +83,14 @@ export function CollectionPage() {
         .then(async (result) => {
           if (cancelled) return;
           setQueued(result.remaining);
-          if (result.remaining === 0) {
+          if (result.remaining === 0 && result.rejected.length === 0) {
             setRound((prev) => ({ ...prev, entries: prev.entries.map((entry) => ({ ...entry, queued: false })) }));
           }
           if (result.rejected.length) {
             const count = result.rejected.length;
             setNotice({
               severity: 'warning',
-              text: `${count === 1 ? '1 entry saved on this phone was' : `${count} entries saved on this phone were`} refused by the server and removed: ${result.rejected[0].message}`,
+              text: `${count === 1 ? '1 entry saved on this phone was' : `${count} entries saved on this phone were`} refused by the server and kept on this phone for recovery: ${result.rejected[0].message}`,
             });
           } else if (result.flushed) {
             setNotice({

@@ -9,6 +9,7 @@
  */
 
 const KEY = 'maple-collection-queue';
+const REJECTED_KEY = 'maple-collection-rejected';
 
 function storageOr(storage) {
   if (storage) return storage;
@@ -16,25 +17,30 @@ function storageOr(storage) {
   return localStorage;
 }
 
-function read(storage) {
+function read(storage, key = KEY) {
   const store = storageOr(storage);
   if (!store) return [];
   try {
-    const parsed = JSON.parse(store.getItem(KEY) ?? '[]');
+    const parsed = JSON.parse(store.getItem(key) ?? '[]');
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
 }
 
-function write(storage, items) {
+function write(storage, items, key = KEY) {
   const store = storageOr(storage);
   if (!store) return;
-  store.setItem(KEY, JSON.stringify(items));
+  store.setItem(key, JSON.stringify(items));
 }
 
 export function queuedCollections(storage) {
   return read(storage);
+}
+
+/** Refused uploads stay on the phone so their original notes can be recovered. */
+export function rejectedCollections(storage) {
+  return read(storage, REJECTED_KEY);
 }
 
 export function enqueueCollection(entry, storage) {
@@ -53,14 +59,13 @@ function isRejection(error) {
  * Posts each queued entry. Stops at the first network failure and leaves that
  * entry, and everything after it, on the phone.
  *
- * An entry the server refuses as invalid will be refused every time, so it is
- * taken off the queue and returned in `rejected` instead of waiting forever and
- * counting as an entry that is about to upload.
+ * Rejected entries are stored separately, without automatic retries, so an
+ * upgrade or validation change cannot erase the only copy of a field note.
  */
 export async function flushCollectionQueue(send, storage) {
   const items = read(storage);
   const remaining = [];
-  const rejected = [];
+  const rejected = rejectedCollections(storage);
   let flushed = 0;
   let stopped = false;
 
@@ -83,5 +88,6 @@ export async function flushCollectionQueue(send, storage) {
   }
 
   write(storage, remaining);
+  write(storage, rejected, REJECTED_KEY);
   return { flushed, remaining: remaining.length, rejected };
 }

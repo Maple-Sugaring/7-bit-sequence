@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { enqueueCollection, flushCollectionQueue, queuedCollections } from '../src/data/offlineQueue';
+import { enqueueCollection, flushCollectionQueue, queuedCollections, rejectedCollections } from '../src/data/offlineQueue';
 
 function memory() {
   const data = new Map();
@@ -53,6 +53,12 @@ describe('collection offline queue', () => {
     expect(result.remaining).toBe(0);
     expect(result.rejected).toEqual([{ entry: { NodeID: 1, Sugar_Percent: 2.1 }, message: 'Enter the sap weight.' }]);
     expect(queuedCollections(store)).toHaveLength(0);
+    expect(rejectedCollections(store)).toEqual(result.rejected);
+
+    const again = await flushCollectionQueue(async () => {
+      throw new Error('Rejected entries must not retry automatically.');
+    }, store);
+    expect(again.rejected).toEqual(result.rejected);
   });
 
   test('keeps an entry through a server error that a retry could fix', async () => {

@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { after, before, describe, mock, test } from 'node:test';
 
 import '../env.js';
-import { signSessionToken } from '../../src/auth/jwt.js';
+import { signAccessToken } from '../../src/auth/jwt.js';
 import {
   collectionTitle,
   collectionVolumeGallons,
@@ -104,6 +104,7 @@ function reset() {
     journal: [],
     resolved: [],
     failJournal: false,
+    failAlerts: false,
   };
   transactionLog = [];
 }
@@ -221,6 +222,7 @@ function handle(text, params = []) {
   }
 
   if (sql.includes('update alerts')) {
+    if (db.failAlerts) throw new Error('alert update failed');
     db.resolved.push({ nodeId: params[0], types: params[1] });
     return { rows: [], rowCount: 1 };
   }
@@ -236,6 +238,7 @@ mock.method(pool, 'connect', async () => {
     metrics: [...db.metrics],
     logs: [...db.logs],
     journal: [...db.journal],
+    resolved: [...db.resolved],
   };
   return {
     query: async (text, params) => {
@@ -244,6 +247,7 @@ mock.method(pool, 'connect', async () => {
         db.metrics = snapshot.metrics;
         db.logs = snapshot.logs;
         db.journal = snapshot.journal;
+        db.resolved = snapshot.resolved;
       }
       return handle(text, params);
     },
@@ -270,7 +274,7 @@ after(async () => {
 async function post(body, { userId = STUDENT_ID, roleId = 2, signedIn = true } = {}) {
   const headers = { accept: 'application/json', 'content-type': 'application/json' };
   if (signedIn) {
-    headers.authorization = `Bearer ${signSessionToken({ UserID: userId, Email: 'sam@g.rit.edu', RoleID: roleId })}`;
+    headers.authorization = `Bearer ${signAccessToken({ UserID: userId, Email: 'sam@g.rit.edu', RoleID: roleId })}`;
   }
   const response = await fetch(`${baseUrl}/collections`, {
     method: 'POST',
@@ -362,6 +366,23 @@ describe('POST /collections', () => {
     assert.equal(db.logs.length, 0);
     assert.equal(db.journal.length, 0);
     assert.equal(db.resolved.length, 0);
+  });
+
+  test('rolls back the collection when its alert cannot be cleared', async () => {
+    reset();
+    db.failAlerts = true;
+    const response = await post({ ...untested, Client_Ref: REF });
+
+    assert.equal(response.status, 500);
+    assert.deepEqual(transactionLog, ['BEGIN', 'ROLLBACK']);
+    assert.equal(db.metrics.length, 0);
+    assert.equal(db.logs.length, 0);
+    assert.equal(db.journal.length, 0);
+
+    db.failAlerts = false;
+    const retry = await post({ ...untested, Client_Ref: REF });
+    assert.equal(retry.status, 201);
+    assert.equal(db.resolved.length, 1);
   });
 
   test('rejects a missing weight with a field-keyed error and writes nothing', async () => {
