@@ -15,7 +15,9 @@ import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import { DataGrid } from '@mui/x-data-grid';
+import { ColumnCards } from '../components/common/ColumnCards';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import dayjs from 'dayjs';
 import { PageHeader } from '../components/common/PageHeader';
@@ -125,6 +127,7 @@ export function ScheduleAdminPage() {
     }
   };
 
+  const phone = useMediaQuery('(max-width:600px)');
   const columns = [
     { field: 'Task', headerName: 'Task', width: 160 },
     { field: 'Stand', headerName: 'Site', width: 180 },
@@ -357,7 +360,7 @@ export function ScheduleAdminPage() {
         </Alert>
       ) : null}
 
-      <Card sx={{ height: 560 }}>
+      <Card sx={{ height: phone ? 'auto' : 560 }}>
         <Tabs
           value={tab}
           onChange={(_event, value) => setTab(value)}
@@ -380,8 +383,17 @@ export function ScheduleAdminPage() {
           role="tabpanel"
           id={tab === 'completed' ? 'schedule-admin-panel-completed' : 'schedule-admin-panel-active'}
           aria-labelledby={tab === 'completed' ? 'schedule-admin-tab-completed' : 'schedule-admin-tab-active'}
-          sx={{ height: 'calc(100% - 49px)' }}
+          sx={{ height: phone ? 'auto' : 'calc(100% - 49px)' }}
         >
+          {phone ? (
+            <ColumnCards
+              rows={visibleSlots}
+              columns={columns}
+              getRowId={(row) => row.SlotID}
+              loading={loading}
+              emptyLabel={tab === 'completed' ? 'No completed shifts yet.' : 'No active shifts.'}
+            />
+          ) : (
           <DataGrid
             rows={visibleSlots}
             columns={columns}
@@ -395,6 +407,7 @@ export function ScheduleAdminPage() {
             }}
             sx={{ border: 0, height: '100%', '& .MuiDataGrid-cell': { py: 1 } }}
           />
+          )}
         </Box>
       </Card>
     </>

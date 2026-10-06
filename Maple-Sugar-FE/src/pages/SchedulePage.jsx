@@ -4,10 +4,14 @@ import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/Grid';
+import MenuItem from '@mui/material/MenuItem';
+import Switch from '@mui/material/Switch';
+import TextField from '@mui/material/TextField';
+import ToggleButton from '@mui/material/ToggleButton';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Stack from '@mui/material/Stack';
-import Tab from '@mui/material/Tab';
-import Tabs from '@mui/material/Tabs';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -125,6 +129,16 @@ function SlotCard({ slot, canClaim, onClaim, onRelease, onPickTime, pending }) {
   );
 }
 
+function matchesShow(slot, show) {
+  if (show === 'completed') return slot.Is_Complete;
+  if (slot.Is_Complete) return false;
+  if (show === 'mine') return slot.isMine;
+  if (show === 'open') return !slot.isFull && !slot.isPast && !slot.isMine;
+  return true;
+}
+
+const SHOW_IDS = ['all', 'mine', 'open', 'completed'];
+
 export function SchedulePage() {
   const { user, can } = useAuth();
   const canClaim = can(Capability.CLAIM_SHIFT);
@@ -134,7 +148,6 @@ export function SchedulePage() {
   const { data, loading, error, refresh } = useSchedule({ userId: user?.id });
 
   const [picking, setPicking] = useState(null);
-  const [tab, setTab] = useState('active');
   const claim = useAction(async (slotId) => {
     await claimShift(slotId, user.id);
     await refresh();
@@ -150,13 +163,45 @@ export function SchedulePage() {
   });
 
   const allSlots = useMemo(() => data?.slots ?? [], [data?.slots]);
-  const activeSlots = useMemo(() => allSlots.filter((slot) => !slot.Is_Complete), [allSlots]);
-  const completedSlots = useMemo(() => allSlots.filter((slot) => slot.Is_Complete), [allSlots]);
-  const visibleSlots = tab === 'completed' ? completedSlots : activeSlots;
+
+  // Filters live in the URL so a link like /schedule?show=mine&upcoming=1 works.
+  const showParam = searchParams.get('show');
+  const show = SHOW_IDS.includes(showParam) ? showParam : 'all';
+  const stand = searchParams.get('stand') ?? '';
+  const task = searchParams.get('task') ?? '';
+  const upcoming = searchParams.get('upcoming') === '1';
+  const setFilter = (key, value) => {
+    const next = new URLSearchParams(searchParams);
+    if (value && value !== 'all') next.set(key, value);
+    else next.delete(key);
+    setSearchParams(next, { replace: true });
+  };
+  const stands = useMemo(() => [...new Set(allSlots.map((slot) => slot.Stand).filter(Boolean))].sort(), [allSlots]);
+  const tasks = useMemo(() => [...new Set(allSlots.map((slot) => slot.Task).filter(Boolean))].sort(), [allSlots]);
+  const filtering = show !== 'all' || stand || task || upcoming;
+
+  const counts = useMemo(
+    () => Object.fromEntries(SHOW_IDS.map((id) => [id, allSlots.filter((slot) => matchesShow(slot, id)).length])),
+    [allSlots],
+  );
+  const showOptions = [
+    ['all', `All (${counts.all})`],
+    ['mine', `My shifts (${counts.mine})`],
+    ['open', `Open (${counts.open})`],
+    ['completed', `Completed (${counts.completed})`],
+  ];
+
+  const visibleSlots = allSlots.filter(
+    (slot) =>
+      matchesShow(slot, show) &&
+      (!stand || slot.Stand === stand) &&
+      (!task || slot.Task === task) &&
+      (!upcoming || !slot.isPast),
+  );
   const days = groupByDay(visibleSlots);
 
   return (
-    <>
+    <Box>
       <PageHeader
         title="Schedule"
         subtitle="Claim a collection shift, or connect Google Calendar so claimed times land on your calendar."
@@ -194,40 +239,61 @@ export function SchedulePage() {
         </Alert>
       ) : null}
 
-      {data?.summary ? (
-        <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}>
-          <Chip label={`${data.summary.open} open shifts`} color="primary" variant="outlined" />
-          <Chip label={`${data.summary.mine} assigned to you`} variant="outlined" />
-          {data.summary.unfilledPast > 0 ? (
-            <Chip label={`${data.summary.unfilledPast} past shifts went unclaimed`} color="warning" variant="outlined" />
-          ) : null}
-        </Stack>
-      ) : null}
+      <Card variant="outlined" sx={{ mb: 3 }}>
+        <CardContent sx={{ '&:last-child': { pb: 2 } }}>
+          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', lg: 'row' }, flexWrap: 'wrap', gap: 2, alignItems: { lg: 'center' } }}>
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              color="primary"
+              value={show}
+              onChange={(_event, value) => value && setFilter('show', value)}
+              aria-label="Which shifts to show"
+              sx={{ flexWrap: 'wrap', '& .MuiToggleButton-root': { flex: { xs: '1 1 45%', md: '0 0 auto' }, px: 2 } }}
+            >
+              {showOptions.map(([id, label]) => (
+                <ToggleButton key={id} value={id}>
+                  {label}
+                </ToggleButton>
+              ))}
+            </ToggleButtonGroup>
 
-      <Tabs
-        value={tab}
-        onChange={(_event, value) => setTab(value)}
-        sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
-      >
-        <Tab
-          value="active"
-          label={`Active (${activeSlots.length})`}
-          id="schedule-tab-active"
-          aria-controls="schedule-panel-active"
-        />
-        <Tab
-          value="completed"
-          label={`Completed (${completedSlots.length})`}
-          id="schedule-tab-completed"
-          aria-controls="schedule-panel-completed"
-        />
-      </Tabs>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: { sm: 'center' }, flexGrow: 1 }}>
+              <TextField select size="small" label="Stand" value={stand} onChange={(e) => setFilter('stand', e.target.value)} sx={{ minWidth: { sm: 180 } }}>
+                <MenuItem value="">All stands</MenuItem>
+                {stands.map((name) => (
+                  <MenuItem key={name} value={name}>{name}</MenuItem>
+                ))}
+              </TextField>
+              <TextField select size="small" label="Task" value={task} onChange={(e) => setFilter('task', e.target.value)} sx={{ minWidth: { sm: 180 } }}>
+                <MenuItem value="">All tasks</MenuItem>
+                {tasks.map((name) => (
+                  <MenuItem key={name} value={name}>{name}</MenuItem>
+                ))}
+              </TextField>
+              <FormControlLabel
+                control={<Switch checked={upcoming} onChange={(e) => setFilter('upcoming', e.target.checked ? '1' : '')} />}
+                label="Hide past"
+                sx={{ mr: 0, whiteSpace: 'nowrap' }}
+              />
+              <Box sx={{ flexGrow: 1 }} />
+              {filtering ? (
+                <Button size="small" onClick={() => setSearchParams(new URLSearchParams(), { replace: true })}>
+                  Clear filters
+                </Button>
+              ) : null}
+            </Stack>
 
-      <Box
-        role="tabpanel"
-        id={tab === 'completed' ? 'schedule-panel-completed' : 'schedule-panel-active'}
-        aria-labelledby={tab === 'completed' ? 'schedule-tab-completed' : 'schedule-tab-active'}
-      >
+            {data?.summary?.unfilledPast > 0 ? (
+              <Typography variant="caption" color="warning.main" sx={{ width: '100%' }}>
+                {data.summary.unfilledPast} past {data.summary.unfilledPast === 1 ? 'shift' : 'shifts'} went unclaimed.
+              </Typography>
+            ) : null}
+          </Box>
+        </CardContent>
+      </Card>
+
+      <Box>
         <AsyncBlock
           loading={loading}
           error={error}
@@ -237,9 +303,11 @@ export function SchedulePage() {
           isEmpty={(rows) => rows.length === 0}
           empty={
             <EmptyBlock
-              title={tab === 'completed' ? 'No completed shifts yet' : 'No active shifts'}
+              title={filtering ? 'No shifts match these filters' : 'No shifts yet'}
               description={
-                tab === 'completed'
+                filtering
+                  ? 'Try clearing a filter to see more shifts.'
+                  : show === 'completed'
                   ? 'Finished collection tasks will show up here.'
                   : 'An administrator has not published any open shifts for this period yet.'
               }
@@ -260,10 +328,10 @@ export function SchedulePage() {
 
                 <Grid container spacing={2}>
                   {slots.map((slot) => (
-                    <Grid size={{ xs: 12, sm: 6, lg: 4 }} key={slot.SlotID}>
+                    <Grid size={{ xs: 12, sm: 6, md: 4 }} key={slot.SlotID}>
                       <SlotCard
                         slot={slot}
-                        canClaim={canClaim && tab === 'active'}
+                        canClaim={canClaim && show !== 'completed'}
                         onClaim={claim.execute}
                         onRelease={release.execute}
                         onPickTime={setPicking}
@@ -286,6 +354,6 @@ export function SchedulePage() {
         onClose={() => setPicking(null)}
         onPick={(window) => pick.execute(window)}
       />
-    </>
+    </Box>
   );
 }

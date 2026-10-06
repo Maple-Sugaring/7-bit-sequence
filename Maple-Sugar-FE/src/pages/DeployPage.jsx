@@ -805,7 +805,7 @@ export function DeployPage() {
 
 function SetupSteps({ activeStep }) {
   return (
-    <Box sx={{ width: '100%', maxWidth: 560, mx: 'auto', mb: 1 }}>
+    <Box sx={{ width: '100%', maxWidth: 560, mx: 'auto', alignSelf: 'center', mb: 1 }}>
       <Stepper activeStep={activeStep} alternativeLabel>
         <Step completed={activeStep > 0}>
           <StepLabel>Register gateway</StepLabel>
