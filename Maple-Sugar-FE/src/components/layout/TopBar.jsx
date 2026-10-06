@@ -9,7 +9,6 @@ import MenuIcon from '@mui/icons-material/Menu';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import Tooltip from '@mui/material/Tooltip';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/auth';
 import { useOpenAlertCount } from '../../services/hooks';
 import { MainNav } from './MainNav';
