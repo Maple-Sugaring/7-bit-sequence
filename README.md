@@ -59,8 +59,9 @@ Open http://localhost:8081. The `--build-arg` is required because Docker ignores
 
 ```bash
 cp Maple-Sugar-BE/.env.example Maple-Sugar-BE/.env
-# fill in JWT_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
-# and set PUBLIC_API_URL=http://localhost:8080/api, PUBLIC_WEB_URL=http://localhost:8080
+# fill in GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, and set
+# PUBLIC_API_URL=http://localhost:8080/api, PUBLIC_WEB_URL=http://localhost:8080
+# JWT_SECRET can be blank for local development; production gets it through SSM.
 docker compose up --build
 ```
 
@@ -79,7 +80,7 @@ Set `PUBLIC_API_URL=http://localhost:5173/api` and `PUBLIC_WEB_URL=http://localh
 
 ## How the API is addressed
 
-The browser always calls `/api/...`. Vite's dev proxy and nginx strip the `/api` prefix, so Express mounts its routes at the root (`/metrics`, `/auth`, `/schedule/slots`, ...). Sessions are a signed JWT cookie. JSON field names such as `Node_Code` and `Recorded_At` are the API contract; do not rename them.
+The browser always calls `/api/...`. Vite's dev proxy and nginx strip the `/api` prefix, so Express mounts its routes at the root (`/metrics`, `/auth`, `/schedule/slots`, ...). Browser sessions use a short-lived JWT access-token cookie and a rotating refresh token backed by Postgres; refresh-token hashes are stored server-side. JSON field names such as `Node_Code` and `Recorded_At` are the API contract; do not rename them.
 
 `VITE_API_MODE` (`http` or `mock`) is the only switch between the real API and the in-memory mock. Vite inlines every `VITE_*` value at build time, so changing it after a Docker build means rebuilding the web image.
 

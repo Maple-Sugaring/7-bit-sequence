@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { mock, after, before, describe, test } from 'node:test';
 
 import '../env.js';
-import { signSessionToken } from '../../src/auth/jwt.js';
+import { signAccessToken } from '../../src/auth/jwt.js';
 import { config } from '../../src/config.js';
 import { pool, closePool } from '../../src/db/pool.js';
 import { readThrough } from '../../src/cache/redisCache.js';
@@ -79,7 +79,7 @@ after(async () => {
 
 function tokenFor(row) {
   usersById.set(row.id, row);
-  return signSessionToken({ UserID: row.id, Email: row.email, RoleID: row.role_id });
+  return signAccessToken({ UserID: row.id, Email: row.email, RoleID: row.role_id });
 }
 
 async function send(path, { method = 'GET', token, cookie, origin, body, raw } = {}) {
@@ -160,7 +160,21 @@ describe('session and OAuth', () => {
     assert.equal(logout.status, 204);
     const cleared = logout.headers.get('set-cookie') ?? '';
     assert.match(cleared, /maple_session=/);
+    assert.match(cleared, /maple_refresh=/);
     assert.match(cleared, /HttpOnly/i);
+  });
+
+  test('refresh without a valid refresh cookie is rejected and clears both cookies', async () => {
+    const none = await send('/auth/refresh', { method: 'POST' });
+    assert.equal(none.status, 401);
+
+    const bogus = await send('/auth/refresh', { method: 'POST', cookie: 'maple_refresh=not-a-real-token' });
+    assert.equal(bogus.status, 401);
+    const cleared = bogus.headers.get('set-cookie') ?? '';
+    assert.match(cleared, /maple_session=/);
+    assert.match(cleared, /maple_refresh=/);
+    // A rejected refresh must not hand back a usable token.
+    assert.equal(bogus.text.includes('eyJ'), false);
   });
 
   test('a bearer token loads the account, and a dead account does not', async () => {

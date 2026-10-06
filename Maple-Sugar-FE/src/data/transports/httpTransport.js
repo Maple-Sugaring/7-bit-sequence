@@ -17,27 +17,65 @@ function buildUrl(path, query) {
   return url;
 }
 
-export async function request({ method = 'GET', path, query, body, signal }) {
-  let response;
+// Single-flight refresh: many requests can 401 at once when the access token
+// lapses, but they should share one call to /auth/refresh rather than stampede
+// it (which reuse-detection would read as a replay and revoke the session).
+let refreshPromise = null;
 
+function refreshAccessToken() {
+  if (!refreshPromise) {
+    refreshPromise = fetch(buildUrl('/auth/refresh'), {
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+      credentials: 'include',
+    })
+      .then(async (response) => {
+        if (!response.ok) return false;
+        const data = await response.json().catch(() => null);
+        // The cookie is the real credential; mirror the token for Bearer callers.
+        authToken = data?.token ?? null;
+        return true;
+      })
+      .catch(() => false)
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+}
+
+function doFetch(path, query, method, body, signal) {
   const timeout = typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(8000) : null;
   const combined =
     signal && timeout && typeof AbortSignal.any === 'function'
       ? AbortSignal.any([signal, timeout])
       : (signal ?? timeout ?? undefined);
 
+  return fetch(buildUrl(path, query), {
+    method,
+    signal: combined,
+    headers: {
+      Accept: 'application/json',
+      ...(body ? { 'Content-Type': 'application/json' } : null),
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : null),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+    credentials: 'include',
+  });
+}
+
+export async function request({ method = 'GET', path, query, body, signal }) {
+  // /auth/refresh authenticates with the refresh cookie, not the access token,
+  // so a 401 from it is terminal — never try to refresh in order to refresh.
+  const canRetry = path !== '/auth/refresh';
+
+  let response;
   try {
-    response = await fetch(buildUrl(path, query), {
-      method,
-      signal: combined,
-      headers: {
-        Accept: 'application/json',
-        ...(body ? { 'Content-Type': 'application/json' } : null),
-        ...(authToken ? { Authorization: `Bearer ${authToken}` } : null),
-      },
-      body: body ? JSON.stringify(body) : undefined,
-      credentials: 'include',
-    });
+    response = await doFetch(path, query, method, body, signal);
+
+    if (response.status === 401 && canRetry && (await refreshAccessToken())) {
+      response = await doFetch(path, query, method, body, signal);
+    }
   } catch (cause) {
     if (cause?.name === 'AbortError') {
       if (signal?.aborted) throw cause;
