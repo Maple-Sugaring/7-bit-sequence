@@ -14,7 +14,10 @@ import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import Checkbox from '@mui/material/Checkbox';
+import IconButton from '@mui/material/IconButton';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import dayjs from 'dayjs';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -23,12 +26,20 @@ import { PageHeader } from '../components/common/PageHeader';
 import { AsyncBlock, EmptyBlock, SkeletonRows } from '../components/common/StateBlock';
 import { timeOnly } from '../components/common/format';
 import { useAuth } from '../context/auth';
+import { ShiftAdminPanel } from '../components/schedule/ShiftAdminPanel';
 import { TimePickerDialog } from '../components/schedule/TimePickerDialog';
-import { claimCollectionTime, claimShift, groupByDay, releaseShift } from '../services/scheduleService';
+import {
+  claimCollectionTime,
+  claimShift,
+  deleteShift,
+  groupByDay,
+  releaseShift,
+  setShiftComplete,
+} from '../services/scheduleService';
 import { useAction, useSchedule } from '../services/hooks';
 import { withPronouns } from '../services/profileService';
 
-function SlotCard({ slot, canClaim, onClaim, onRelease, onPickTime, pending }) {
+function SlotCard({ slot, canClaim, canManage, onClaim, onRelease, onPickTime, onComplete, onDelete, pending }) {
   const claimDisabled = !slot.canClaim || pending;
 
   // Explains a disabled button rather than leaving the user guessing.
@@ -62,6 +73,18 @@ function SlotCard({ slot, canClaim, onClaim, onRelease, onPickTime, pending }) {
               <Chip icon={<CheckCircleIcon />} label="Complete" size="small" color="success" />
             ) : null}
             {slot.isMine ? <Chip label="You" size="small" color="primary" /> : null}
+            {canManage ? (
+              <Tooltip title="Delete shift">
+                <IconButton
+                  size="small"
+                  onClick={() => onDelete(slot.SlotID)}
+                  disabled={pending}
+                  aria-label={`Delete ${slot.Task}`}
+                >
+                  <DeleteOutlineIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            ) : null}
           </Stack>
 
           <Typography variant="body2" color="text.secondary">
@@ -89,6 +112,19 @@ function SlotCard({ slot, canClaim, onClaim, onRelease, onPickTime, pending }) {
           <Typography variant="caption" color="text.secondary">
             {slot.remaining} of {slot.Capacity} {slot.remaining === 1 ? 'spot' : 'spots'} open
           </Typography>
+
+          {canManage ? (
+            <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+              <Checkbox
+                size="small"
+                checked={Boolean(slot.Is_Complete)}
+                onChange={(event) => onComplete(slot.SlotID, event.target.checked)}
+                disabled={pending}
+                inputProps={{ 'aria-label': `Mark ${slot.Task} complete` }}
+              />
+              <Typography variant="body2">Mark complete</Typography>
+            </Stack>
+          ) : null}
 
           {canClaim && slot.canPickTime ? (
             <Button size="small" variant="contained" onClick={() => onPickTime(slot)} disabled={pending} fullWidth>
@@ -142,6 +178,7 @@ const SHOW_IDS = ['all', 'mine', 'open', 'completed'];
 export function SchedulePage() {
   const { user, can } = useAuth();
   const canClaim = can(Capability.CLAIM_SHIFT);
+  const canManage = can(Capability.MANAGE_SCHEDULE);
   const [searchParams, setSearchParams] = useSearchParams();
   const calendarConnected = searchParams.get('calendar') === 'connected';
   const calendarError = searchParams.get('calendarError');
@@ -159,6 +196,15 @@ export function SchedulePage() {
   });
   const release = useAction(async (slotId) => {
     await releaseShift(slotId, user.id);
+    await refresh();
+  });
+
+  const remove = useAction(async (slotId) => {
+    await deleteShift(slotId);
+    await refresh();
+  });
+  const complete = useAction(async (slotId, isComplete) => {
+    await setShiftComplete(slotId, isComplete);
     await refresh();
   });
 
@@ -204,8 +250,14 @@ export function SchedulePage() {
     <Box>
       <PageHeader
         title="Schedule"
-        subtitle="Claim a collection shift, or connect Google Calendar so claimed times land on your calendar."
+        subtitle={
+          canManage
+            ? 'Post, assign, complete, or delete shifts. Students claim open shifts from here too.'
+            : 'Claim a collection shift, or connect Google Calendar so claimed times land on your calendar.'
+        }
       />
+
+      {canManage ? <ShiftAdminPanel onChanged={refresh} /> : null}
 
       {calendarError ? (
         <Alert
@@ -233,9 +285,13 @@ export function SchedulePage() {
         </Alert>
       ) : null}
 
-      {(claim.error || release.error) ? (
-        <Alert severity="warning" sx={{ mb: 3 }} onClose={() => { claim.clearError(); release.clearError(); }}>
-          {claim.error ?? release.error}
+      {(claim.error || release.error || remove.error || complete.error) ? (
+        <Alert
+          severity="warning"
+          sx={{ mb: 3 }}
+          onClose={() => { claim.clearError(); release.clearError(); remove.clearError(); complete.clearError(); }}
+        >
+          {claim.error ?? release.error ?? remove.error ?? complete.error}
         </Alert>
       ) : null}
 
@@ -332,10 +388,13 @@ export function SchedulePage() {
                       <SlotCard
                         slot={slot}
                         canClaim={canClaim && show !== 'completed'}
+                        canManage={canManage}
+                        onComplete={complete.execute}
+                        onDelete={remove.execute}
                         onClaim={claim.execute}
                         onRelease={release.execute}
                         onPickTime={setPicking}
-                        pending={claim.pending || release.pending || pick.pending}
+                        pending={claim.pending || release.pending || pick.pending || remove.pending || complete.pending}
                       />
                     </Grid>
                   ))}

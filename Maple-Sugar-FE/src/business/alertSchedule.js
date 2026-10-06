@@ -59,15 +59,15 @@ export function noteForAlert(alert) {
   return alert?.Alert_Type ?? '';
 }
 
-/** Schedule-admin URL with the tree, task, and a short note already chosen. */
+/** Schedule URL with the tree, task, and a short note already chosen. */
 export function schedulePathForAlert(alert) {
   const task = SHIFT_TASKS.includes(taskForAlert(alert?.Alert_Type))
     ? taskForAlert(alert.Alert_Type)
     : 'Maintenance';
   const params = new URLSearchParams();
   if (alert?.NodeID != null) params.set('nodeId', String(alert.NodeID));
-  params.set('task', task);
+  params.set('shiftTask', task);
   const notes = noteForAlert(alert);
   if (notes) params.set('notes', notes);
-  return `/schedule-admin?${params.toString()}`;
+  return `/schedule?${params.toString()}`;
 }

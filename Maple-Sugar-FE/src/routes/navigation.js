@@ -1,6 +1,5 @@
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
-import EditCalendarIcon from '@mui/icons-material/EditCalendar';
 import RestoreIcon from '@mui/icons-material/Restore';
 import ParkIcon from '@mui/icons-material/Park';
 import SettingsInputAntennaIcon from '@mui/icons-material/SettingsInputAntenna';
@@ -37,12 +36,6 @@ export const NAV_ITEMS = [
     label: 'Sugar Woods',
     icon: ParkIcon,
     capability: Capability.VIEW_DATA_TABLE,
-  },
-  {
-    to: '/schedule-admin',
-    label: 'Schedule Admin',
-    icon: EditCalendarIcon,
-    capability: Capability.MANAGE_SCHEDULE,
   },
   {
     to: '/admin',

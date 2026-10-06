@@ -13,9 +13,9 @@ describe('alert to schedule', () => {
       Description: 'Net sap is 9.7 gal at Alumni House - Tree 2, at the 10 gallon bucket capacity.',
     });
     const params = new URLSearchParams(path.split('?')[1]);
-    expect(path.startsWith('/schedule-admin?')).toBe(true);
+    expect(path.startsWith('/schedule?')).toBe(true);
     expect(params.get('nodeId')).toBe('2');
-    expect(params.get('task')).toBe('Sap Collection');
+    expect(params.get('shiftTask')).toBe('Sap Collection');
     expect(params.get('notes')).toBe('Bucket - 2 is full at Alumni House.');
   });
 

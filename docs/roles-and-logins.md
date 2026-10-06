@@ -43,7 +43,7 @@ Navigation (`Maple-Sugar-FE/src/routes/navigation.js`) shows an item when the ro
 | Notifications | `/notifications` | `view_alerts` | yes | yes | no |
 | Admin | `/admin` | `manage_users` | yes | no | no |
 
-Also routed: `/nodes/:nodeId` (a tree's detail page, `view_dashboard`), `/login`, `/auth/callback`. Legacy paths redirect (`/input` and `/record` to `/collection`, `/alerts` to `/notifications`, `/data` to `/table`, `/nodes` and `/deployed` to `/deploy`, `/schedule/manage` to `/schedule-admin`, `/guides` to `/dashboard`).
+Also routed: `/nodes/:nodeId` (a tree's detail page, `view_dashboard`), `/login`, `/auth/callback`. Legacy paths redirect (`/input` and `/record` to `/collection`, `/alerts` to `/notifications`, `/data` to `/table`, `/nodes` and `/deployed` to `/deploy`, `/schedule/manage` and `/schedule-admin` to `/schedule`, `/guides` to `/dashboard`).
 
 Since the first visible nav item is the landing page, Admin, Student, and MSS land on The Bush (`/dashboard`) in the current nav order.
 
