@@ -127,16 +127,28 @@ export function statusCounts(rows) {
   return counts;
 }
 
-/** Nodes at the same point (to ~1 m) share one marker and one popup. */
+/** About 1 m in degrees: nodes closer than this cannot be told apart on the map. */
+const SAME_POINT_DEGREES = 0.00001;
+
+/**
+ * Nodes at the same point share one marker and one popup. Compared by distance
+ * rather than rounding to a grid, which would split two nearly identical points
+ * that happen to straddle a cell edge.
+ */
 export function groupByLocation(rows) {
-  const groups = new Map();
+  const groups = [];
   rows.forEach((row) => {
     if (!validCoordinates(row.Location)) return;
-    const key = `${row.Location.lat.toFixed(5)},${row.Location.lon.toFixed(5)}`;
-    if (!groups.has(key)) groups.set(key, { key, position: [row.Location.lat, row.Location.lon], nodes: [] });
-    groups.get(key).nodes.push(row);
+    const { lat, lon } = row.Location;
+    const group = groups.find(
+      (candidate) =>
+        Math.abs(candidate.position[0] - lat) <= SAME_POINT_DEGREES &&
+        Math.abs(candidate.position[1] - lon) <= SAME_POINT_DEGREES,
+    );
+    if (group) group.nodes.push(row);
+    else groups.push({ key: `${lat},${lon}`, position: [lat, lon], nodes: [row] });
   });
-  return [...groups.values()];
+  return groups;
 }
 
 export function worstStatus(rows) {
@@ -144,12 +156,11 @@ export function worstStatus(rows) {
 }
 
 /**
- * Load state for the three sources the map reads. Nodes can render once the
- * node list is in, but if any source failed the map may be missing faults or
- * readings, so it is flagged `stale` rather than shown as healthy.
+ * Load state for the two sources the map reads. Nodes can render once the
+ * board is in, but if alerts failed the map may be missing faults, so it is flagged `stale` rather than shown as healthy.
  */
-export function fleetLoadState({ nodes, board, alerts, error }) {
-  const settled = nodes != null && board != null && alerts != null;
+export function fleetLoadState({ nodes, alerts, error }) {
+  const settled = nodes != null && alerts != null;
   return {
     loading: !settled && !error,
     stale: Boolean(error) && nodes != null,

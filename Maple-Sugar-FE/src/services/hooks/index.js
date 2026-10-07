@@ -142,7 +142,6 @@ export function useGuides() {
 const FLEET_REFRESH_MS = 60_000;
 
 // Stable identities: useAsync refetches when its loader changes.
-const loadHealth = () => nodeService.getDeviceHealth();
 const loadBoard = () => nodeService.getBoard();
 const loadAlerts = () => alertService.getAlerts();
 
@@ -154,28 +153,26 @@ function useLastGood(value) {
 }
 
 /**
- * Every node with its map status, latest reading and siting. Refreshes on a
- * timer and when the tab regains focus so a field user sees current statuses.
- * A failed refresh keeps the last good data and reports `error` alongside it.
+ * Every deployed node with its map status. The board rows already carry
+ * siting, last-seen, health and the latest reading, so the map needs only the
+ * board and the alerts; the Dashboard shares this one fetch. Refreshes on a
+ * timer and when the tab regains focus. A failed refresh keeps the last good
+ * data and reports `error` alongside it.
  */
 export function useFleetMap() {
-  const health = useAsync(loadHealth);
   const board = useAsync(loadBoard);
   const alerts = useAsync(loadAlerts);
-  const healthData = useLastGood(health.data);
   const boardData = useLastGood(board.data);
   const alertData = useLastGood(alerts.data);
   const [now, setNow] = useState(() => new Date());
-  const { refresh: refreshHealth } = health;
   const { refresh: refreshBoard } = board;
   const { refresh: refreshAlerts } = alerts;
 
   const refresh = useCallback(() => {
     setNow(new Date());
-    refreshHealth();
     refreshBoard();
     refreshAlerts();
-  }, [refreshHealth, refreshBoard, refreshAlerts]);
+  }, [refreshBoard, refreshAlerts]);
 
   useEffect(() => {
     const timer = setInterval(refresh, FLEET_REFRESH_MS);
@@ -187,18 +184,12 @@ export function useFleetMap() {
   }, [refresh]);
 
   const nodes = useMemo(
-    () =>
-      buildFleetNodes({
-        nodes: healthData?.nodes ?? [],
-        board: boardData ?? [],
-        alerts: alertData ?? [],
-        now,
-      }),
-    [healthData, boardData, alertData, now],
+    () => buildFleetNodes({ nodes: boardData ?? [], board: boardData ?? [], alerts: alertData ?? [], now }),
+    [boardData, alertData, now],
   );
 
-  const error = health.error ?? board.error ?? alerts.error;
-  const { loading, stale } = fleetLoadState({ nodes: healthData, board: boardData, alerts: alertData, error });
+  const error = board.error ?? alerts.error;
+  const { loading, stale } = fleetLoadState({ nodes: boardData, alerts: alertData, error });
 
   return { nodes, loading, error, stale, refresh };
 }

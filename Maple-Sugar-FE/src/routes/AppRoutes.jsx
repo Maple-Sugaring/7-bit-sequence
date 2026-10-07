@@ -42,7 +42,7 @@ const DeployPage = lazy(() =>
 
 const PROTECTED = [
   { path: '/dashboard', element: <DashboardPage />, capability: Capability.VIEW_DASHBOARD },
-  { path: '/map', element: <FleetMapPage />, capability: Capability.VIEW_DASHBOARD },
+  { path: '/map', element: <FleetMapPage />, capability: [Capability.VIEW_DASHBOARD, Capability.VIEW_NODES] },
   { path: '/deploy', element: <DeployPage />, capability: Capability.DEPLOY_NODES },
   { path: '/table', element: <SapDataPage />, capability: Capability.VIEW_DATA_TABLE },
   { path: '/collection', element: <CollectionPage />, capability: Capability.RECORD_DATA },

@@ -77,6 +77,16 @@ describe('groupByLocation', () => {
     expect(groups).toHaveLength(2);
     expect(groups.find((g) => g.nodes.length === 2).nodes.map((n) => n.NodeID)).toEqual([1, 2]);
   });
+  it('groups points that straddle a rounding boundary', () => {
+    const a = { NodeID: 1, Location: { lat: 43.084004, lon: -77.68 } };
+    const b = { NodeID: 2, Location: { lat: 43.084006, lon: -77.68 } };
+    expect(groupByLocation([a, b])).toHaveLength(1);
+  });
+  it('keeps points more than a metre apart separate', () => {
+    const a = { NodeID: 1, Location: { lat: 43.084, lon: -77.68 } };
+    const b = { NodeID: 2, Location: { lat: 43.08402, lon: -77.68 } };
+    expect(groupByLocation([a, b])).toHaveLength(2);
+  });
   it('skips nodes without valid coordinates', () => {
     expect(groupByLocation([{ NodeID: 1, Location: null }, { NodeID: 2, Location: { lat: 0, lon: 0 } }])).toEqual([]);
   });
@@ -153,19 +163,19 @@ describe('statusCounts', () => {
 
 describe('fleetLoadState', () => {
   const some = [];
-  it('is loading until every source has settled', () => {
-    expect(fleetLoadState({ nodes: some, board: null, alerts: some, error: null })).toEqual({ loading: true, stale: false });
+  it('is loading until both sources have settled', () => {
+    expect(fleetLoadState({ nodes: some, alerts: null, error: null })).toEqual({ loading: true, stale: false });
   });
-  it('is settled and healthy when all sources load', () => {
-    expect(fleetLoadState({ nodes: some, board: some, alerts: some, error: null })).toEqual({ loading: false, stale: false });
+  it('is settled and healthy when both load', () => {
+    expect(fleetLoadState({ nodes: some, alerts: some, error: null })).toEqual({ loading: false, stale: false });
   });
-  it('flags stale when alerts fail on first load but nodes are in', () => {
-    expect(fleetLoadState({ nodes: some, board: some, alerts: null, error: 'boom' })).toEqual({ loading: false, stale: true });
+  it('flags stale when alerts fail on first load but the board is in', () => {
+    expect(fleetLoadState({ nodes: some, alerts: null, error: 'boom' })).toEqual({ loading: false, stale: true });
   });
   it('flags stale when a refresh fails after a good load', () => {
-    expect(fleetLoadState({ nodes: some, board: some, alerts: some, error: 'boom' }).stale).toBe(true);
+    expect(fleetLoadState({ nodes: some, alerts: some, error: 'boom' }).stale).toBe(true);
   });
-  it('is an error, not stale, when the node list itself failed', () => {
-    expect(fleetLoadState({ nodes: null, board: some, alerts: some, error: 'boom' })).toEqual({ loading: false, stale: false });
+  it('is an error, not stale, when the board itself failed', () => {
+    expect(fleetLoadState({ nodes: null, alerts: some, error: 'boom' })).toEqual({ loading: false, stale: false });
   });
 });

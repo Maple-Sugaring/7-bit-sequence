@@ -4,17 +4,20 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import { useMemo } from 'react';
+import { lazy, Suspense, useMemo } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { statusCounts } from '../../business/nodeMapStatus';
-import { useFleetMap } from '../../services/hooks';
 import { ErrorBlock, LoadingBlock } from '../common/StateBlock';
-import { FleetMap } from './FleetMap';
 import { FleetMapLegend } from './FleetMapLegend';
 
-/** Dashboard mini-map: same data and statuses as the full /map page. */
-export function FleetMapCard() {
-  const fleet = useFleetMap();
+// Leaflet and its stylesheet only load when the card is on screen.
+const FleetMap = lazy(() => import('./FleetMap').then((module) => ({ default: module.FleetMap })));
+
+/**
+ * Dashboard mini-map. The page owns the fleet data (`fleet` from useFleetMap)
+ * so the cards and this map read one fetch and always agree.
+ */
+export function FleetMapCard({ fleet }) {
   const counts = useMemo(() => statusCounts(fleet.nodes), [fleet.nodes]);
   const noLocation = fleet.nodes.filter((node) => !node.hasLocation).length;
   return (
@@ -41,7 +44,9 @@ export function FleetMapCard() {
             ) : null}
             <FleetMapLegend counts={counts} noLocation={noLocation} compact />
             <div style={{ marginTop: 12 }}>
-              <FleetMap nodes={fleet.nodes} height={260} scrollWheelZoom={false} />
+              <Suspense fallback={<LoadingBlock label="Loading map" height={260} />}>
+                <FleetMap nodes={fleet.nodes} height={260} scrollWheelZoom={false} />
+              </Suspense>
             </div>
           </>
         )}
