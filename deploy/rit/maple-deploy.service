@@ -1,0 +1,7 @@
+[Unit]
+Description=Pull origin/main and redeploy Maple Sugaring stack
+
+[Service]
+Type=oneshot
+# sg: the long-lived user manager may predate the docker group membership.
+ExecStart=/usr/bin/sg docker -c "/bin/bash %h/maple/app/deploy/rit/deploy.sh"

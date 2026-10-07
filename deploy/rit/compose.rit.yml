@@ -1,0 +1,25 @@
+# Overlay for the RIT server (maplesugaring01.webdev.gccis.rit.edu).
+# docker compose --env-file ~/maple/config/compose.env -f docker-compose.yml -f deploy/rit/compose.rit.yml up -d --build
+# Compose >= 2.24.4 is required for !override.
+# TLS is expected to be terminated in front of this host (RIT), so nginx in the
+# `web` service is published directly and there is no Caddy container.
+services:
+  db:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Database password is required in compose.env}
+  api:
+    env_file: !override
+      - path: ${MAPLE_CONFIG_DIR:-/home/student/maple/config}/backend.env
+        required: true
+    environment: !override
+      DATABASE_URL: postgresql://maple:${POSTGRES_PASSWORD}@db:5432/maple_sugaring
+      REDIS_URL: redis://cache:6379
+      NODE_ENV: production
+      PORT: 3000
+      TRUST_PROXY_HOPS: 1
+  web:
+    ports: !override
+      - "${WEB_PORT:-80}:80"
+      # RIT's reverse proxy also sends half of its HTTPS traffic to :5432 on this
+      # host (stale upstream). Serve the same app there until RIT removes it.
+      - "5432:80"
