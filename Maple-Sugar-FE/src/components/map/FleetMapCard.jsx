@@ -36,7 +36,7 @@ export function FleetMapCard() {
           <>
             {fleet.stale ? (
               <Alert severity="warning" sx={{ mb: 1 }}>
-                Could not refresh. Showing the last data we loaded.
+                Some data could not be loaded, so faults or readings may be missing. Showing what we have.
               </Alert>
             ) : null}
             <FleetMapLegend counts={counts} noLocation={noLocation} compact />

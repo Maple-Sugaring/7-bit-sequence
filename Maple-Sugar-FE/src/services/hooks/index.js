@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { buildFleetNodes } from '../../business/nodeMapStatus';
+import { buildFleetNodes, fleetLoadState } from '../../business/nodeMapStatus';
 import * as adminService from '../adminService';
 import * as alertService from '../alertService';
 import * as collectionService from '../collectionService';
@@ -197,9 +197,8 @@ export function useFleetMap() {
     [healthData, boardData, alertData, now],
   );
 
-  // Statuses need all three sources; do not render until each has settled once.
-  const loading = healthData == null || boardData == null || alertData == null;
   const error = health.error ?? board.error ?? alerts.error;
+  const { loading, stale } = fleetLoadState({ nodes: healthData, board: boardData, alerts: alertData, error });
 
-  return { nodes, loading: loading && !error, error, stale: Boolean(error) && !loading, refresh };
+  return { nodes, loading, error, stale, refresh };
 }

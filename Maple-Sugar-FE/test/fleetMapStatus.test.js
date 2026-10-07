@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildFleetNodes,
   deriveMapStatus,
+  fleetLoadState,
   groupByLocation,
   MapStatus,
   statusCounts,
@@ -119,5 +120,24 @@ describe('statusCounts', () => {
   it('counts every status including zeros', () => {
     const rows = buildFleetNodes({ nodes: [node(), node({ NodeID: 2, Status_Code: 2 })], board: [], alerts: [], now: NOW });
     expect(statusCounts(rows)).toEqual({ fresh: 1, stale: 0, faulted: 1, maintenance: 0, offline: 0 });
+  });
+});
+
+describe('fleetLoadState', () => {
+  const some = [];
+  it('is loading until every source has settled', () => {
+    expect(fleetLoadState({ nodes: some, board: null, alerts: some, error: null })).toEqual({ loading: true, stale: false });
+  });
+  it('is settled and healthy when all sources load', () => {
+    expect(fleetLoadState({ nodes: some, board: some, alerts: some, error: null })).toEqual({ loading: false, stale: false });
+  });
+  it('flags stale when alerts fail on first load but nodes are in', () => {
+    expect(fleetLoadState({ nodes: some, board: some, alerts: null, error: 'boom' })).toEqual({ loading: false, stale: true });
+  });
+  it('flags stale when a refresh fails after a good load', () => {
+    expect(fleetLoadState({ nodes: some, board: some, alerts: some, error: 'boom' }).stale).toBe(true);
+  });
+  it('is an error, not stale, when the node list itself failed', () => {
+    expect(fleetLoadState({ nodes: null, board: some, alerts: some, error: 'boom' })).toEqual({ loading: false, stale: false });
   });
 });

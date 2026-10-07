@@ -117,3 +117,16 @@ export function groupByLocation(rows) {
 export function worstStatus(rows) {
   return STATUS_ORDER.find((status) => rows.some((row) => row.mapStatus === status)) ?? MapStatus.FRESH;
 }
+
+/**
+ * Load state for the three sources the map reads. Nodes can render once the
+ * node list is in, but if any source failed the map may be missing faults or
+ * readings, so it is flagged `stale` rather than shown as healthy.
+ */
+export function fleetLoadState({ nodes, board, alerts, error }) {
+  const settled = nodes != null && board != null && alerts != null;
+  return {
+    loading: !settled && !error,
+    stale: Boolean(error) && nodes != null,
+  };
+}
