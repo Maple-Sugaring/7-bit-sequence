@@ -1,4 +1,15 @@
-# EC2 production deployment
+# EC2 backup deployment (retired)
+
+The AWS deployment was fully removed on October 7, 2026. Its EC2 instance,
+EBS data, S3 backups and Terraform state, SSM parameters, and IAM resources were
+deleted. This Terraform remains as a manual backup deployment definition. To
+restore it, start with the bootstrap steps below, create new application secrets
+and data, set the new GitHub repository variables, and then run the deployment
+workflows manually. The former Elastic IP no longer belongs to this deployment;
+update external DNS and gateway configuration before using a replacement.
+
+The architecture and operations below describe the former deployment and the
+steps for provisioning a replacement.
 
 One Ubuntu 24.04 `t3.medium` in `us-east-1` runs the Compose application. Caddy
 terminates HTTPS for `ritmaplesugaring.privatedns.org`, then Nginx forwards `/api`
@@ -65,8 +76,9 @@ Postgres parameter without also changing the database role's password.
 
 ## GitHub Actions
 
-After merging this branch into `main`, set these repository **variables** using
-bootstrap/production Terraform outputs (these identifiers are not secrets):
+After provisioning a replacement, set these repository **variables** using
+bootstrap/production Terraform outputs (these identifiers are not secrets).
+All previous AWS repository variables were deleted during teardown:
 
 | Variable | Terraform output |
 | --- | --- |
@@ -76,8 +88,8 @@ bootstrap/production Terraform outputs (these identifiers are not secrets):
 | `EC2_INSTANCE_ID` | production `instance_id` |
 | `EC2_ARTIFACT_BUCKET` | production `artifact_bucket` |
 
-`Terraform EC2` validates pull requests without AWS credentials. Manual runs
-from `main` use OIDC to plan or apply infrastructure with state locking.
+`Terraform EC2` runs only through manual dispatch from `main`; it validates
+the code, then uses OIDC to plan or apply infrastructure with state locking.
 `Deploy Docker stack to EC2` manually packages `main`, uploads it to private
 S3, deploys through SSM, and checks HTTPS. IAM trust permits only this repo's
 `main` ref. Infrastructure and application operations are separate; bootstrap,

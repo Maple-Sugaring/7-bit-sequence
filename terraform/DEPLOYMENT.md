@@ -1,5 +1,14 @@
 # Deployment record — October 6, 2026
 
+**Retired October 7, 2026.** The 27 production Terraform resources and 10
+bootstrap resources were destroyed. The two SSM SecureStrings, all artifact and
+backup objects, and every version of the Terraform state were deleted. GitHub's
+five AWS deployment variables were removed. No AWS deployment resources remain;
+the EC2 instance may temporarily appear in AWS inventory as `terminated`.
+This record is historical. See [README.md](README.md) for the manual backup
+deployment procedure. External FreeDNS, Google OAuth, and physical gateway
+settings are outside this AWS teardown and may still reference the old endpoint.
+
 Production: https://ritmaplesugaring.privatedns.org
 
 | Resource | Value |
