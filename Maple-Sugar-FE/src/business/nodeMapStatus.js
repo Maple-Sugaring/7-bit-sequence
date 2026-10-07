@@ -7,30 +7,43 @@
 export const STALE_AFTER_MINUTES = 45;
 
 export const MapStatus = {
-  FRESH: 'fresh',
+  ONLINE: 'online',
   STALE: 'stale',
-  FAULTED: 'faulted',
+  DEGRADED: 'degraded',
   MAINTENANCE: 'maintenance',
   OFFLINE: 'offline',
 };
 
 /** Most urgent first; the list sorts by this. */
 export const STATUS_ORDER = [
-  MapStatus.FAULTED,
+  MapStatus.DEGRADED,
   MapStatus.STALE,
   MapStatus.OFFLINE,
   MapStatus.MAINTENANCE,
-  MapStatus.FRESH,
+  MapStatus.ONLINE,
 ];
 
-/** Marker shape and MUI palette key per status; colour is never the only cue. */
+/**
+ * The one place a node status gets its words, colour and shape. Labels and
+ * colours match what the Dashboard, Node and Deploy pages always showed for
+ * status codes 0-3; `stale` is the one status they did not have. Colour is a
+ * MUI palette key and is never the only cue, so each status has its own shape.
+ */
 export const STATUS_META = {
-  [MapStatus.FRESH]: { label: 'Fresh', color: 'success', shape: 'circle' },
-  [MapStatus.STALE]: { label: 'Stale', color: 'warning', shape: 'ring' },
-  [MapStatus.FAULTED]: { label: 'Faulted', color: 'error', shape: 'triangle' },
+  [MapStatus.ONLINE]: { label: 'Online', color: 'success', shape: 'circle' },
+  [MapStatus.STALE]: { label: 'Stale', color: 'default', shape: 'ring' },
+  [MapStatus.DEGRADED]: { label: 'Degraded', color: 'warning', shape: 'triangle' },
   [MapStatus.MAINTENANCE]: { label: 'Maintenance', color: 'info', shape: 'square' },
-  [MapStatus.OFFLINE]: { label: 'Offline', color: 'neutral', shape: 'slash' },
+  [MapStatus.OFFLINE]: { label: 'Offline', color: 'error', shape: 'slash' },
 };
+
+/** For screens that only have the raw status code (0 offline .. 3 maintenance). */
+export function statusFromCode(code) {
+  return (
+    { 0: MapStatus.OFFLINE, 1: MapStatus.ONLINE, 2: MapStatus.DEGRADED, 3: MapStatus.MAINTENANCE }[code] ??
+    MapStatus.ONLINE
+  );
+}
 
 /** Open alerts of these types mean the hardware itself is in trouble. */
 export const FAULT_ALERT_TYPES = ['Tipped', 'Spill'];
@@ -52,12 +65,12 @@ export function validCoordinates(location) {
 export function deriveMapStatus(node, { now = new Date(), faultNodeIds = new Set() } = {}) {
   if (node.Last_Seen == null || node.Status_Code === STATUS_OFFLINE) return MapStatus.OFFLINE;
   if (node.Status_Code === STATUS_MAINTENANCE) return MapStatus.MAINTENANCE;
-  if (node.Status_Code === STATUS_DEGRADED || faultNodeIds.has(node.NodeID)) return MapStatus.FAULTED;
+  if (node.Status_Code === STATUS_DEGRADED || faultNodeIds.has(node.NodeID)) return MapStatus.DEGRADED;
   const minutes = (new Date(now).getTime() - new Date(node.Last_Seen).getTime()) / 60000;
-  return minutes > STALE_AFTER_MINUTES ? MapStatus.STALE : MapStatus.FRESH;
+  return minutes > STALE_AFTER_MINUTES ? MapStatus.STALE : MapStatus.ONLINE;
 }
 
-/** Why a node reads as faulted, for the popup. Null when it is not. */
+/** Why a node reads as degraded, for the popup. Null when it is not. */
 function faultReasonFor(node, alertTexts) {
   const parts = [];
   if (node.Status_Code === STATUS_DEGRADED) parts.push('Reporting as degraded');
@@ -87,7 +100,7 @@ export function buildFleetNodes({ nodes = [], board = [], alerts = [], now = new
       // can never sit beside a Fresh badge.
       minutesSinceSeen:
         node.Last_Seen == null ? null : Math.floor((new Date(now) - new Date(node.Last_Seen)) / 60000),
-      faultReason: mapStatus === MapStatus.FAULTED ? faultReasonFor(node, alertTexts) : null,
+      faultReason: mapStatus === MapStatus.DEGRADED ? faultReasonFor(node, alertTexts) : null,
       reading: readingByNode.get(node.NodeID) ?? null,
       hasLocation: validCoordinates(node.Location),
     };
@@ -115,7 +128,7 @@ export function groupByLocation(rows) {
 }
 
 export function worstStatus(rows) {
-  return STATUS_ORDER.find((status) => rows.some((row) => row.mapStatus === status)) ?? MapStatus.FRESH;
+  return STATUS_ORDER.find((status) => rows.some((row) => row.mapStatus === status)) ?? MapStatus.ONLINE;
 }
 
 /**

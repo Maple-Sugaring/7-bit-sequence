@@ -22,6 +22,7 @@ import StepLabel from '@mui/material/StepLabel';
 import Stepper from '@mui/material/Stepper';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import { statusFromCode } from '../business/nodeMapStatus';
 import { Capability } from '../business/permissions';
 import { PageHeader } from '../components/common/PageHeader';
 import { AsyncBlock, EmptyBlock } from '../components/common/StateBlock';
@@ -43,13 +44,6 @@ import {
 } from '../services/nodeService';
 
 const STANDS = ['Alumni House', 'Chabad House', 'Red Barn'];
-
-const NODE_STATUS = {
-  0: { label: 'Offline', color: 'error' },
-  1: { label: 'Online', color: 'success' },
-  2: { label: 'Degraded', color: 'warning' },
-  3: { label: 'Maintenance', color: 'info' },
-};
 
 const emptyDraft = () => ({
   Node_Name: '',
@@ -533,7 +527,7 @@ export function DeployPage() {
                   <NodeRow
                     key={node.NodeID}
                     node={node}
-                    status={NODE_STATUS[node.Status_Code] ?? { label: 'Unknown', color: 'default' }}
+                    status={statusFromCode(node.Status_Code)}
                     gatewayName={gatewayById.get(node.GatewayID)?.Gateway_Name}
                     canDeploy={canDeploy}
                     onOpen={() => navigate(`/nodes/${node.NodeID}`)}

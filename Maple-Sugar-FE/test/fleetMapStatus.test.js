@@ -6,6 +6,7 @@ import {
   groupByLocation,
   MapStatus,
   statusCounts,
+  statusFromCode,
   validCoordinates,
 } from '../src/business/nodeMapStatus';
 
@@ -37,8 +38,8 @@ describe('validCoordinates', () => {
 });
 
 describe('deriveMapStatus', () => {
-  it('is fresh for an online node seen recently', () => {
-    expect(deriveMapStatus(node(), { now: NOW })).toBe(MapStatus.FRESH);
+  it('is online for an online node seen recently', () => {
+    expect(deriveMapStatus(node(), { now: NOW })).toBe(MapStatus.ONLINE);
   });
   it('is stale after 45 minutes without a report', () => {
     const seen = '2026-03-01T11:00:00Z';
@@ -50,19 +51,19 @@ describe('deriveMapStatus', () => {
   it('is offline when status code is 0', () => {
     expect(deriveMapStatus(node({ Status_Code: 0 }), { now: NOW })).toBe(MapStatus.OFFLINE);
   });
-  it('is faulted for degraded status even if recently seen', () => {
-    expect(deriveMapStatus(node({ Status_Code: 2 }), { now: NOW })).toBe(MapStatus.FAULTED);
+  it('is degraded for degraded status even if recently seen', () => {
+    expect(deriveMapStatus(node({ Status_Code: 2 }), { now: NOW })).toBe(MapStatus.DEGRADED);
   });
-  it('is faulted when the node has an open fault alert', () => {
-    expect(deriveMapStatus(node(), { now: NOW, faultNodeIds: new Set([1]) })).toBe(MapStatus.FAULTED);
+  it('is degraded when the node has an open fault alert', () => {
+    expect(deriveMapStatus(node(), { now: NOW, faultNodeIds: new Set([1]) })).toBe(MapStatus.DEGRADED);
   });
   it('maintenance wins over fault and stale', () => {
     const n = node({ Status_Code: 3, Last_Seen: '2026-03-01T01:00:00Z' });
     expect(deriveMapStatus(n, { now: NOW, faultNodeIds: new Set([1]) })).toBe(MapStatus.MAINTENANCE);
   });
-  it('fault wins over stale', () => {
+  it('degraded wins over stale', () => {
     const n = node({ Status_Code: 2, Last_Seen: '2026-03-01T01:00:00Z' });
-    expect(deriveMapStatus(n, { now: NOW })).toBe(MapStatus.FAULTED);
+    expect(deriveMapStatus(n, { now: NOW })).toBe(MapStatus.DEGRADED);
   });
 });
 
@@ -87,13 +88,13 @@ describe('buildFleetNodes', () => {
 
   it('derives status, joins latest reading and flags missing location', () => {
     const rows = buildFleetNodes({ nodes: health, board, alerts, now: NOW });
-    expect(rows.find((r) => r.NodeID === 1)).toMatchObject({ mapStatus: MapStatus.FAULTED, reading: { Weight: 12.5 }, hasLocation: true });
-    expect(rows.find((r) => r.NodeID === 2).mapStatus).toBe(MapStatus.FAULTED);
-    expect(rows.find((r) => r.NodeID === 3)).toMatchObject({ mapStatus: MapStatus.FRESH, hasLocation: false, reading: null });
+    expect(rows.find((r) => r.NodeID === 1)).toMatchObject({ mapStatus: MapStatus.DEGRADED, reading: { Weight: 12.5 }, hasLocation: true });
+    expect(rows.find((r) => r.NodeID === 2).mapStatus).toBe(MapStatus.DEGRADED);
+    expect(rows.find((r) => r.NodeID === 3)).toMatchObject({ mapStatus: MapStatus.ONLINE, hasLocation: false, reading: null });
   });
   it('ignores resolved alerts and non-fault alert types', () => {
     const rows = buildFleetNodes({ nodes: [node()], board: [], alerts: [{ NodeID: 1, Alert_Type: 'Sap Run', Is_Resolved: false }], now: NOW });
-    expect(rows[0].mapStatus).toBe(MapStatus.FRESH);
+    expect(rows[0].mapStatus).toBe(MapStatus.ONLINE);
   });
 });
 
@@ -116,10 +117,19 @@ describe('fault reason and clock', () => {
   });
 });
 
+describe('statusFromCode', () => {
+  it('maps the raw codes the older screens use', () => {
+    expect([0, 1, 2, 3].map(statusFromCode)).toEqual(['offline', 'online', 'degraded', 'maintenance']);
+  });
+  it('treats an unknown code as online, as those screens always did', () => {
+    expect(statusFromCode(undefined)).toBe('online');
+  });
+});
+
 describe('statusCounts', () => {
   it('counts every status including zeros', () => {
     const rows = buildFleetNodes({ nodes: [node(), node({ NodeID: 2, Status_Code: 2 })], board: [], alerts: [], now: NOW });
-    expect(statusCounts(rows)).toEqual({ fresh: 1, stale: 0, faulted: 1, maintenance: 0, offline: 0 });
+    expect(statusCounts(rows)).toEqual({ online: 1, stale: 0, degraded: 1, maintenance: 0, offline: 0 });
   });
 });
 

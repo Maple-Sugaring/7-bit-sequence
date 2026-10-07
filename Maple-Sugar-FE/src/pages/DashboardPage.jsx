@@ -19,21 +19,16 @@ import {
 } from '../business/shelfLife';
 import { weekForecastRows, weekLabel, weekStart } from '../business/weekWindows';
 import { bushAverageSugar, syrupEstimate } from '../business/sugarContent';
+import { STATUS_META, statusFromCode } from '../business/nodeMapStatus';
 import { isFull } from '../business/yieldMetrics';
 import { LIVE_FROM, LIVE_NODE_IDS, LIVE_TO, bucketGallons, bucketPercent, recordedSugar } from '../business/liveWeight';
 import { SiteForecastChart } from '../components/charts/SeriesChart';
 import { FleetMapCard } from '../components/map/FleetMapCard';
+import { NodeStatusChip } from '../components/common/NodeStatusChip';
 import { MeterBar } from '../components/common/MeterBar';
 import { PageHeader } from '../components/common/PageHeader';
 import { dateOnly, dateTime } from '../components/common/format';
 import { useBush, useLiveWeather, useReadings } from '../services/hooks';
-
-const STATUS = {
-  0: { label: 'Offline', color: 'error' },
-  1: { label: 'Online', color: 'success' },
-  2: { label: 'Degraded', color: 'warning' },
-  3: { label: 'Maintenance', color: 'info' },
-};
 
 function Meter({ label, value, percent, detail, color }) {
   return (
@@ -232,13 +227,13 @@ export function DashboardPage() {
 
       <Grid container spacing={2}>
         {(bush.data ?? []).map((node) => {
-          const status = STATUS[node.Status_Code] ?? STATUS[1];
+          const status = statusFromCode(node.Status_Code);
           const gallons = bucketGallons(node.Weight, node.Tare_Weight ?? 0);
           const fill = bucketPercent(node.Weight, node.Tare_Weight ?? 0);
           const shelf = shelfByNode.get(node.NodeID);
           const tip = [
             node.Node_Name,
-            `Status ${status.label}`,
+            `Status ${STATUS_META[status].label}`,
             node.Signal_Rssi != null ? `Signal ${node.Signal_Rssi} dBm` : null,
             node.Sugar_Percent != null ? `Sugar ${node.Sugar_Percent}%` : null,
             node.Ice_Present ? 'Ice in the bucket' : null,
@@ -256,7 +251,7 @@ export function DashboardPage() {
                     <CardContent>
                       <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
                         <Typography variant="h6">{node.Stand}</Typography>
-                        <Chip size="small" label={status.label} color={status.color} />
+                        <NodeStatusChip status={status} />
                       </Stack>
                       <Typography variant="body2" color="text.secondary">
                         {node.Node_Name}

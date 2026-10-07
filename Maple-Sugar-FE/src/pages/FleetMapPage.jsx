@@ -103,7 +103,7 @@ export function FleetMapPage() {
     <>
       <PageHeader
         title="Fleet map"
-        subtitle="Every node by status. Pick a faulted or stale tree to open it."
+        subtitle="Every node by status. Pick a degraded or stale tree to open it."
         actions={
           <Button onClick={fleet.refresh} sx={{ minHeight: 44 }}>
             Refresh

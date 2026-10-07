@@ -8,7 +8,7 @@ import Typography from '@mui/material/Typography';
 import { Link as RouterLink } from 'react-router-dom';
 import { STATUS_META, STATUS_ORDER } from '../../business/nodeMapStatus';
 import { relativeMinutes } from '../common/format';
-import { STATUS_HEX } from './statusMarker';
+import { STATUS_HEX } from '../common/statusGlyph';
 
 const bySeverity = (a, b) =>
   STATUS_ORDER.indexOf(a.mapStatus) - STATUS_ORDER.indexOf(b.mapStatus) || a.Node_Name.localeCompare(b.Node_Name);

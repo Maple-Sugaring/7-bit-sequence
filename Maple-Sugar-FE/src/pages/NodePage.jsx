@@ -15,6 +15,7 @@ import Typography from '@mui/material/Typography';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import dayjs from 'dayjs';
 import { basisLabel, bushAverageSugar, syrupEstimate } from '../business/sugarContent';
+import { statusFromCode } from '../business/nodeMapStatus';
 import { Capability } from '../business/permissions';
 import { LIVE_FROM, LIVE_TO, TIME_UNITS, bucketGallons, bucketPercent, dailyWeightRows } from '../business/liveWeight';
 import { ChartCard } from '../components/charts/ChartCard';
@@ -27,15 +28,9 @@ import { useBush, useReadings } from '../services/hooks';
 import { useAction, useAsync } from '../services/hooks/useAsync';
 import { getUsers } from '../services/adminService';
 import { flagNode } from '../services/alertService';
+import { NodeStatusChip } from '../components/common/NodeStatusChip';
 import { runNodeAction } from '../services/nodeService';
 import { assignShift, SHIFT_TASKS } from '../services/scheduleService';
-
-const STATUS = {
-  0: { label: 'Offline', color: 'error' },
-  1: { label: 'Online', color: 'success' },
-  2: { label: 'Degraded', color: 'warning' },
-  3: { label: 'Maintenance', color: 'info' },
-};
 
 export function NodePage() {
   const { nodeId } = useParams();
@@ -79,7 +74,7 @@ export function NodePage() {
     });
   });
 
-  const status = STATUS[node?.Status_Code] ?? STATUS[1];
+  const status = statusFromCode(node?.Status_Code);
   const gallons = node ? bucketGallons(node.Weight, node.Tare_Weight ?? 0) : null;
   const fill = node ? bucketPercent(node.Weight, node.Tare_Weight ?? 0) : null;
   const estimate = syrupEstimate({
@@ -124,7 +119,7 @@ export function NodePage() {
       />
       <Stack direction="row" spacing={1} sx={{ mb: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
         <Chip label={node?.Stand} />
-        <Chip label={status.label} color={status.color} />
+        <NodeStatusChip status={status} size="medium" />
         {node?.Node_Code ? <Chip label={node.Node_Code} variant="outlined" /> : null}
         {node?.Ice_Present ? <Chip label="Ice in the bucket" color="info" /> : null}
         <Chip label={node?.Barcode_ID ?? 'No bucket'} variant="outlined" />

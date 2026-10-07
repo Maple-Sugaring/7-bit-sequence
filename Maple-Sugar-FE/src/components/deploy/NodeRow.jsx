@@ -7,11 +7,12 @@ import ScheduleIcon from '@mui/icons-material/Schedule';
 import SignalCellularAltIcon from '@mui/icons-material/SignalCellularAlt';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
 import IconButton from '@mui/material/IconButton';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
+import { STATUS_META } from '../../business/nodeMapStatus';
+import { NodeStatusChip } from '../common/NodeStatusChip';
 import { dateTime, decibels } from '../common/format';
 
 function Fact({ icon: Icon, children }) {
@@ -27,10 +28,10 @@ function Fact({ icon: Icon, children }) {
 
 /**
  * One deployed tree as a full-width row. The accent follows its status, and
- * every node shares one icon. `status` is { label, color } from the page.
+ * every node shares one icon. `status` is a node status key (see nodeMapStatus).
  */
 export function NodeRow({ node, status, gatewayName, canDeploy, onOpen, onEdit, onMore }) {
-  const color = status.color === 'default' ? 'grey' : status.color;
+  const color = STATUS_META[status].color === 'default' ? 'grey' : STATUS_META[status].color;
   const accentOf = (theme) => (color === 'grey' ? theme.palette.grey[500] : theme.palette[color].main);
 
   return (
@@ -78,7 +79,7 @@ export function NodeRow({ node, status, gatewayName, canDeploy, onOpen, onEdit, 
             <Typography variant="subtitle1" component="h3" sx={{ fontWeight: 700, lineHeight: 1.25 }}>
               {node.Node_Name}
             </Typography>
-            <Chip size="small" label={status.label} color={status.color} />
+            <NodeStatusChip status={status} />
             <Typography
               variant="caption"
               sx={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontWeight: 600, color: 'text.secondary' }}

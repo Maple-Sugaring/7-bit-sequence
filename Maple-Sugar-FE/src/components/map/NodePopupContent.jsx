@@ -1,14 +1,12 @@
 import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
 import Divider from '@mui/material/Divider';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { Link as RouterLink } from 'react-router-dom';
-import { STATUS_META } from '../../business/nodeMapStatus';
+import { NodeStatusChip } from '../common/NodeStatusChip';
 import { dateTime, fahrenheit, pounds, relativeMinutes } from '../common/format';
 
 function NodeSummary({ node }) {
-  const meta = STATUS_META[node.mapStatus];
   const reading = node.reading;
   return (
     <Stack spacing={0.5}>
@@ -16,7 +14,7 @@ function NodeSummary({ node }) {
         <Typography component="h3" variant="subtitle2" fontWeight={700}>
           {node.Node_Name}
         </Typography>
-        <Chip size="small" color={meta.color === 'neutral' ? 'default' : meta.color} label={meta.label} />
+        <NodeStatusChip status={node.mapStatus} />
       </Stack>
       {node.faultReason ? (
         <Typography variant="body2" color="error">
