@@ -11,12 +11,7 @@ import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import {
-  formatShelfLife,
-  remainingShelfLifeHours,
-  shelfLifeFromReadings,
-  shelfLifeSeverity,
-} from '../business/shelfLife';
+import { shortestBatch } from '../business/shelfLife';
 import { weekForecastRows, weekLabel, weekStart } from '../business/weekWindows';
 import { bushAverageSugar, syrupEstimate } from '../business/sugarContent';
 import { MapStatus, STATUS_META } from '../business/nodeMapStatus';
@@ -28,7 +23,7 @@ import { NodeStatusChip } from '../components/common/NodeStatusChip';
 import { MeterBar } from '../components/common/MeterBar';
 import { PageHeader } from '../components/common/PageHeader';
 import { dateOnly, dateTime } from '../components/common/format';
-import { useFleetMap, useLiveWeather, useReadings } from '../services/hooks';
+import { useBucketShelfLife, useFleetMap, useLiveWeather, useReadings } from '../services/hooks';
 
 function Meter({ label, value, percent, detail, color }) {
   return (
@@ -46,6 +41,8 @@ function Meter({ label, value, percent, detail, color }) {
     </Box>
   );
 }
+
+const NO_BATCHES = [];
 
 export function DashboardPage() {
   const navigate = useNavigate();
@@ -74,38 +71,22 @@ export function DashboardPage() {
     return { readings: weights.length, sugar, syrup, measured };
   }, [readings.data, bushNodes]);
 
-  const shelfByNode = useMemo(() => {
-    const ambient = weather?.Temperature_F ?? null;
+  // Shelf life belongs to the sap in a bucket, so each tree shows whichever
+  // bucket is sitting on it now, and a tree with an empty bucket shows none.
+  const batches = useBucketShelfLife(weather?.Temperature_F ?? null).data ?? NO_BATCHES;
+  const batchByNode = useMemo(() => {
     const map = new Map();
-    for (const node of bushNodes ?? []) {
-      const rows = (readings.data ?? []).filter((row) => row.NodeID === node.NodeID);
-      const fromProbe = shelfLifeFromReadings(rows);
-      if (fromProbe) {
-        map.set(node.NodeID, { ...fromProbe, source: 'sap temperature' });
-        continue;
-      }
-      if (ambient == null || !node.Recorded_At) continue;
-      const hours = remainingShelfLifeHours({
-        filledAt: node.Recorded_At,
-        temperatureF: ambient,
-        sugarPercent: node.Sugar_Percent,
-      });
-      map.set(node.NodeID, {
-        hours,
-        label: formatShelfLife(hours),
-        severity: shelfLifeSeverity(hours),
-        source: 'air temperature',
-      });
+    for (const batch of batches) {
+      if (batch.state === 'empty' || batch.nodeId == null) continue;
+      const held = map.get(batch.nodeId);
+      if (!held || (batch.hours ?? Infinity) < (held.hours ?? Infinity)) map.set(batch.nodeId, batch);
     }
     return map;
-  }, [bushNodes, readings.data, weather]);
+  }, [batches]);
 
   const offlineNodes = bushNodes.filter((node) => node.mapStatus === MapStatus.OFFLINE);
-  const shortestShelf = [...shelfByNode.values()].reduce((soonest, entry) => {
-    if (entry.hours == null) return soonest;
-    if (!soonest || entry.hours < soonest.hours) return entry;
-    return soonest;
-  }, null);
+  const shortestShelf = shortestBatch(batches);
+  const holdingSap = batches.filter((batch) => batch.state !== 'empty').length;
 
   return (
     <>
@@ -199,7 +180,11 @@ export function DashboardPage() {
               <Typography variant="overline">Shelf life</Typography>
               <Typography variant="h4">{shortestShelf?.label ?? '—'}</Typography>
               <Typography variant="body2" color="text.secondary">
-                {shortestShelf ? `Shortest window, from ${shortestShelf.source}` : 'Needs a temperature and a reading'}
+                {shortestShelf
+                  ? `Bucket ${shortestShelf.barcode ?? shortestShelf.bucketId} is closest, from ${shortestShelf.source}`
+                  : holdingSap
+                    ? 'Needs a temperature to time the sap in the buckets'
+                    : 'No sap in any bucket yet'}
               </Typography>
             </Grid>
             <Grid size={{ xs: 6, sm: 3, md: 2 }}>
@@ -232,7 +217,7 @@ export function DashboardPage() {
           const status = node.mapStatus;
           const gallons = bucketGallons(node.Weight, node.Tare_Weight ?? 0);
           const fill = bucketPercent(node.Weight, node.Tare_Weight ?? 0);
-          const shelf = shelfByNode.get(node.NodeID);
+          const shelf = batchByNode.get(node.NodeID);
           const tip = [
             node.Node_Name,
             `Status ${STATUS_META[status].label}`,
@@ -282,9 +267,14 @@ export function DashboardPage() {
                         Sugar {node.Sugar_Percent == null ? '— not recorded' : `${node.Sugar_Percent}% Brix`}
                       </Typography>
                       <Typography variant="body2" color={shelf ? `${shelf.severity}.main` : 'text.secondary'}>
-                        Shelf life {shelf?.label ?? '—'}
-                        {shelf ? ` · ${shelf.source}` : ''}
+                        Shelf life {shelf?.label ?? 'none, no sap in the bucket'}
+                        {shelf?.source ? ` · ${shelf.source}` : ''}
                       </Typography>
+                      {shelf ? (
+                        <Typography variant="caption" color="text.secondary">
+                          {shelf.barcode ? `Bucket ${shelf.barcode} · ` : ''}filling since {dateTime(shelf.startedAt)}
+                        </Typography>
+                      ) : null}
                       {node.Temperature != null ? (
                         <Typography variant="body2" color="text.secondary">
                           Sap temperature {node.Temperature}°F

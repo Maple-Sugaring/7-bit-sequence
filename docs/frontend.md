@@ -33,7 +33,7 @@ Both values are read at build time (`import.meta.env`). The Docker image sets `h
 | --- | --- | --- |
 | `/login` (also `/`) | `LoginPage` | Google button; mock buttons in mock mode. Shows `?error=` banner from a failed OAuth. |
 | `/auth/callback` | `AuthCallbackPage` | Landing after Google redirect. |
-| `/dashboard` | `DashboardPage` ("The Bush") | Live weather and bucket fill for each tree on Deploy; KPI cards (readings, sugar, shelf life, syrup gallons). |
+| `/dashboard` | `DashboardPage` ("The Bush") | Live weather and bucket fill for each tree on Deploy; KPI cards (readings, sugar, shelf life, syrup gallons). Shelf life is timed per bucket batch, the sap in one bucket since it was last emptied, so a bucket keeps its clock when moved between trees and a tree with an empty bucket shows none. |
 | `/nodes/:nodeId` | `NodePage` | One tree: battery, bucket, 2026 weight chart, field actions (collect, maintenance, flag). |
 | `/deploy` | `DeployPage` | Register gateways, add/edit/delete/flash nodes. See [deploy-and-flasher.md](deploy-and-flasher.md). |
 | `/table` | `SapDataPage` ("Sugar Woods") | Filterable readings table with export. |
