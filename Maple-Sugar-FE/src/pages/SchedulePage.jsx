@@ -110,7 +110,7 @@ function SlotCard({ slot, canClaim, canManage, onClaim, onRelease, onPickTime, o
           </Stack>
 
           <Typography variant="caption" color="text.secondary">
-            {slot.remaining} of {slot.Capacity} {slot.remaining === 1 ? 'spot' : 'spots'} open
+            {slot.remaining} of {slot.Capacity} {slot.Capacity === 1 ? 'spot' : 'spots'} open
           </Typography>
 
           {canManage ? (
@@ -120,7 +120,7 @@ function SlotCard({ slot, canClaim, canManage, onClaim, onRelease, onPickTime, o
                 checked={Boolean(slot.Is_Complete)}
                 onChange={(event) => onComplete(slot.SlotID, event.target.checked)}
                 disabled={pending}
-                inputProps={{ 'aria-label': `Mark ${slot.Task} complete` }}
+                slotProps={{ input: { 'aria-label': `Mark ${slot.Task} complete` } }}
               />
               <Typography variant="body2">Mark complete</Typography>
             </Stack>

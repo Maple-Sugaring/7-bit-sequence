@@ -32,6 +32,12 @@ import { NodeStatusChip } from '../components/common/NodeStatusChip';
 import { runNodeAction } from '../services/nodeService';
 import { assignShift, SHIFT_TASKS } from '../services/scheduleService';
 
+const ACTION_DONE = {
+  collect: 'Bucket collected.',
+  maintenance: 'Marked for maintenance.',
+  online: 'Marked online.',
+};
+
 export function NodePage() {
   const { nodeId } = useParams();
   const navigate = useNavigate();
@@ -40,9 +46,13 @@ export function NodePage() {
   const statuses = useNodeStatuses(bush.data);
   const canSchedule = can(Capability.MANAGE_SCHEDULE);
   const canDeploy = can(Capability.DEPLOY_NODES);
+  const canCollect = can(Capability.RECORD_DATA);
+  // Status changes and field reports both need the flag capability (admins have it too).
+  const canFlag = can(Capability.FLAG_NODE);
   const people = useAsync(useCallback(() => getUsers(), []), { enabled: canSchedule, initialData: null });
   const node = (bush.data ?? []).find((item) => item.NodeID === Number(nodeId));
   const [notes, setNotes] = useState('');
+  const [done, setDone] = useState(null);
   const [unit, setUnit] = useState('day');
   const [shift, setShift] = useState(() => {
     const start = dayjs().add(1, 'day').hour(9).minute(0).second(0);
@@ -55,16 +65,22 @@ export function NodePage() {
     to: LIVE_TO,
   });
   const action = useAction(async (name) => {
+    setDone(null);
     await runNodeAction(Number(nodeId), { Action: name, Notes: notes });
     await bush.refresh();
+    setDone(ACTION_DONE[name]);
   });
   const report = useAction(async (type) => {
+    setDone(null);
     await flagNode(Number(nodeId), {
       type,
       description: notes.trim() || (type === 'Spill' ? 'Bucket spilled. Needs a manual check.' : 'Ice in the bucket. Weight may sit above 10 gallons.'),
     });
+    setDone(type === 'Spill' ? 'Spill reported.' : 'Freezing reported.');
   });
+  const [shiftDone, setShiftDone] = useState(null);
   const createShift = useAction(async () => {
+    setShiftDone(null);
     await assignShift({
       Task: shift.Task,
       UserID: shift.UserID,
@@ -73,6 +89,8 @@ export function NodePage() {
       Ends_At: shift.Ends_At.toISOString(),
       Notes: shift.Notes || `Assigned from ${node.Node_Name}`,
     });
+    const person = (people.data?.users ?? []).find((user) => user.UserID === shift.UserID);
+    setShiftDone(`Shift assigned to ${person?.fullName ?? 'that student'}.`);
   });
 
   const status = statuses.get(node?.NodeID) ?? statusFromCode(node?.Status_Code);
@@ -204,44 +222,57 @@ export function NodePage() {
       </Box>
 
       <Grid container spacing={2}>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" sx={{ mb: 1 }}>
-                At the tree
-              </Typography>
-              <TextField
-                label="Note"
-                value={notes}
-                onChange={(event) => setNotes(event.target.value)}
-                fullWidth
-                sx={{ mb: 2 }}
-              />
-              {action.error || report.error ? (
-                <Alert severity="error" sx={{ mb: 2 }}>
-                  {action.error ?? report.error}
-                </Alert>
-              ) : null}
-              <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
-                <Button variant="contained" disabled={action.pending} onClick={() => action.execute('collect')}>
-                  Collect bucket
-                </Button>
-                <Button variant="outlined" disabled={action.pending} onClick={() => action.execute('maintenance')}>
-                  Maintenance
-                </Button>
-                <Button variant="outlined" disabled={action.pending} onClick={() => action.execute('online')}>
-                  Mark online
-                </Button>
-                <Button variant="outlined" color="warning" disabled={report.pending} onClick={() => report.execute('Spill')}>
-                  Report a spill
-                </Button>
-                <Button variant="outlined" color="info" disabled={report.pending} onClick={() => report.execute('Freezing')}>
-                  Report freezing
-                </Button>
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
+        {canCollect || canFlag ? (
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" sx={{ mb: 1 }}>
+                  At the tree
+                </Typography>
+                <TextField
+                  label="Note"
+                  value={notes}
+                  onChange={(event) => setNotes(event.target.value)}
+                  fullWidth
+                  sx={{ mb: 2 }}
+                />
+                {action.error || report.error ? (
+                  <Alert severity="error" sx={{ mb: 2 }}>
+                    {action.error ?? report.error}
+                  </Alert>
+                ) : null}
+                {done ? (
+                  <Alert severity="success" sx={{ mb: 2 }} onClose={() => setDone(null)}>
+                    {done}
+                  </Alert>
+                ) : null}
+                <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                  {canCollect ? (
+                    <Button variant="contained" disabled={action.pending} onClick={() => action.execute('collect')}>
+                      Collect bucket
+                    </Button>
+                  ) : null}
+                  {canFlag ? (
+                    <>
+                      <Button variant="outlined" disabled={action.pending} onClick={() => action.execute('maintenance')}>
+                        Maintenance
+                      </Button>
+                      <Button variant="outlined" disabled={action.pending} onClick={() => action.execute('online')}>
+                        Mark online
+                      </Button>
+                      <Button variant="outlined" color="warning" disabled={report.pending} onClick={() => report.execute('Spill')}>
+                        Report a spill
+                      </Button>
+                      <Button variant="outlined" color="info" disabled={report.pending} onClick={() => report.execute('Freezing')}>
+                        Report freezing
+                      </Button>
+                    </>
+                  ) : null}
+                </Stack>
+              </CardContent>
+            </Card>
+          </Grid>
+        ) : null}
 
         {can(Capability.MANAGE_SCHEDULE) && node?.BucketID ? (
           <Grid size={{ xs: 12, md: 6 }}>
@@ -294,6 +325,11 @@ export function NodePage() {
                     slotProps={{ textField: { fullWidth: true } }}
                   />
                   {createShift.error ? <Alert severity="error">{createShift.error}</Alert> : null}
+                  {shiftDone ? (
+                    <Alert severity="success" onClose={() => setShiftDone(null)}>
+                      {shiftDone}
+                    </Alert>
+                  ) : null}
                   <Button
                     variant="contained"
                     disabled={createShift.pending || !shift.UserID}

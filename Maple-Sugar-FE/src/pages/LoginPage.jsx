@@ -11,7 +11,7 @@ import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import mapleLogo from '../assets/MapleLogo.png';
 import ritLogo from '../assets/RITLogo.png';
 import { useAuth } from '../context/auth';
-import { landingRouteFor } from '../routes/navigation';
+import { canVisit, landingRouteFor } from '../routes/navigation';
 import { demoAccounts } from '../services/authService';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? '/api').replace(/\/$/, '');
@@ -36,7 +36,9 @@ export function LoginPage() {
   };
 
   if (!restoring && isAuthenticated) {
-    return <Navigate to={location.state?.from ?? landingRouteFor(role)} replace />;
+    // A page remembered from the last session may belong to a different role.
+    const from = location.state?.from;
+    return <Navigate to={from && canVisit(role, from) ? from : landingRouteFor(role)} replace />;
   }
 
   return (
