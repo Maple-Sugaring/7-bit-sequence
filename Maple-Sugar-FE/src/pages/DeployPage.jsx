@@ -450,7 +450,7 @@ export function DeployPage() {
                 sx={{
                   display: 'grid',
                   gap: 1.5,
-                  gridTemplateColumns: { xs: '1fr', sm: 'repeat(auto-fill, minmax(280px, 1fr))' },
+                  gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'repeat(auto-fill, minmax(280px, 1fr))' },
                 }}
               >
                 {gatewayList.map((gateway) => (

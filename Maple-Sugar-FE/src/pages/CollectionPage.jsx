@@ -294,7 +294,7 @@ export function CollectionPage() {
             <CardContent>
               <Stack spacing={2}>
                 <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline', justifyContent: 'space-between' }}>
-                  <Typography variant="h5" component="h2">
+                  <Typography variant="h6" component="h2">
                     This round
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
@@ -329,7 +329,7 @@ export function CollectionPage() {
             >
               <CardContent>
                 <Stack spacing={2}>
-                  <Typography variant="h5" component="h2">
+                  <Typography variant="h6" component="h2">
                     {tree ? tree.label : 'Pick a tree'}
                   </Typography>
                   {!tree ? (

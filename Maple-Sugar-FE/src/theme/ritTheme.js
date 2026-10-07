@@ -49,6 +49,10 @@ const theme = createTheme({
       styleOverrides: {
         html: { WebkitFontSmoothing: 'antialiased' },
         body: { backgroundColor: '#F6F3F0', color: neutral.black },
+        // Leaflet's own popup styles beat MUI's single-class rules: they add
+        // paragraph margins and a different font to popup content.
+        '.leaflet-popup-content p': { margin: 0 },
+        '.leaflet-container': { fontFamily: 'inherit' },
       },
     },
     MuiButton: {

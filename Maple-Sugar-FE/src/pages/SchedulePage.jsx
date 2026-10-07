@@ -66,7 +66,7 @@ function SlotCard({ slot, canClaim, canManage, onClaim, onRelease, onPickTime, o
       <CardContent sx={{ '&:last-child': { pb: 2 } }}>
         <Stack spacing={1.25}>
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}>
-            <Typography variant="subtitle1" component="h3" fontWeight={700} sx={{ flexGrow: 1 }}>
+            <Typography variant="subtitle1" component="h3" sx={{ fontWeight: 700, flexGrow: 1 }}>
               {slot.Task}
             </Typography>
             {slot.Is_Complete ? (
@@ -391,7 +391,7 @@ export function SchedulePage() {
             {days.map(({ day, slots }) => (
               <Box key={day}>
                 <Stack direction="row" spacing={1.5} sx={{ alignItems: 'baseline', mb: 1.5 }}>
-                  <Typography variant="h5" component="h2">
+                  <Typography variant="h6" component="h2">
                     {day === 'needs-time' ? 'Needs a time' : dayjs(day).format('dddd, MMM D')}
                   </Typography>
                   {day !== 'needs-time' && dayjs(day).isSame(dayjs(), 'day') ? (

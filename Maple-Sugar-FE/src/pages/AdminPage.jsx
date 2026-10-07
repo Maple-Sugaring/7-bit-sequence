@@ -371,7 +371,7 @@ export function AdminPage() {
         ].map((stat) => (
           <Grid size={{ xs: 6, md: 3 }} key={stat.label}>
             <Card sx={{ p: 2 }}>
-              <Typography variant="caption" color="text.secondary" display="block">
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                 {stat.label}
               </Typography>
               <Typography variant="h4" component="p">

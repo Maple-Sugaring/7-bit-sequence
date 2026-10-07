@@ -118,7 +118,7 @@ export function DashboardPage() {
         <Card>
           <CardContent>
             <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline', justifyContent: 'space-between' }}>
-              <Typography variant="h5" component="h2">
+              <Typography variant="h6" component="h2">
                 RIT weather
               </Typography>
               <Typography variant="body2" color="text.secondary">
@@ -153,7 +153,7 @@ export function DashboardPage() {
         <CardContent>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ justifyContent: 'space-between' }}>
             <Box>
-              <Typography variant="h5" component="h2">
+              <Typography variant="h6" component="h2">
                 2026 weight
               </Typography>
               <Typography variant="body2" color="text.secondary">
@@ -173,7 +173,7 @@ export function DashboardPage() {
                 return (
                   <Stack key={node.NodeID} direction="row" sx={{ justifyContent: 'space-between', py: 0.5 }}>
                     <Typography>{node.Node_Name}</Typography>
-                    <Typography fontWeight={700}>
+                    <Typography sx={{ fontWeight: 700 }}>
                       {gallons == null ? '—' : `${gallons.toFixed(1)} gal · ${Number(node.Weight).toFixed(1)} lb`}
                       {full ? ' · full' : ''}
                     </Typography>
