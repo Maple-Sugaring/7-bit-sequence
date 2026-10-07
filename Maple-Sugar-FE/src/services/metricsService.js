@@ -1,9 +1,11 @@
 import * as bucketsRepository from '../data/repositories/bucketsRepository';
+import * as collectionLogsRepository from '../data/repositories/collectionLogsRepository';
 import * as metricsRepository from '../data/repositories/metricsRepository';
 import * as nodesRepository from '../data/repositories/nodesRepository';
 import { seasonOf, semesterOf } from '../business/aggregation';
 import { classifyReading, sapToSyrupRatio } from '../business/sugarContent';
 import { riskFromTemperature } from '../business/spoilage';
+import { shelfLifeByBucket } from '../business/shelfLife';
 import {
   fillPercent,
   gallonsFromWeight,
@@ -109,4 +111,27 @@ export function submitReading(reading) {
 /** FR-046: lets a user correct a value that disagrees with the sensor. */
 export function correctReading(metricId, changes) {
   return metricsRepository.updateMetric(metricId, changes);
+}
+
+/** A batch is days old at most; two weeks of readings always reaches its start. */
+const BATCH_LOOKBACK_DAYS = 14;
+
+/**
+ * The sap in every bucket and how long it has left. Reads one bucket's
+ * history regardless of which tree it sat on, so a bucket moved between trees
+ * keeps its clock. `ambientF` is today's air temperature, used for the
+ * stretches no sap probe covered.
+ */
+export async function getBucketShelfLife({ ambientF = null } = {}) {
+  const now = new Date();
+  // Whole UTC days so the cache key repeats between refreshes.
+  const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - BATCH_LOOKBACK_DAYS));
+
+  const [metrics, buckets, collections] = await Promise.all([
+    metricsRepository.listMetrics({ from: from.toISOString() }),
+    bucketsRepository.listBuckets(),
+    collectionLogsRepository.listCollectionLogs(),
+  ]);
+
+  return [...shelfLifeByBucket({ readings: metrics, buckets, collections, ambientF, now }).values()];
 }

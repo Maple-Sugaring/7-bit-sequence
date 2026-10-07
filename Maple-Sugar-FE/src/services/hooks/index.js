@@ -36,6 +36,24 @@ export function useReadings({ season, nodeId, from, to } = {}) {
   );
 }
 
+const SHELF_LIFE_REFRESH_MS = 60_000;
+
+/** Shelf life per bucket batch. Refreshes on the fleet's timer so the countdown moves. */
+export function useBucketShelfLife(ambientF) {
+  const result = useAsync(
+    useCallback(() => metricsService.getBucketShelfLife({ ambientF }), [ambientF]),
+    { initialData: [] },
+  );
+  const { refresh } = result;
+
+  useEffect(() => {
+    const timer = setInterval(refresh, SHELF_LIFE_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [refresh]);
+
+  return result;
+}
+
 export function useRecordingTargets() {
   return useAsync(useCallback(() => metricsService.getRecordingTargets(), []), {
     initialData: [],
