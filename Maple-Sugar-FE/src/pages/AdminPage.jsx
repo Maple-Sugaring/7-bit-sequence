@@ -222,6 +222,37 @@ export function AdminPage() {
   const phone = useMediaQuery('(max-width:600px)');
   const columns = [
     { field: 'fullName', headerName: 'Name', width: 180 },
+    // Second, not last: the columns are wider than the page, so a trailing column is scrolled off.
+    {
+      field: 'actions',
+      headerName: '',
+      width: 110,
+      sortable: false,
+      filterable: false,
+      renderCell: (params) => (
+        <Stack direction="row">
+          <Tooltip title="Set end date">
+            <IconButton
+              size="small"
+              onClick={() => setExpiryUser(params.row)}
+              aria-label={`Set end date for ${params.row.fullName}`}
+            >
+              <MoreTimeIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Remove user">
+            <IconButton
+              size="small"
+              onClick={() => setPendingRemoval(params.row)}
+              disabled={remove.pending || params.row.UserID === currentUser?.id}
+              aria-label={`Remove ${params.row.fullName}`}
+            >
+              <DeleteOutlineIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+      ),
+    },
     {
       field: 'Pronouns',
       headerName: 'Pronouns',
@@ -291,36 +322,6 @@ export function AdminPage() {
           disabled={toggleActive.pending || params.row.UserID === currentUser?.id}
           inputProps={{ 'aria-label': `Active status for ${params.row.fullName}` }}
         />
-      ),
-    },
-    {
-      field: 'actions',
-      headerName: '',
-      width: 110,
-      sortable: false,
-      filterable: false,
-      renderCell: (params) => (
-        <Stack direction="row">
-          <Tooltip title="Set end date">
-            <IconButton
-              size="small"
-              onClick={() => setExpiryUser(params.row)}
-              aria-label={`Set end date for ${params.row.fullName}`}
-            >
-              <MoreTimeIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Remove user">
-            <IconButton
-              size="small"
-              onClick={() => setPendingRemoval(params.row)}
-              disabled={remove.pending || params.row.UserID === currentUser?.id}
-              aria-label={`Remove ${params.row.fullName}`}
-            >
-              <DeleteOutlineIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        </Stack>
       ),
     },
   ];
