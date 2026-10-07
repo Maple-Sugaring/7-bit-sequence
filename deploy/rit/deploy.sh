@@ -24,12 +24,12 @@ echo "$(date -u +%FT%TZ) deploying ${deployed_sha:-none} -> $remote_sha"
 git checkout --quiet "$BRANCH"
 git merge --ff-only "origin/$BRANCH"
 
-docker compose --env-file "$CONFIG_DIR/compose.env" \
-  -f docker-compose.yml -f deploy/rit/compose.rit.yml up -d --build --remove-orphans
+COMPOSE=(docker compose --env-file "$CONFIG_DIR/compose.env" -f docker-compose.yml -f deploy/rit/compose.rit.yml)
+"${COMPOSE[@]}" up -d --build --remove-orphans
 
 # Wait for the API healthcheck; fail loudly so the journal/log shows it.
 for _ in $(seq 1 30); do
-  status=$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose -f docker-compose.yml -f deploy/rit/compose.rit.yml ps -q api)" 2>/dev/null || true)
+  status=$(docker inspect -f '{{.State.Health.Status}}' "$("${COMPOSE[@]}" ps -q api)" 2>/dev/null || true)
   [ "$status" = healthy ] && { echo "$remote_sha" > "$STATE_FILE"; echo "deploy ok: $remote_sha"; docker image prune -f >/dev/null; exit 0; }
   sleep 5
 done
