@@ -82,8 +82,8 @@ export function useAlerts() {
   return useAsync(useCallback(() => alertService.getAlerts(), []), { initialData: [] });
 }
 
-export function useOpenAlertCount() {
-  return useAsync(useCallback(() => alertService.getOpenAlertCount(), []), { initialData: 0 });
+export function useOpenAlertCount(enabled = true) {
+  return useAsync(useCallback(() => alertService.getOpenAlertCount(), []), { enabled, initialData: 0 });
 }
 
 export function useDeviceHealth() {

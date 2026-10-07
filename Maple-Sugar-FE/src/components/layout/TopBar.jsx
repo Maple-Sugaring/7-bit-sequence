@@ -30,7 +30,8 @@ export function TopBar() {
   const [profileAnchor, setProfileAnchor] = useState(null);
   const compact = useMediaQuery('(max-width:900px)');
   const [menuOpen, setMenuOpen] = useState(false);
-  const alerts = useOpenAlertCount();
+  const canViewAlerts = can(Capability.VIEW_ALERTS);
+  const alerts = useOpenAlertCount(canViewAlerts);
   const openCount = Number(alerts.data) || 0;
   const previousCount = useRef(null);
 
@@ -52,7 +53,7 @@ export function TopBar() {
   const profileItems = [
     { to: '/profile', label: 'Profile & settings', Icon: SettingsIcon },
     ...(can(Capability.VIEW_SCHEDULE) ? [{ to: '/schedule?show=mine', label: 'My upcoming shifts', Icon: EventIcon }] : []),
-    { to: '/notifications', label: 'Notifications', Icon: NotificationsIcon },
+    ...(canViewAlerts ? [{ to: '/notifications', label: 'Notifications', Icon: NotificationsIcon }] : []),
   ];
 
   const goTo = (to) => {
@@ -71,7 +72,7 @@ export function TopBar() {
       component="header"
       sx={{
         display: "grid",
-        gridTemplateColumns: compact ? "1fr auto auto" : "auto 1fr auto auto",
+        gridTemplateColumns: `${compact ? "1fr" : "auto 1fr"} ${canViewAlerts ? "auto auto" : "auto"}`,
         alignItems: "center",
         gap: 1,
         px: { xs: 1.5, md: 3 },
@@ -106,11 +107,13 @@ export function TopBar() {
       </Typography>
       </Box>
       {compact ? null : <MainNav />}
-      <IconButton aria-label={`Notifications${openCount ? `, ${openCount} open` : ''}`} onClick={() => navigate('/notifications')} sx={{ color: '#fff' }}>
-        <Badge badgeContent={openCount} color="error" invisible={openCount === 0}>
-          <NotificationsIcon />
-        </Badge>
-      </IconButton>
+      {canViewAlerts ? (
+        <IconButton aria-label={`Notifications${openCount ? `, ${openCount} open` : ''}`} onClick={() => navigate('/notifications')} sx={{ color: '#fff' }}>
+          <Badge badgeContent={openCount} color="error" invisible={openCount === 0}>
+            <NotificationsIcon />
+          </Badge>
+        </IconButton>
+      ) : null}
       <Tooltip title={user?.fullName ? `${user.fullName} · Profile` : 'Profile'}>
         <IconButton aria-label="Your profile" aria-haspopup="menu" aria-expanded={profileAnchor ? 'true' : undefined} onClick={(event) => setProfileAnchor(event.currentTarget)} sx={{ color: '#fff' }}>
           <AccountCircleIcon />
