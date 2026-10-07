@@ -59,7 +59,8 @@ export function SapDataPage() {
   const [to, setTo] = useState(dayjs(initial.to));
   const [preset, setPreset] = useState('7d');
   const [unit, setUnit] = useState('day');
-  const [picked, setPicked] = useState([]);
+  // null = untouched (every tree selected); an array is the user's explicit choice, possibly empty.
+  const [picked, setPicked] = useState(null);
   const [pdfState, setPdfState] = useState({ busy: false, error: '' });
   const readings = useReadings({ from: LIVE_FROM, to: LIVE_TO });
 
@@ -72,7 +73,7 @@ export function SapDataPage() {
   }, [bush.data]);
 
   const boardIds = useMemo(() => new Set(nodes.map((node) => node.NodeID)), [nodes]);
-  const selectedIds = picked.length ? picked : nodes.map((node) => node.NodeID);
+  const selectedIds = useMemo(() => picked ?? nodes.map((node) => node.NodeID), [picked, nodes]);
 
   const tracked = useMemo(
     () => (readings.data ?? []).filter((row) => boardIds.has(row.NodeID)),
@@ -83,7 +84,7 @@ export function SapDataPage() {
     const start = from?.format('YYYY-MM-DD');
     const end = to?.format('YYYY-MM-DD');
     const ranged = tracked.filter((row) => {
-      if (selectedIds.length && !selectedIds.includes(row.NodeID)) return false;
+      if (!selectedIds.includes(row.NodeID)) return false;
       const date = String(row.Recorded_At).slice(0, 10);
       if (start && date < start) return false;
       if (end && date > end) return false;
@@ -92,11 +93,11 @@ export function SapDataPage() {
     return {
       ranged,
       ...dailyWeightRows(ranged, {
-        nodeIds: selectedIds.length ? selectedIds : [...boardIds],
+        nodeIds: selectedIds,
         unit,
       }),
     };
-  }, [tracked, selectedIds, from, to, unit, boardIds]);
+  }, [tracked, selectedIds, from, to, unit]);
 
   const stands = useMemo(() => {
     const names = [...new Set(nodes.map((node) => node.Stand).filter(Boolean))];
@@ -109,10 +110,14 @@ export function SapDataPage() {
 
   const emptyTitle = nodes.length === 0
     ? 'No trees deployed yet'
-    : 'No weight in this range';
+    : selectedIds.length === 0
+      ? 'No trees selected'
+      : 'No weight in this range';
   const emptyDescription = nodes.length === 0
     ? 'Register a gateway and add nodes on Deploy, then flash the Heltecs. Readings show up here once packets arrive.'
-    : 'Widen the dates, or wait for the next LoRa packet from a selected tree.';
+    : selectedIds.length === 0
+      ? 'Pick at least one tree to chart its weight.'
+      : 'Widen the dates, or wait for the next LoRa packet from a selected tree.';
 
   const loading = bush.loading || readings.loading;
 
@@ -287,10 +292,10 @@ export function SapDataPage() {
                     control={
                       <Checkbox
                         size="small"
-                        checked={picked.length === 0 || picked.includes(node.NodeID)}
+                        checked={selectedIds.includes(node.NodeID)}
                         onChange={() =>
                           setPicked((current) => {
-                            const base = current.length ? current : nodes.map((item) => item.NodeID);
+                            const base = current ?? nodes.map((item) => item.NodeID);
                             return base.includes(node.NodeID)
                               ? base.filter((id) => id !== node.NodeID)
                               : [...base, node.NodeID];
@@ -312,9 +317,13 @@ export function SapDataPage() {
                 ))}
               </FormGroup>
             )}
-            {picked.length > 0 ? (
-              <Button size="small" sx={{ mt: 1 }} onClick={() => setPicked([])}>
-                Select all
+            {nodes.length > 0 ? (
+              <Button
+                size="small"
+                sx={{ mt: 1 }}
+                onClick={() => setPicked(selectedIds.length === nodes.length ? [] : null)}
+              >
+                {selectedIds.length === nodes.length ? 'Clear all' : 'Select all'}
               </Button>
             ) : null}
           </Box>
