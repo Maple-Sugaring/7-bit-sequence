@@ -1,4 +1,5 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
+import { buildFleetNodes } from '../../business/nodeMapStatus';
 import * as adminService from '../adminService';
 import * as alertService from '../alertService';
 import * as collectionService from '../collectionService';
@@ -136,4 +137,52 @@ export function useUsers() {
 
 export function useGuides() {
   return useAsync(useCallback(() => guideService.getGuides(), []));
+}
+
+const FLEET_REFRESH_MS = 60_000;
+
+/**
+ * Every node with its map status, latest reading and siting. Refreshes on a
+ * timer and when the tab regains focus so a field user sees current statuses.
+ */
+export function useFleetMap() {
+  const health = useDeviceHealth();
+  const board = useBush();
+  const alerts = useAlerts();
+  const { refresh: refreshHealth } = health;
+  const { refresh: refreshBoard } = board;
+  const { refresh: refreshAlerts } = alerts;
+
+  const refresh = useCallback(() => {
+    refreshHealth();
+    refreshBoard();
+    refreshAlerts();
+  }, [refreshHealth, refreshBoard, refreshAlerts]);
+
+  useEffect(() => {
+    const timer = setInterval(refresh, FLEET_REFRESH_MS);
+    const onFocus = () => refresh();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [refresh]);
+
+  const nodes = useMemo(
+    () =>
+      buildFleetNodes({
+        nodes: health.data?.nodes ?? [],
+        board: board.data ?? [],
+        alerts: alerts.data ?? [],
+      }),
+    [health.data, board.data, alerts.data],
+  );
+
+  return {
+    nodes,
+    loading: health.loading && !health.data,
+    error: health.error ?? board.error ?? alerts.error,
+    refresh,
+  };
 }
