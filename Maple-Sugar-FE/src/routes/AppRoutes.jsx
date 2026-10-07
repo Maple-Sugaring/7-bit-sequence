@@ -8,6 +8,8 @@ import { AuthCallbackPage } from '../pages/AuthCallbackPage';
 import { LoginPage } from '../pages/LoginPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { ProtectedRoute } from './ProtectedRoute';
+import {useLocation} from 'react-router-dom';
+import {useAuth} from '../context/auth';
 
 const DashboardPage = lazy(() =>
   import('../pages/DashboardPage').then((module) => ({ default: module.DashboardPage })),
@@ -40,6 +42,17 @@ const DeployPage = lazy(() =>
   import('../pages/DeployPage').then((module) => ({ default: module.DeployPage })),
 );
 
+function ScheduleRoute() {
+  const { can } = useAuth();
+  const { search } = useLocation();
+  if (can(Capability.MANAGE_SCHEDULE)) {
+    const params = new URLSearchParams(search);
+    params.set('view', 'student');
+    return <Navigate to={`/schedule-admin?${params}`} replace />;
+  }
+  return <SchedulePage />;
+}
+
 const PROTECTED = [
   { path: '/dashboard', element: <DashboardPage />, capability: Capability.VIEW_DASHBOARD },
   { path: '/deploy', element: <DeployPage />, capability: Capability.DEPLOY_NODES },
@@ -47,7 +60,7 @@ const PROTECTED = [
   { path: '/collection', element: <CollectionPage />, capability: Capability.RECORD_DATA },
   { path: '/nodes/:nodeId', element: <NodePage />, capability: Capability.VIEW_DASHBOARD },
   { path: '/notifications', element: <AlertsPage />, capability: Capability.VIEW_ALERTS },
-  { path: '/schedule', element: <SchedulePage />, capability: Capability.VIEW_SCHEDULE },
+  { path: '/schedule', element: <ScheduleRoute/>, capability: Capability.VIEW_SCHEDULE },
   {
     path: '/schedule-admin',
     element: <ScheduleAdminPage />,
