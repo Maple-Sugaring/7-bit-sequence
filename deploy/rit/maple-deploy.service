@@ -1,0 +1,6 @@
+[Unit]
+Description=Pull origin/main and redeploy Maple Sugaring stack
+
+[Service]
+Type=oneshot
+ExecStart=%h/maple/app/deploy/rit/deploy.sh
