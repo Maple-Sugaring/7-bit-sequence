@@ -22,12 +22,13 @@ import StepLabel from '@mui/material/StepLabel';
 import Stepper from '@mui/material/Stepper';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import { statusFromCode } from '../business/nodeMapStatus';
 import { Capability } from '../business/permissions';
 import { PageHeader } from '../components/common/PageHeader';
 import { AsyncBlock, EmptyBlock } from '../components/common/StateBlock';
 import { useAuth } from '../context/auth';
 import { eraseHeltec, flashHeltec } from '../hardware/heltecFlash';
-import { useGateways, useNodes } from '../services/hooks';
+import { useGateways, useNodes, useNodeStatuses } from '../services/hooks';
 import { GatewayCard } from '../components/deploy/GatewayCard';
 import { NodeRow } from '../components/deploy/NodeRow';
 import { LocationPicker } from '../components/map/LocationPicker';
@@ -43,13 +44,6 @@ import {
 } from '../services/nodeService';
 
 const STANDS = ['Alumni House', 'Chabad House', 'Red Barn'];
-
-const NODE_STATUS = {
-  0: { label: 'Offline', color: 'error' },
-  1: { label: 'Online', color: 'success' },
-  2: { label: 'Degraded', color: 'warning' },
-  3: { label: 'Maintenance', color: 'info' },
-};
 
 const emptyDraft = () => ({
   Node_Name: '',
@@ -104,6 +98,7 @@ export function DeployPage() {
   const nodes = useNodes();
   const gateways = useGateways();
   const nodeList = useMemo(() => nodes.data ?? [], [nodes.data]);
+  const statuses = useNodeStatuses(nodeList);
   const gatewayList = useMemo(() => gateways.data ?? [], [gateways.data]);
   const gatewayById = useMemo(
     () => new Map(gatewayList.map((gateway) => [gateway.GatewayID, gateway])),
@@ -533,7 +528,7 @@ export function DeployPage() {
                   <NodeRow
                     key={node.NodeID}
                     node={node}
-                    status={NODE_STATUS[node.Status_Code] ?? { label: 'Unknown', color: 'default' }}
+                    status={statuses.get(node.NodeID) ?? statusFromCode(node.Status_Code)}
                     gatewayName={gatewayById.get(node.GatewayID)?.Gateway_Name}
                     canDeploy={canDeploy}
                     onOpen={() => navigate(`/nodes/${node.NodeID}`)}

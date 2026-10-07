@@ -19,20 +19,16 @@ import {
 } from '../business/shelfLife';
 import { weekForecastRows, weekLabel, weekStart } from '../business/weekWindows';
 import { bushAverageSugar, syrupEstimate } from '../business/sugarContent';
+import { MapStatus, STATUS_META } from '../business/nodeMapStatus';
 import { isFull } from '../business/yieldMetrics';
 import { LIVE_FROM, LIVE_NODE_IDS, LIVE_TO, bucketGallons, bucketPercent, recordedSugar } from '../business/liveWeight';
 import { SiteForecastChart } from '../components/charts/SeriesChart';
+import { FleetMapCard } from '../components/map/FleetMapCard';
+import { NodeStatusChip } from '../components/common/NodeStatusChip';
 import { MeterBar } from '../components/common/MeterBar';
 import { PageHeader } from '../components/common/PageHeader';
 import { dateOnly, dateTime } from '../components/common/format';
-import { useBush, useLiveWeather, useReadings } from '../services/hooks';
-
-const STATUS = {
-  0: { label: 'Offline', color: 'error' },
-  1: { label: 'Online', color: 'success' },
-  2: { label: 'Degraded', color: 'warning' },
-  3: { label: 'Maintenance', color: 'info' },
-};
+import { useFleetMap, useLiveWeather, useReadings } from '../services/hooks';
 
 function Meter({ label, value, percent, detail, color }) {
   return (
@@ -53,7 +49,9 @@ function Meter({ label, value, percent, detail, color }) {
 
 export function DashboardPage() {
   const navigate = useNavigate();
-  const bush = useBush();
+  // One fetch feeds the cards below and the fleet map, so they cannot disagree.
+  const fleet = useFleetMap();
+  const bushNodes = fleet.nodes;
   const live = useLiveWeather();
   const readings = useReadings({ from: LIVE_FROM, to: LIVE_TO });
   const weather = live.data?.Sites?.[0] ?? (live.data?.Configured ? live.data : null);
@@ -65,21 +63,21 @@ export function DashboardPage() {
     // test twice.
     const sugars = recordedSugar(readings.data ?? []);
     const sugar = sugars.length ? sugars.reduce((sum, value) => sum + value, 0) / sugars.length : null;
-    const bushSugar = bushAverageSugar(bush.data);
-    const syrup = (bush.data ?? []).reduce((sum, node) => {
+    const bushSugar = bushAverageSugar(bushNodes);
+    const syrup = bushNodes.reduce((sum, node) => {
       const gallons = bucketGallons(node.Weight, node.Tare_Weight ?? 0);
       // A tree's own last test, then the bush average, then 43:1.
       const estimate = syrupEstimate({ sapGallons: gallons, tree: node.Sugar_Percent, bush: bushSugar });
       return sum + (estimate?.syrupGallons ?? 0);
     }, 0);
-    const measured = (bush.data ?? []).some((node) => node.Sugar_Percent != null);
+    const measured = bushNodes.some((node) => node.Sugar_Percent != null);
     return { readings: weights.length, sugar, syrup, measured };
-  }, [readings.data, bush.data]);
+  }, [readings.data, bushNodes]);
 
   const shelfByNode = useMemo(() => {
     const ambient = weather?.Temperature_F ?? null;
     const map = new Map();
-    for (const node of bush.data ?? []) {
+    for (const node of bushNodes ?? []) {
       const rows = (readings.data ?? []).filter((row) => row.NodeID === node.NodeID);
       const fromProbe = shelfLifeFromReadings(rows);
       if (fromProbe) {
@@ -100,9 +98,9 @@ export function DashboardPage() {
       });
     }
     return map;
-  }, [bush.data, readings.data, weather]);
+  }, [bushNodes, readings.data, weather]);
 
-  const offlineNodes = (bush.data ?? []).filter((node) => node.Status_Code === 0);
+  const offlineNodes = bushNodes.filter((node) => node.mapStatus === MapStatus.OFFLINE);
   const shortestShelf = [...shelfByNode.values()].reduce((soonest, entry) => {
     if (entry.hours == null) return soonest;
     if (!soonest || entry.hours < soonest.hours) return entry;
@@ -169,7 +167,7 @@ export function DashboardPage() {
           <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid size={{ xs: 12, sm: 6, md: 4 }}>
               <Typography variant="overline">In the buckets now</Typography>
-              {(bush.data ?? []).map((node) => {
+              {bushNodes.map((node) => {
                 const gallons = bucketGallons(node.Weight, node.Tare_Weight ?? 0);
                 const full = isFull(node.Weight, node.Tare_Weight ?? 0);
                 return (
@@ -214,7 +212,7 @@ export function DashboardPage() {
               </Typography>
             </Grid>
           </Grid>
-          {(bush.data ?? []).some((node) => isFull(node.Weight, node.Tare_Weight ?? 0)) ? (
+          {bushNodes.some((node) => isFull(node.Weight, node.Tare_Weight ?? 0)) ? (
             <Alert severity="warning" sx={{ mt: 2 }} action={<Button color="inherit" onClick={() => navigate('/notifications')}>Alerts</Button>}>
               A bucket is full. Collect it before it spills, or open the alerts.
             </Alert>
@@ -227,15 +225,17 @@ export function DashboardPage() {
         </CardContent>
       </Card>
 
+      <FleetMapCard fleet={fleet} />
+
       <Grid container spacing={2}>
-        {(bush.data ?? []).map((node) => {
-          const status = STATUS[node.Status_Code] ?? STATUS[1];
+        {bushNodes.map((node) => {
+          const status = node.mapStatus;
           const gallons = bucketGallons(node.Weight, node.Tare_Weight ?? 0);
           const fill = bucketPercent(node.Weight, node.Tare_Weight ?? 0);
           const shelf = shelfByNode.get(node.NodeID);
           const tip = [
             node.Node_Name,
-            `Status ${status.label}`,
+            `Status ${STATUS_META[status].label}`,
             node.Signal_Rssi != null ? `Signal ${node.Signal_Rssi} dBm` : null,
             node.Sugar_Percent != null ? `Sugar ${node.Sugar_Percent}%` : null,
             node.Ice_Present ? 'Ice in the bucket' : null,
@@ -253,7 +253,7 @@ export function DashboardPage() {
                     <CardContent>
                       <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
                         <Typography variant="h6">{node.Stand}</Typography>
-                        <Chip size="small" label={status.label} color={status.color} />
+                        <NodeStatusChip status={status} />
                       </Stack>
                       <Typography variant="body2" color="text.secondary">
                         {node.Node_Name}

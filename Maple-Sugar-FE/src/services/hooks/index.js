@@ -1,4 +1,5 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { buildFleetNodes, fleetLoadState, statusByNodeId } from '../../business/nodeMapStatus';
 import * as adminService from '../adminService';
 import * as alertService from '../alertService';
 import * as collectionService from '../collectionService';
@@ -136,4 +137,72 @@ export function useUsers() {
 
 export function useGuides() {
   return useAsync(useCallback(() => guideService.getGuides(), []));
+}
+
+const FLEET_REFRESH_MS = 60_000;
+
+// Stable identities: useAsync refetches when its loader changes.
+const loadBoard = () => nodeService.getBoard();
+const loadAlerts = () => alertService.getAlerts();
+
+/** useAsync nulls its data when a refetch fails; keep the last good value instead. */
+function useLastGood(value) {
+  const [kept, setKept] = useState(value);
+  if (value != null && value !== kept) setKept(value);
+  return value ?? kept;
+}
+
+/**
+ * Every deployed node with its map status. The board rows already carry
+ * siting, last-seen, health and the latest reading, so the map needs only the
+ * board and the alerts; the Dashboard shares this one fetch. Refreshes on a
+ * timer and when the tab regains focus. A failed refresh keeps the last good
+ * data and reports `error` alongside it.
+ */
+export function useFleetMap() {
+  const board = useAsync(loadBoard);
+  const alerts = useAsync(loadAlerts);
+  const boardData = useLastGood(board.data);
+  const alertData = useLastGood(alerts.data);
+  const [now, setNow] = useState(() => new Date());
+  const { refresh: refreshBoard } = board;
+  const { refresh: refreshAlerts } = alerts;
+
+  const refresh = useCallback(() => {
+    setNow(new Date());
+    refreshBoard();
+    refreshAlerts();
+  }, [refreshBoard, refreshAlerts]);
+
+  useEffect(() => {
+    const timer = setInterval(refresh, FLEET_REFRESH_MS);
+    window.addEventListener('focus', refresh);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [refresh]);
+
+  const nodes = useMemo(
+    () => buildFleetNodes({ nodes: boardData ?? [], board: boardData ?? [], alerts: alertData ?? [], now }),
+    [boardData, alertData, now],
+  );
+
+  const error = board.error ?? alerts.error;
+  const { loading, stale } = fleetLoadState({ nodes: boardData, alerts: alertData, error });
+
+  return { nodes, loading, error, stale, refresh };
+}
+
+/**
+ * Status per node id for a page that lists nodes (Dashboard, Node, Deploy), on
+ * the same rules as the map. Alerts decide degraded-by-fault; until they load,
+ * a node falls back to what its own fields say.
+ */
+export function useNodeStatuses(nodes) {
+  const alerts = useAlerts();
+  return useMemo(
+    () => statusByNodeId(nodes ?? [], alerts.data ?? []),
+    [nodes, alerts.data],
+  );
 }

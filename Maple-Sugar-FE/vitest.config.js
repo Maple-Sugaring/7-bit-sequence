@@ -6,7 +6,8 @@ export default mergeConfig(
   defineConfig({
     test: {
       environment: 'node',
-      include: ['test/**/*.test.js'],
+      // Component tests opt into jsdom with a `// @vitest-environment jsdom` docblock.
+      include: ['test/**/*.test.{js,jsx}'],
     },
   }),
 );

@@ -45,6 +45,8 @@ function Forbidden() {
  */
 export function ProtectedRoute({ capability, children }) {
   const { isAuthenticated, restoring, can } = useAuth();
+  // One capability, or a list of which any one is enough.
+  const needed = capability ? [capability].flat() : [];
   const location = useLocation();
 
   if (restoring) return <FullPageSpinner />;
@@ -54,7 +56,7 @@ export function ProtectedRoute({ capability, children }) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
-  if (capability && !can(capability)) return <Forbidden />;
+  if (needed.length > 0 && !needed.some((candidate) => can(candidate))) return <Forbidden />;
 
   return children;
 }

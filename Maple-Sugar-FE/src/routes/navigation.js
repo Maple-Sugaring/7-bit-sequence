@@ -1,10 +1,11 @@
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import MapIcon from '@mui/icons-material/Map';
 import RestoreIcon from '@mui/icons-material/Restore';
 import ParkIcon from '@mui/icons-material/Park';
 import SettingsInputAntennaIcon from '@mui/icons-material/SettingsInputAntenna';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
-import { can, Capability } from '../business/permissions';
+import { canAny, Capability } from '../business/permissions';
 
 export const NAV_ITEMS = [
   {
@@ -12,6 +13,12 @@ export const NAV_ITEMS = [
     label: 'The Bush',
     icon: RestoreIcon,
     capability: Capability.VIEW_DASHBOARD,
+  },
+  {
+    to: '/map',
+    label: 'Map',
+    icon: MapIcon,
+    capability: [Capability.VIEW_DASHBOARD, Capability.VIEW_NODES],
   },
   {
     to: '/deploy',
@@ -46,7 +53,8 @@ export const NAV_ITEMS = [
 ];
 
 export function navItemsFor(role) {
-  return NAV_ITEMS.filter((item) => can(role, item.capability));
+  // `capability` is one capability or a list of which any one is enough.
+  return NAV_ITEMS.filter((item) => canAny(role, [item.capability].flat()));
 }
 
 export function landingRouteFor(role) {
