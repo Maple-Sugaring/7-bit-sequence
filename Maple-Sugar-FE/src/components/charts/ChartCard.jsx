@@ -22,7 +22,7 @@ export function ChartCard({
     <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <CardHeader
         title={
-          <Typography variant="h5" component="h2">
+          <Typography variant="h6" component="h2">
             {title}
           </Typography>
         }

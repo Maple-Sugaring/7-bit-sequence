@@ -35,7 +35,7 @@ export function RoundSummary({ round, onNewRound, onKeepGoing }) {
     <Card>
       <CardContent>
         <Stack spacing={2}>
-          <Typography variant="h5" component="h2">
+          <Typography variant="h6" component="h2">
             {round.label ? `${round.label} done` : 'Round done'}
           </Typography>
 

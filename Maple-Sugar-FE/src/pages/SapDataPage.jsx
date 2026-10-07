@@ -167,7 +167,7 @@ export function SapDataPage() {
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.7fr)' },
+          gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.7fr)' },
           gridTemplateRows: { md: 'auto auto' },
           columnGap: 2,
           rowGap: 1.5,

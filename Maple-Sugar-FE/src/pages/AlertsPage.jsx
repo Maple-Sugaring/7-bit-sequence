@@ -80,7 +80,7 @@ function AlertRow({ alert, canResolve, canSchedule, onResolve, onReopen, onSched
 
           <Box sx={{ flexGrow: 1, minWidth: 0 }}>
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5, mb: 0.5 }}>
-              <Typography variant="subtitle1" component="h3" fontWeight={700}>
+              <Typography variant="subtitle1" component="h3" sx={{ fontWeight: 700 }}>
                 {alert.Alert_Type}
               </Typography>
               <Chip label={alert.nodeName} size="small" variant="outlined" />

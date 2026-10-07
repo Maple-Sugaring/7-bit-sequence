@@ -25,7 +25,7 @@ function Forbidden() {
 
   return (
     <Stack spacing={2} sx={{ alignItems: 'center', textAlign: 'center', py: 8 }}>
-      <Typography variant="h3" component="h1">
+      <Typography variant="h2" component="h1">
         You do not have access to this page
       </Typography>
       <Typography variant="body1" color="text.secondary" sx={{ maxWidth: '52ch' }}>

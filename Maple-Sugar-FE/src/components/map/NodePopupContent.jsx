@@ -11,7 +11,7 @@ function NodeSummary({ node }) {
   return (
     <Stack spacing={0.5}>
       <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-        <Typography component="h3" variant="subtitle2" fontWeight={700}>
+        <Typography component="h3" variant="subtitle2" sx={{ fontWeight: 700 }}>
           {node.Node_Name}
         </Typography>
         <NodeStatusChip status={node.mapStatus} />
@@ -45,7 +45,7 @@ function NodeSummary({ node }) {
         to={`/nodes/${node.NodeID}`}
         size="small"
         variant="contained"
-        sx={{ alignSelf: 'flex-start', minHeight: 36 }}
+        sx={{ alignSelf: 'flex-start', minHeight: 36, color: '#fff !important' }}
       >
         Open node
       </Button>
