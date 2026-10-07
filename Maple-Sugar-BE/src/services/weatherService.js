@@ -11,6 +11,7 @@ import { ApiError } from '../lib/ApiError.js';
 import { CAMPUS_SITES } from '../business/sites.js';
 import { describeSapChange, sapRunFromTemps } from '../business/sapFlow.js';
 import { SUGARBUSH_TIME_ZONE, formatZoneDate } from '../business/availability.js';
+import { addDays, pastDaysFromSnapshots, startOfWeek } from '../business/pastWeather.js';
 import * as weatherRepository from '../repositories/weatherRepository.js';
 import * as alertsRepository from '../repositories/alertsRepository.js';
 import { cacheNamespaces } from '../cache/cacheKeys.js';
@@ -177,6 +178,17 @@ export async function getLive() {
       };
     }),
   );
+
+  // The week chart starts on Sunday, but OpenWeather only looks ahead. Fill the
+  // days already behind us from what earlier reads stored.
+  const todayKey = formatZoneDate(new Date(), SUGARBUSH_TIME_ZONE);
+  const weekStartKey = startOfWeek(todayKey);
+  const stored = await weatherRepository.liveSince(`${addDays(weekStartKey, -1)}T00:00:00Z`);
+  const past = pastDaysFromSnapshots(stored, { today: todayKey, weekStart: weekStartKey });
+  for (const entry of sites) {
+    const have = new Set(entry.days.map((day) => day.Date));
+    entry.days = [...past.filter((day) => !have.has(day.Date)), ...entry.days];
+  }
 
   const primary = sites[0];
   const current = primary.current;
