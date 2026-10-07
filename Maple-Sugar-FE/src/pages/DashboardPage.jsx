@@ -11,7 +11,7 @@ import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { shortestBatch } from '../business/shelfLife';
+import { batchesByNode, shelfLifeSummary } from '../business/shelfLife';
 import { weekForecastRows, weekLabel, weekStart } from '../business/weekWindows';
 import { bushAverageSugar, syrupEstimate } from '../business/sugarContent';
 import { MapStatus, STATUS_META } from '../business/nodeMapStatus';
@@ -74,19 +74,10 @@ export function DashboardPage() {
   // Shelf life belongs to the sap in a bucket, so each tree shows whichever
   // bucket is sitting on it now, and a tree with an empty bucket shows none.
   const batches = useBucketShelfLife(weather?.Temperature_F ?? null).data ?? NO_BATCHES;
-  const batchByNode = useMemo(() => {
-    const map = new Map();
-    for (const batch of batches) {
-      if (batch.state === 'empty' || batch.nodeId == null) continue;
-      const held = map.get(batch.nodeId);
-      if (!held || (batch.hours ?? Infinity) < (held.hours ?? Infinity)) map.set(batch.nodeId, batch);
-    }
-    return map;
-  }, [batches]);
+  const batchByNode = useMemo(() => batchesByNode(batches), [batches]);
 
   const offlineNodes = bushNodes.filter((node) => node.mapStatus === MapStatus.OFFLINE);
-  const shortestShelf = shortestBatch(batches);
-  const holdingSap = batches.filter((batch) => batch.state !== 'empty').length;
+  const { shortest: shortestShelf, holdingSap } = useMemo(() => shelfLifeSummary(batches), [batches]);
 
   return (
     <>

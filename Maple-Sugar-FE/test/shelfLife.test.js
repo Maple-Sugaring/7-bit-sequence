@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { bucketBatch, shelfLifeByBucket } from '../src/business/shelfLife';
+import { batchesByNode, bucketBatch, shelfLifeByBucket, shelfLifeSummary } from '../src/business/shelfLife';
 
 const NOW = new Date('2026-10-07T12:00:00.000Z');
 const hoursAgo = (hours) => new Date(NOW.getTime() - hours * 3_600_000).toISOString();
@@ -202,5 +202,32 @@ describe('tracking by bucket, not by node', () => {
 
     expect(byBucket.get(2).state).toBe('empty');
     expect(byBucket.get(1).state).toBe('active');
+  });
+});
+
+describe('reading the batches together', () => {
+  const batch = (extra) => ({ state: 'active', bucketId: 1, nodeId: 1, hours: 20, ...extra });
+  const empty = (extra) => ({ state: 'empty', bucketId: 9, nodeId: null, hours: null, ...extra });
+
+  test('gives each tree the batch of the bucket on it, the shortest if several claim it', () => {
+    const byNode = batchesByNode([
+      batch({ bucketId: 1, nodeId: 1, hours: 20 }),
+      batch({ bucketId: 2, nodeId: 1, hours: 8 }),
+      batch({ bucketId: 3, nodeId: 2, hours: null, state: 'unknown' }),
+      empty(),
+    ]);
+    expect(byNode.get(1).bucketId).toBe(2);
+    expect(byNode.get(2).state).toBe('unknown');
+    expect(byNode.size).toBe(2);
+  });
+
+  test('summarises the bush: the closest batch and how many buckets hold sap', () => {
+    const summary = shelfLifeSummary([batch({ hours: 20 }), batch({ bucketId: 2, hours: 5 }), empty(), batch({ bucketId: 4, state: 'unknown', hours: null })]);
+    expect(summary.shortest.bucketId).toBe(2);
+    expect(summary.holdingSap).toBe(3);
+  });
+
+  test('has no closest batch when every bucket is empty', () => {
+    expect(shelfLifeSummary([empty(), empty()])).toEqual({ shortest: null, holdingSap: 0 });
   });
 });

@@ -11,6 +11,7 @@
  */
 
 import { SPOILAGE_THRESHOLD_F } from './spoilage';
+import { LB_PER_GALLON } from './yieldMetrics';
 
 /** Hours a bucket of sap stays usable when held at or below freezing. */
 export const BASE_SHELF_LIFE_HOURS = 96;
@@ -122,7 +123,7 @@ export function bucketBatch({ bucket, readings, collections = [], ambientF = nul
     startedAt: new Date(startedAt).toISOString(),
     ageHours: (asOf - startedAt) / HOUR_MS,
     asOf: new Date(asOf).toISOString(),
-    gallons: batch[batch.length - 1].net / 8.34,
+    gallons: batch[batch.length - 1].net / LB_PER_GALLON,
   };
 
   // Walk the batch, splitting each gap into the part a probe reading still
@@ -204,6 +205,29 @@ export function shortestBatch(batches) {
     if (batch.hours == null) return soonest;
     return !soonest || batch.hours < soonest.hours ? batch : soonest;
   }, null);
+}
+
+/**
+ * The batch each tree is holding now, keyed by NodeID. A tree whose bucket is
+ * empty has none. Should two buckets both last reported from one tree, the one
+ * nearer spoiling is the one worth showing.
+ */
+export function batchesByNode(batches) {
+  const byNode = new Map();
+  for (const batch of batches) {
+    if (batch.state === 'empty' || batch.nodeId == null) continue;
+    const held = byNode.get(batch.nodeId);
+    if (!held || (batch.hours ?? Infinity) < (held.hours ?? Infinity)) byNode.set(batch.nodeId, batch);
+  }
+  return byNode;
+}
+
+/** Bush-wide view: the closest batch, and how many buckets hold sap at all. */
+export function shelfLifeSummary(batches) {
+  return {
+    shortest: shortestBatch(batches),
+    holdingSap: batches.filter((batch) => batch.state !== 'empty').length,
+  };
 }
 
 export function formatShelfLife(hours) {
