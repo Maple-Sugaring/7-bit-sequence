@@ -22,6 +22,7 @@ import { bushAverageSugar, syrupEstimate } from '../business/sugarContent';
 import { isFull } from '../business/yieldMetrics';
 import { LIVE_FROM, LIVE_NODE_IDS, LIVE_TO, bucketGallons, bucketPercent, recordedSugar } from '../business/liveWeight';
 import { SiteForecastChart } from '../components/charts/SeriesChart';
+import { FleetMapCard } from '../components/map/FleetMapCard';
 import { MeterBar } from '../components/common/MeterBar';
 import { PageHeader } from '../components/common/PageHeader';
 import { dateOnly, dateTime } from '../components/common/format';
@@ -226,6 +227,8 @@ export function DashboardPage() {
           ) : null}
         </CardContent>
       </Card>
+
+      <FleetMapCard />
 
       <Grid container spacing={2}>
         {(bush.data ?? []).map((node) => {

@@ -1,5 +1,6 @@
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import MapIcon from '@mui/icons-material/Map';
 import RestoreIcon from '@mui/icons-material/Restore';
 import ParkIcon from '@mui/icons-material/Park';
 import SettingsInputAntennaIcon from '@mui/icons-material/SettingsInputAntenna';
@@ -11,6 +12,12 @@ export const NAV_ITEMS = [
     to: '/dashboard',
     label: 'The Bush',
     icon: RestoreIcon,
+    capability: Capability.VIEW_DASHBOARD,
+  },
+  {
+    to: '/map',
+    label: 'Map',
+    icon: MapIcon,
     capability: Capability.VIEW_DASHBOARD,
   },
   {

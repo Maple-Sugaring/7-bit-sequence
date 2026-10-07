@@ -33,12 +33,16 @@ const CollectionPage = lazy(() =>
 const ProfilePage = lazy(() =>
   import('../pages/ProfilePage').then((module) => ({ default: module.ProfilePage })),
 );
+const FleetMapPage = lazy(() =>
+  import('../pages/FleetMapPage').then((module) => ({ default: module.FleetMapPage })),
+);
 const DeployPage = lazy(() =>
   import('../pages/DeployPage').then((module) => ({ default: module.DeployPage })),
 );
 
 const PROTECTED = [
   { path: '/dashboard', element: <DashboardPage />, capability: Capability.VIEW_DASHBOARD },
+  { path: '/map', element: <FleetMapPage />, capability: Capability.VIEW_DASHBOARD },
   { path: '/deploy', element: <DeployPage />, capability: Capability.DEPLOY_NODES },
   { path: '/table', element: <SapDataPage />, capability: Capability.VIEW_DATA_TABLE },
   { path: '/collection', element: <CollectionPage />, capability: Capability.RECORD_DATA },
