@@ -96,6 +96,25 @@ describe('buildFleetNodes', () => {
   });
 });
 
+describe('fault reason and clock', () => {
+  it('explains a fault from status code and open alerts', () => {
+    const rows = buildFleetNodes({
+      nodes: [node({ Status_Code: 2 })],
+      board: [],
+      alerts: [{ NodeID: 1, Alert_Type: 'Tipped', Description: 'Bucket tipped over', Is_Resolved: false }],
+      now: NOW,
+    });
+    expect(rows[0].faultReason).toBe('Reporting as degraded; Bucket tipped over');
+  });
+  it('has no fault reason when not faulted', () => {
+    expect(buildFleetNodes({ nodes: [node()], now: NOW })[0].faultReason).toBeNull();
+  });
+  it('computes minutes since seen from the supplied clock', () => {
+    expect(buildFleetNodes({ nodes: [node()], now: NOW })[0].minutesSinceSeen).toBe(10);
+    expect(buildFleetNodes({ nodes: [node({ Last_Seen: null })], now: NOW })[0].minutesSinceSeen).toBeNull();
+  });
+});
+
 describe('statusCounts', () => {
   it('counts every status including zeros', () => {
     const rows = buildFleetNodes({ nodes: [node(), node({ NodeID: 2, Status_Code: 2 })], board: [], alerts: [], now: NOW });

@@ -57,20 +57,41 @@ export function deriveMapStatus(node, { now = new Date(), faultNodeIds = new Set
   return minutes > STALE_AFTER_MINUTES ? MapStatus.STALE : MapStatus.FRESH;
 }
 
+/** Why a node reads as faulted, for the popup. Null when it is not. */
+function faultReasonFor(node, alertTexts) {
+  const parts = [];
+  if (node.Status_Code === STATUS_DEGRADED) parts.push('Reporting as degraded');
+  parts.push(...(alertTexts.get(node.NodeID) ?? []));
+  return parts.length ? parts.join('; ') : null;
+}
+
 /** Nodes with the status, latest reading and siting the map needs. */
 export function buildFleetNodes({ nodes = [], board = [], alerts = [], now = new Date() }) {
-  const faultNodeIds = new Set(
-    alerts
-      .filter((alert) => !alert.Is_Resolved && FAULT_ALERT_TYPES.includes(alert.Alert_Type))
-      .map((alert) => alert.NodeID),
+  const faultAlerts = alerts.filter(
+    (alert) => !alert.Is_Resolved && FAULT_ALERT_TYPES.includes(alert.Alert_Type),
   );
+  const faultNodeIds = new Set(faultAlerts.map((alert) => alert.NodeID));
+  const alertTexts = new Map();
+  faultAlerts.forEach((alert) => {
+    const list = alertTexts.get(alert.NodeID) ?? [];
+    list.push(alert.Description || alert.Alert_Type);
+    alertTexts.set(alert.NodeID, list);
+  });
   const readingByNode = new Map(board.map((row) => [row.NodeID, row]));
-  return nodes.map((node) => ({
-    ...node,
-    mapStatus: deriveMapStatus(node, { now, faultNodeIds }),
-    reading: readingByNode.get(node.NodeID) ?? null,
-    hasLocation: validCoordinates(node.Location),
-  }));
+  return nodes.map((node) => {
+    const mapStatus = deriveMapStatus(node, { now, faultNodeIds });
+    return {
+      ...node,
+      mapStatus,
+      // Recomputed from the same clock as the status, so "seen 50 min ago"
+      // can never sit beside a Fresh badge.
+      minutesSinceSeen:
+        node.Last_Seen == null ? null : Math.floor((new Date(now) - new Date(node.Last_Seen)) / 60000),
+      faultReason: mapStatus === MapStatus.FAULTED ? faultReasonFor(node, alertTexts) : null,
+      reading: readingByNode.get(node.NodeID) ?? null,
+      hasLocation: validCoordinates(node.Location),
+    };
+  });
 }
 
 export function statusCounts(rows) {

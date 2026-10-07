@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import MenuItem from '@mui/material/MenuItem';
@@ -27,13 +28,15 @@ export function FleetMapPage() {
   const [mobileView, setMobileView] = useState('list');
   const wide = useMediaQuery('(min-width:900px)');
 
-  const site = params.get('site') ?? ALL_SITES;
-  const selectedId = params.get('node') ? Number(params.get('node')) : null;
-
   const sites = useMemo(
     () => [...new Set(fleet.nodes.map((node) => node.Stand).filter(Boolean))].sort(),
     [fleet.nodes],
   );
+  // A site that is not in the list (stale link, typo) falls back to all sites,
+  // so the filter and the select always agree.
+  const siteParam = params.get('site');
+  const site = siteParam && sites.includes(siteParam) ? siteParam : ALL_SITES;
+  const nodeParam = Number.parseInt(params.get('node') ?? '', 10);
 
   const bySite = useMemo(
     () => (site === ALL_SITES ? fleet.nodes : fleet.nodes.filter((node) => node.Stand === site)),
@@ -48,7 +51,12 @@ export function FleetMapPage() {
         (!needle || node.Node_Name.toLowerCase().includes(needle)),
     );
   }, [bySite, statuses, query]);
-  const noLocation = bySite.filter((node) => !node.hasLocation).length;
+  const noLocation = visible.filter((node) => !node.hasLocation).length;
+  // Only a node that is on screen and sited can be selected.
+  const selectedId =
+    Number.isInteger(nodeParam) && visible.some((node) => node.NodeID === nodeParam && node.hasLocation)
+      ? nodeParam
+      : null;
 
   const update = (key, value) => {
     const next = new URLSearchParams(params);
@@ -108,7 +116,7 @@ export function FleetMapPage() {
             select
             size="small"
             label="Site"
-            value={sites.includes(site) ? site : ALL_SITES}
+            value={site}
             onChange={(event) => update('site', event.target.value)}
             sx={{ minWidth: 200 }}
           >
@@ -141,6 +149,11 @@ export function FleetMapPage() {
         </Stack>
         <FleetMapLegend counts={counts} active={statuses} onToggle={toggleStatus} noLocation={noLocation} />
       </Stack>
+      {fleet.stale ? (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Could not refresh. Showing the last data we loaded.
+        </Alert>
+      ) : null}
       {body}
     </>
   );

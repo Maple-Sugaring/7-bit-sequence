@@ -1,7 +1,22 @@
 import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import { STATUS_META, STATUS_ORDER } from '../../business/nodeMapStatus';
-import { STATUS_HEX } from './statusMarker';
+import { shapeSvg, STATUS_HEX } from './statusMarker';
+
+// The same shape the marker uses, so the legend explains the map. Input is constant.
+function StatusGlyph({ status }) {
+  const meta = STATUS_META[status];
+  return (
+    <svg
+      viewBox="0 0 28 28"
+      width="20"
+      height="20"
+      aria-hidden="true"
+      style={{ marginLeft: 8 }}
+      dangerouslySetInnerHTML={{ __html: shapeSvg(meta.shape, STATUS_HEX[meta.color]) }}
+    />
+  );
+}
 
 /** Status chips with counts. In `interactive` mode they toggle a status filter. */
 export function FleetMapLegend({ counts, active, onToggle, noLocation = 0, compact = false }) {
@@ -15,12 +30,12 @@ export function FleetMapLegend({ counts, active, onToggle, noLocation = 0, compa
           <Chip
             key={status}
             size={compact ? 'small' : 'medium'}
+            icon={<StatusGlyph status={status} />}
             label={`${meta.label} ${counts[status] ?? 0}`}
             onClick={interactive ? () => onToggle(status) : undefined}
             aria-pressed={interactive ? active?.has(status) ?? false : undefined}
             variant={selected ? 'filled' : 'outlined'}
             sx={{
-              borderLeft: `6px solid ${STATUS_HEX[meta.color]}`,
               minHeight: interactive && !compact ? 36 : undefined,
               opacity: selected ? 1 : 0.6,
             }}

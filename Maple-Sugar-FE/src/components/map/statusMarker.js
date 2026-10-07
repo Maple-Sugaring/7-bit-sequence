@@ -13,7 +13,7 @@ export const STATUS_HEX = {
 const SIZE = 28;
 
 // Shape carries the status as well as colour, so it reads without colour vision.
-function shapeSvg(shape, hex) {
+export function shapeSvg(shape, hex) {
   const common = `stroke="#fff" stroke-width="2"`;
   switch (shape) {
     case 'ring':

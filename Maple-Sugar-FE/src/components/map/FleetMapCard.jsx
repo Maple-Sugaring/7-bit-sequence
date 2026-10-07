@@ -1,3 +1,4 @@
+import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
@@ -33,6 +34,11 @@ export function FleetMapCard() {
           <LoadingBlock label="Loading map" height={260} />
         ) : (
           <>
+            {fleet.stale ? (
+              <Alert severity="warning" sx={{ mb: 1 }}>
+                Could not refresh. Showing the last data we loaded.
+              </Alert>
+            ) : null}
             <FleetMapLegend counts={counts} noLocation={noLocation} compact />
             <div style={{ marginTop: 12 }}>
               <FleetMap nodes={fleet.nodes} height={260} scrollWheelZoom={false} />

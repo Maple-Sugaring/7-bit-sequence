@@ -6,6 +6,9 @@ import { DEFAULT_CENTER } from './mapConstants';
 import { NodePopupContent } from './NodePopupContent';
 import { statusIcon } from './statusMarker';
 
+// A freshly mounted map has not been measured yet; wait this long before moving it.
+const SELECT_SETTLE_MS = 150;
+
 const prefersReducedMotion = () =>
   typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
@@ -24,6 +27,7 @@ function FitToMarkers({ groups }) {
 function GroupMarker({ group, selected }) {
   const map = useMap();
   const ref = useRef(null);
+  const [lat, lon] = group.position;
   const status = worstStatus(group.nodes);
   const icon = useMemo(
     () => statusIcon(status, group.nodes.length, selected),
@@ -36,12 +40,14 @@ function GroupMarker({ group, selected }) {
     const timer = setTimeout(() => {
       map.invalidateSize();
       const target = Math.max(map.getZoom(), 17);
-      if (prefersReducedMotion()) map.setView(group.position, target, { animate: false });
-      else map.flyTo(group.position, target);
+      if (prefersReducedMotion()) map.setView([lat, lon], target, { animate: false });
+      else map.flyTo([lat, lon], target);
       ref.current?.openPopup();
-    }, 150);
+    }, SELECT_SETTLE_MS);
     return () => clearTimeout(timer);
-  }, [selected, map, group.position]);
+    // Primitives, not the array: the array is rebuilt on every data refresh,
+    // which would re-fly the map and reopen a popup the user closed.
+  }, [selected, map, lat, lon]);
   const label = group.nodes.map((node) => node.Node_Name).join(', ');
   return (
     <Marker ref={ref} position={group.position} icon={icon} title={label} alt={label} keyboard>

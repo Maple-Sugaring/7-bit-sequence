@@ -1,9 +1,10 @@
+import Button from '@mui/material/Button';
 import List from '@mui/material/List';
+import ListItem from '@mui/material/ListItem';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
 import ListSubheader from '@mui/material/ListSubheader';
 import Typography from '@mui/material/Typography';
-import dayjs from 'dayjs';
 import { Link as RouterLink } from 'react-router-dom';
 import { STATUS_META, STATUS_ORDER } from '../../business/nodeMapStatus';
 import { relativeMinutes } from '../common/format';
@@ -14,29 +15,44 @@ const bySeverity = (a, b) =>
 
 function Row({ node, selected, onSelect }) {
   const meta = STATUS_META[node.mapStatus];
-  const minutes = node.Last_Seen ? dayjs().diff(dayjs(node.Last_Seen), 'minute') : null;
-  const secondary = `${meta.label} · seen ${node.Last_Seen ? relativeMinutes(minutes) : 'never'}`;
+  const secondary = `${meta.label} · seen ${node.Last_Seen ? relativeMinutes(node.minutesSinceSeen) : 'never'}`;
+  const accent = { minHeight: 48, borderLeft: `6px solid ${STATUS_HEX[meta.color]}` };
+
+  // No siting: nothing to show on the map, so the whole row is the link.
+  if (!node.hasLocation) {
+    return (
+      <ListItem disablePadding>
+        <ListItemButton component={RouterLink} to={`/nodes/${node.NodeID}`} sx={accent}>
+          <ListItemText primary={node.Node_Name} secondary={secondary} />
+        </ListItemButton>
+      </ListItem>
+    );
+  }
+  // Two sibling controls rather than a link nested inside a button.
   return (
-    <ListItemButton
-      selected={selected}
-      // Rows with a point select it on the map; rows without one go straight to the node.
-      {...(node.hasLocation
-        ? { onClick: () => onSelect(node.NodeID) }
-        : { component: RouterLink, to: `/nodes/${node.NodeID}` })}
-      sx={{ minHeight: 48, borderLeft: `6px solid ${STATUS_HEX[meta.color]}` }}
-    >
-      <ListItemText primary={node.Node_Name} secondary={secondary} />
-      {node.hasLocation ? (
-        <RouterLink
+    <ListItem
+      disablePadding
+      secondaryAction={
+        <Button
+          component={RouterLink}
           to={`/nodes/${node.NodeID}`}
-          onClick={(event) => event.stopPropagation()}
+          size="small"
           aria-label={`Open ${node.Node_Name}`}
-          style={{ padding: '12px 8px', minWidth: 44, textAlign: 'center' }}
+          sx={{ minWidth: 44, minHeight: 44 }}
         >
           Open
-        </RouterLink>
-      ) : null}
-    </ListItemButton>
+        </Button>
+      }
+    >
+      <ListItemButton
+        selected={selected}
+        onClick={() => onSelect(node.NodeID)}
+        aria-label={`${node.Node_Name}, ${meta.label}. Show on map`}
+        sx={{ ...accent, pr: 9 }}
+      >
+        <ListItemText primary={node.Node_Name} secondary={secondary} />
+      </ListItemButton>
+    </ListItem>
   );
 }
 

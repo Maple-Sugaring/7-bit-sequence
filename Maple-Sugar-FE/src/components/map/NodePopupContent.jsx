@@ -3,7 +3,6 @@ import Chip from '@mui/material/Chip';
 import Divider from '@mui/material/Divider';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import dayjs from 'dayjs';
 import { Link as RouterLink } from 'react-router-dom';
 import { STATUS_META } from '../../business/nodeMapStatus';
 import { dateTime, fahrenheit, pounds, relativeMinutes } from '../common/format';
@@ -11,7 +10,6 @@ import { dateTime, fahrenheit, pounds, relativeMinutes } from '../common/format'
 function NodeSummary({ node }) {
   const meta = STATUS_META[node.mapStatus];
   const reading = node.reading;
-  const minutes = node.Last_Seen ? dayjs().diff(dayjs(node.Last_Seen), 'minute') : null;
   return (
     <Stack spacing={0.5}>
       <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
@@ -20,14 +18,20 @@ function NodeSummary({ node }) {
         </Typography>
         <Chip size="small" color={meta.color === 'neutral' ? 'default' : meta.color} label={meta.label} />
       </Stack>
+      {node.faultReason ? (
+        <Typography variant="body2" color="error">
+          {node.faultReason}
+        </Typography>
+      ) : null}
       <Typography variant="body2" color="text.secondary">
-        Last seen {node.Last_Seen ? `${relativeMinutes(minutes)} (${dateTime(node.Last_Seen)})` : 'never'}
+        Last seen {node.Last_Seen ? `${relativeMinutes(node.minutesSinceSeen)} (${dateTime(node.Last_Seen)})` : 'never'}
       </Typography>
       <Typography variant="body2">
         {reading
           ? [
               pounds(reading.Weight),
               reading.Temperature == null ? null : fahrenheit(reading.Temperature),
+              reading.Sap_Flow_Rate_Lph == null ? null : `${reading.Sap_Flow_Rate_Lph} L/h`,
               reading.Ice_Present ? 'ice' : null,
             ]
               .filter(Boolean)

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { buildFleetNodes } from '../../business/nodeMapStatus';
 import * as adminService from '../adminService';
 import * as alertService from '../alertService';
@@ -141,19 +141,37 @@ export function useGuides() {
 
 const FLEET_REFRESH_MS = 60_000;
 
+// Stable identities: useAsync refetches when its loader changes.
+const loadHealth = () => nodeService.getDeviceHealth();
+const loadBoard = () => nodeService.getBoard();
+const loadAlerts = () => alertService.getAlerts();
+
+/** useAsync nulls its data when a refetch fails; keep the last good value instead. */
+function useLastGood(value) {
+  const [kept, setKept] = useState(value);
+  if (value != null && value !== kept) setKept(value);
+  return value ?? kept;
+}
+
 /**
  * Every node with its map status, latest reading and siting. Refreshes on a
  * timer and when the tab regains focus so a field user sees current statuses.
+ * A failed refresh keeps the last good data and reports `error` alongside it.
  */
 export function useFleetMap() {
-  const health = useDeviceHealth();
-  const board = useBush();
-  const alerts = useAlerts();
+  const health = useAsync(loadHealth);
+  const board = useAsync(loadBoard);
+  const alerts = useAsync(loadAlerts);
+  const healthData = useLastGood(health.data);
+  const boardData = useLastGood(board.data);
+  const alertData = useLastGood(alerts.data);
+  const [now, setNow] = useState(() => new Date());
   const { refresh: refreshHealth } = health;
   const { refresh: refreshBoard } = board;
   const { refresh: refreshAlerts } = alerts;
 
   const refresh = useCallback(() => {
+    setNow(new Date());
     refreshHealth();
     refreshBoard();
     refreshAlerts();
@@ -161,28 +179,27 @@ export function useFleetMap() {
 
   useEffect(() => {
     const timer = setInterval(refresh, FLEET_REFRESH_MS);
-    const onFocus = () => refresh();
-    window.addEventListener('focus', onFocus);
+    window.addEventListener('focus', refresh);
     return () => {
       clearInterval(timer);
-      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('focus', refresh);
     };
   }, [refresh]);
 
   const nodes = useMemo(
     () =>
       buildFleetNodes({
-        nodes: health.data?.nodes ?? [],
-        board: board.data ?? [],
-        alerts: alerts.data ?? [],
+        nodes: healthData?.nodes ?? [],
+        board: boardData ?? [],
+        alerts: alertData ?? [],
+        now,
       }),
-    [health.data, board.data, alerts.data],
+    [healthData, boardData, alertData, now],
   );
 
-  return {
-    nodes,
-    loading: health.loading && !health.data,
-    error: health.error ?? board.error ?? alerts.error,
-    refresh,
-  };
+  // Statuses need all three sources; do not render until each has settled once.
+  const loading = healthData == null || boardData == null || alertData == null;
+  const error = health.error ?? board.error ?? alerts.error;
+
+  return { nodes, loading: loading && !error, error, stale: Boolean(error) && !loading, refresh };
 }
