@@ -19,7 +19,7 @@ import {
 } from '../business/shelfLife';
 import { weekForecastRows, weekLabel, weekStart } from '../business/weekWindows';
 import { bushAverageSugar, syrupEstimate } from '../business/sugarContent';
-import { STATUS_META, statusFromCode } from '../business/nodeMapStatus';
+import { MapStatus, STATUS_META, statusFromCode } from '../business/nodeMapStatus';
 import { isFull } from '../business/yieldMetrics';
 import { LIVE_FROM, LIVE_NODE_IDS, LIVE_TO, bucketGallons, bucketPercent, recordedSugar } from '../business/liveWeight';
 import { SiteForecastChart } from '../components/charts/SeriesChart';
@@ -28,7 +28,7 @@ import { NodeStatusChip } from '../components/common/NodeStatusChip';
 import { MeterBar } from '../components/common/MeterBar';
 import { PageHeader } from '../components/common/PageHeader';
 import { dateOnly, dateTime } from '../components/common/format';
-import { useBush, useLiveWeather, useReadings } from '../services/hooks';
+import { useBush, useLiveWeather, useNodeStatuses, useReadings } from '../services/hooks';
 
 function Meter({ label, value, percent, detail, color }) {
   return (
@@ -50,6 +50,7 @@ function Meter({ label, value, percent, detail, color }) {
 export function DashboardPage() {
   const navigate = useNavigate();
   const bush = useBush();
+  const statuses = useNodeStatuses(bush.data);
   const live = useLiveWeather();
   const readings = useReadings({ from: LIVE_FROM, to: LIVE_TO });
   const weather = live.data?.Sites?.[0] ?? (live.data?.Configured ? live.data : null);
@@ -98,7 +99,7 @@ export function DashboardPage() {
     return map;
   }, [bush.data, readings.data, weather]);
 
-  const offlineNodes = (bush.data ?? []).filter((node) => node.Status_Code === 0);
+  const offlineNodes = (bush.data ?? []).filter((node) => statuses.get(node.NodeID) === MapStatus.OFFLINE);
   const shortestShelf = [...shelfByNode.values()].reduce((soonest, entry) => {
     if (entry.hours == null) return soonest;
     if (!soonest || entry.hours < soonest.hours) return entry;
@@ -227,7 +228,7 @@ export function DashboardPage() {
 
       <Grid container spacing={2}>
         {(bush.data ?? []).map((node) => {
-          const status = statusFromCode(node.Status_Code);
+          const status = statuses.get(node.NodeID) ?? statusFromCode(node.Status_Code);
           const gallons = bucketGallons(node.Weight, node.Tare_Weight ?? 0);
           const fill = bucketPercent(node.Weight, node.Tare_Weight ?? 0);
           const shelf = shelfByNode.get(node.NodeID);

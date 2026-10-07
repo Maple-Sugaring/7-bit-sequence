@@ -28,7 +28,7 @@ import { PageHeader } from '../components/common/PageHeader';
 import { AsyncBlock, EmptyBlock } from '../components/common/StateBlock';
 import { useAuth } from '../context/auth';
 import { eraseHeltec, flashHeltec } from '../hardware/heltecFlash';
-import { useGateways, useNodes } from '../services/hooks';
+import { useGateways, useNodes, useNodeStatuses } from '../services/hooks';
 import { GatewayCard } from '../components/deploy/GatewayCard';
 import { NodeRow } from '../components/deploy/NodeRow';
 import { LocationPicker } from '../components/map/LocationPicker';
@@ -98,6 +98,7 @@ export function DeployPage() {
   const nodes = useNodes();
   const gateways = useGateways();
   const nodeList = useMemo(() => nodes.data ?? [], [nodes.data]);
+  const statuses = useNodeStatuses(nodeList);
   const gatewayList = useMemo(() => gateways.data ?? [], [gateways.data]);
   const gatewayById = useMemo(
     () => new Map(gatewayList.map((gateway) => [gateway.GatewayID, gateway])),
@@ -527,7 +528,7 @@ export function DeployPage() {
                   <NodeRow
                     key={node.NodeID}
                     node={node}
-                    status={statusFromCode(node.Status_Code)}
+                    status={statuses.get(node.NodeID) ?? statusFromCode(node.Status_Code)}
                     gatewayName={gatewayById.get(node.GatewayID)?.Gateway_Name}
                     canDeploy={canDeploy}
                     onOpen={() => navigate(`/nodes/${node.NodeID}`)}

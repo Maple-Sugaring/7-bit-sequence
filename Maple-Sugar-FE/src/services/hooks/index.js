@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { buildFleetNodes, fleetLoadState } from '../../business/nodeMapStatus';
+import { buildFleetNodes, fleetLoadState, statusByNodeId } from '../../business/nodeMapStatus';
 import * as adminService from '../adminService';
 import * as alertService from '../alertService';
 import * as collectionService from '../collectionService';
@@ -201,4 +201,17 @@ export function useFleetMap() {
   const { loading, stale } = fleetLoadState({ nodes: healthData, board: boardData, alerts: alertData, error });
 
   return { nodes, loading, error, stale, refresh };
+}
+
+/**
+ * Status per node id for a page that lists nodes (Dashboard, Node, Deploy), on
+ * the same rules as the map. Alerts decide degraded-by-fault; until they load,
+ * a node falls back to what its own fields say.
+ */
+export function useNodeStatuses(nodes) {
+  const alerts = useAlerts();
+  return useMemo(
+    () => statusByNodeId(nodes ?? [], alerts.data ?? []),
+    [nodes, alerts.data],
+  );
 }

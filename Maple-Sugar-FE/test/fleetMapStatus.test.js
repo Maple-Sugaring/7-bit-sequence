@@ -5,6 +5,7 @@ import {
   fleetLoadState,
   groupByLocation,
   MapStatus,
+  statusByNodeId,
   statusCounts,
   statusFromCode,
   validCoordinates,
@@ -123,6 +124,23 @@ describe('statusFromCode', () => {
   });
   it('treats an unknown code as online, as those screens always did', () => {
     expect(statusFromCode(undefined)).toBe('online');
+  });
+});
+
+describe('statusByNodeId', () => {
+  it('gives every screen the same status the map would', () => {
+    const nodes = [
+      node(),
+      node({ NodeID: 2, Last_Seen: '2026-03-01T11:00:00Z' }),
+      node({ NodeID: 3, Status_Code: 3 }),
+      node({ NodeID: 4, Last_Seen: null }),
+      node({ NodeID: 5 }),
+    ];
+    const alerts = [{ NodeID: 5, Alert_Type: 'Spill', Is_Resolved: false }];
+    const statuses = statusByNodeId(nodes, alerts, NOW);
+    expect([1, 2, 3, 4, 5].map((id) => statuses.get(id))).toEqual(['online', 'stale', 'maintenance', 'offline', 'degraded']);
+    const mapRows = buildFleetNodes({ nodes, board: [], alerts, now: NOW });
+    mapRows.forEach((row) => expect(statuses.get(row.NodeID)).toBe(row.mapStatus));
   });
 });
 

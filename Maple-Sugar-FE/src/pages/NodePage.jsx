@@ -24,7 +24,7 @@ import { PageHeader } from '../components/common/PageHeader';
 import { dateTime } from '../components/common/format';
 import { LocationWidget } from '../components/map/LocationWidget';
 import { useAuth } from '../context/auth';
-import { useBush, useReadings } from '../services/hooks';
+import { useBush, useNodeStatuses, useReadings } from '../services/hooks';
 import { useAction, useAsync } from '../services/hooks/useAsync';
 import { getUsers } from '../services/adminService';
 import { flagNode } from '../services/alertService';
@@ -37,6 +37,7 @@ export function NodePage() {
   const navigate = useNavigate();
   const { can } = useAuth();
   const bush = useBush();
+  const statuses = useNodeStatuses(bush.data);
   const canSchedule = can(Capability.MANAGE_SCHEDULE);
   const canDeploy = can(Capability.DEPLOY_NODES);
   const people = useAsync(useCallback(() => getUsers(), []), { enabled: canSchedule, initialData: null });
@@ -74,7 +75,7 @@ export function NodePage() {
     });
   });
 
-  const status = statusFromCode(node?.Status_Code);
+  const status = statuses.get(node?.NodeID) ?? statusFromCode(node?.Status_Code);
   const gallons = node ? bucketGallons(node.Weight, node.Tare_Weight ?? 0) : null;
   const fill = node ? bucketPercent(node.Weight, node.Tare_Weight ?? 0) : null;
   const estimate = syrupEstimate({

@@ -70,6 +70,20 @@ export function deriveMapStatus(node, { now = new Date(), faultNodeIds = new Set
   return minutes > STALE_AFTER_MINUTES ? MapStatus.STALE : MapStatus.ONLINE;
 }
 
+function openFaultAlerts(alerts) {
+  return alerts.filter((alert) => !alert.Is_Resolved && FAULT_ALERT_TYPES.includes(alert.Alert_Type));
+}
+
+/**
+ * Status per node id, for screens that list nodes but are not the map. Uses the
+ * same rules as the map (offline, maintenance, degraded, stale, online) so a
+ * node reads the same wherever it appears.
+ */
+export function statusByNodeId(nodes = [], alerts = [], now = new Date()) {
+  const faultNodeIds = new Set(openFaultAlerts(alerts).map((alert) => alert.NodeID));
+  return new Map(nodes.map((node) => [node.NodeID, deriveMapStatus(node, { now, faultNodeIds })]));
+}
+
 /** Why a node reads as degraded, for the popup. Null when it is not. */
 function faultReasonFor(node, alertTexts) {
   const parts = [];
@@ -80,9 +94,7 @@ function faultReasonFor(node, alertTexts) {
 
 /** Nodes with the status, latest reading and siting the map needs. */
 export function buildFleetNodes({ nodes = [], board = [], alerts = [], now = new Date() }) {
-  const faultAlerts = alerts.filter(
-    (alert) => !alert.Is_Resolved && FAULT_ALERT_TYPES.includes(alert.Alert_Type),
-  );
+  const faultAlerts = openFaultAlerts(alerts);
   const faultNodeIds = new Set(faultAlerts.map((alert) => alert.NodeID));
   const alertTexts = new Map();
   faultAlerts.forEach((alert) => {
