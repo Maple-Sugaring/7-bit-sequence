@@ -18,7 +18,7 @@ import { useNavigate } from "react-router-dom";
 export function TopBar() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const compact = useMediaQuery('(max-width:900px)');
+  const compact = useMediaQuery('(max-width:1100px)');
   const [menuOpen, setMenuOpen] = useState(false);
   const alerts = useOpenAlertCount();
   const openCount = Number(alerts.data) || 0;
@@ -44,7 +44,7 @@ export function TopBar() {
       component="header"
       sx={{
         display: "grid",
-        gridTemplateColumns: "auto 1fr auto",
+        gridTemplateColumns: "auto 1fr auto auto",
         alignItems: "center",
         gap: 1,
         px: { xs: 1.5, md: 3 },
