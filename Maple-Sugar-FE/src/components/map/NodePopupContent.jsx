@@ -45,7 +45,7 @@ function NodeSummary({ node }) {
         to={`/nodes/${node.NodeID}`}
         size="small"
         variant="contained"
-        sx={{ alignSelf: 'flex-start', minHeight: 36 }}
+        sx={{ alignSelf: 'flex-start', minHeight: 36, color: '#fff !important' }}
       >
         Open node
       </Button>
