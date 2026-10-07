@@ -175,6 +175,9 @@ function matchesShow(slot, show) {
 
 const SHOW_IDS = ['all', 'mine', 'open', 'completed'];
 
+// Past shifts are hidden by default, but today's stay visible even once they have ended.
+const isBeforeToday = (slot) => slot.isPast && !dayjs(slot.Ends_At).isSame(dayjs(), 'day');
+
 export function SchedulePage() {
   const { user, can } = useAuth();
   const canClaim = can(Capability.CLAIM_SHIFT);
@@ -210,12 +213,12 @@ export function SchedulePage() {
 
   const allSlots = useMemo(() => data?.slots ?? [], [data?.slots]);
 
-  // Filters live in the URL so a link like /schedule?show=mine&upcoming=1 works.
+  // Filters live in the URL so a link like /schedule?show=mine&past=1 works.
   const showParam = searchParams.get('show');
   const show = SHOW_IDS.includes(showParam) ? showParam : 'all';
   const stand = searchParams.get('stand') ?? '';
   const task = searchParams.get('task') ?? '';
-  const upcoming = searchParams.get('upcoming') === '1';
+  const viewPast = searchParams.get('past') === '1';
   const setFilter = (key, value) => {
     const next = new URLSearchParams(searchParams);
     if (value && value !== 'all') next.set(key, value);
@@ -224,7 +227,7 @@ export function SchedulePage() {
   };
   const stands = useMemo(() => [...new Set(allSlots.map((slot) => slot.Stand).filter(Boolean))].sort(), [allSlots]);
   const tasks = useMemo(() => [...new Set(allSlots.map((slot) => slot.Task).filter(Boolean))].sort(), [allSlots]);
-  const filtering = show !== 'all' || stand || task || upcoming;
+  const filtering = show !== 'all' || stand || task || viewPast;
 
   const counts = useMemo(
     () => Object.fromEntries(SHOW_IDS.map((id) => [id, allSlots.filter((slot) => matchesShow(slot, id)).length])),
@@ -242,7 +245,7 @@ export function SchedulePage() {
       matchesShow(slot, show) &&
       (!stand || slot.Stand === stand) &&
       (!task || slot.Task === task) &&
-      (!upcoming || !slot.isPast),
+      (viewPast || !isBeforeToday(slot)),
   );
   const days = groupByDay(visibleSlots);
 
@@ -305,7 +308,21 @@ export function SchedulePage() {
               value={show}
               onChange={(_event, value) => value && setFilter('show', value)}
               aria-label="Which shifts to show"
-              sx={{ flexWrap: 'wrap', '& .MuiToggleButton-root': { flex: { xs: '1 1 45%', md: '0 0 auto' }, px: 2 } }}
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, auto)' },
+                gap: 1,
+                '& .MuiToggleButton-root': {
+                  px: 2,
+                  whiteSpace: 'nowrap',
+                  // Each button is its own pill so a wrapped row never leaves mismatched edges.
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: '4px !important',
+                  marginLeft: '0 !important',
+                  '&.Mui-selected': { borderColor: 'primary.main' },
+                },
+              }}
             >
               {showOptions.map(([id, label]) => (
                 <ToggleButton key={id} value={id}>
@@ -328,8 +345,8 @@ export function SchedulePage() {
                 ))}
               </TextField>
               <FormControlLabel
-                control={<Switch checked={upcoming} onChange={(e) => setFilter('upcoming', e.target.checked ? '1' : '')} />}
-                label="Hide past"
+                control={<Switch checked={viewPast} onChange={(e) => setFilter('past', e.target.checked ? '1' : '')} />}
+                label="View past"
                 sx={{ mr: 0, whiteSpace: 'nowrap' }}
               />
               <Box sx={{ flexGrow: 1 }} />
