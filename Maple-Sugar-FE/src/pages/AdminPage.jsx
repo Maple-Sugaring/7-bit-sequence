@@ -285,6 +285,20 @@ export function AdminPage() {
       ),
     },
     {
+      field: 'Is_Active',
+      headerName: 'Active',
+      width: 90,
+      sortable: false,
+      renderCell: (params) => (
+        <Switch
+          checked={params.value}
+          onChange={(event) => toggleActive.execute(params.row.UserID, event.target.checked)}
+          disabled={toggleActive.pending || params.row.UserID === currentUser?.id}
+          slotProps={{ input: { 'aria-label': `Active status for ${params.row.fullName}` } }}
+        />
+      ),
+    },
+    {
       field: 'expiry',
       headerName: 'Account status',
       width: 160,
@@ -309,20 +323,6 @@ export function AdminPage() {
         ) : (
           dateTime(params.value)
         ),
-    },
-    {
-      field: 'Is_Active',
-      headerName: 'Active',
-      width: 90,
-      sortable: false,
-      renderCell: (params) => (
-        <Switch
-          checked={params.value}
-          onChange={(event) => toggleActive.execute(params.row.UserID, event.target.checked)}
-          disabled={toggleActive.pending || params.row.UserID === currentUser?.id}
-          inputProps={{ 'aria-label': `Active status for ${params.row.fullName}` }}
-        />
-      ),
     },
   ];
 

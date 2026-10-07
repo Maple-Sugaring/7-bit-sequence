@@ -167,6 +167,7 @@ export function SapDataPage() {
       <Box
         sx={{
           display: 'grid',
+          // One column on phones, where `order` puts each heading above its own control.
           gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.7fr)' },
           gridTemplateRows: { md: 'auto auto' },
           columnGap: 2,
@@ -176,13 +177,13 @@ export function SapDataPage() {
           mb: 2,
         }}
       >
-        <Typography variant="subtitle2" component="h2">
+        <Typography variant="subtitle2" component="h2" sx={{ order: { xs: 1, md: 0 } }}>
           Time period
         </Typography>
-        <Typography variant="subtitle2" component="h2">
+        <Typography variant="subtitle2" component="h2" sx={{ order: { xs: 3, md: 0 } }}>
           Time increment
         </Typography>
-        <Typography variant="subtitle2" component="h2">
+        <Typography variant="subtitle2" component="h2" sx={{ order: { xs: 5, md: 0 } }}>
           Date selection
         </Typography>
         <TextField
@@ -197,6 +198,7 @@ export function SapDataPage() {
             setTo(dayjs(range.to));
           }}
           slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
+          sx={{ order: { xs: 2, md: 0 } }}
         >
           {preset === '' ? (
             <MenuItem value="" disabled>
@@ -215,6 +217,7 @@ export function SapDataPage() {
           label="Select"
           value={unit}
           onChange={(event) => setUnit(event.target.value)}
+          sx={{ order: { xs: 4, md: 0 } }}
         >
           {TIME_UNITS.map(([id, label]) => (
             <MenuItem key={id} value={id}>
@@ -222,7 +225,7 @@ export function SapDataPage() {
             </MenuItem>
           ))}
         </TextField>
-        <Stack direction="row" spacing={1}>
+        <Stack direction="row" spacing={1} sx={{ order: { xs: 6, md: 0 } }}>
           <DatePicker
             label="From"
             value={from}

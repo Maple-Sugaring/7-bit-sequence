@@ -2,11 +2,11 @@ import { lazy, Suspense } from 'react';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { Capability } from '../business/permissions';
 import { AppShell } from '../components/layout/AppShell';
 import { AuthCallbackPage } from '../pages/AuthCallbackPage';
 import { LoginPage } from '../pages/LoginPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
+import { ROUTE_CAPABILITIES } from './navigation';
 import { ProtectedRoute } from './ProtectedRoute';
 
 const DashboardPage = lazy(() =>
@@ -41,16 +41,15 @@ const DeployPage = lazy(() =>
 );
 
 const PROTECTED = [
-  { path: '/dashboard', element: <DashboardPage />, capability: Capability.VIEW_DASHBOARD },
-  { path: '/map', element: <FleetMapPage />, capability: [Capability.VIEW_DASHBOARD, Capability.VIEW_NODES] },
-  { path: '/deploy', element: <DeployPage />, capability: Capability.DEPLOY_NODES },
-  { path: '/table', element: <SapDataPage />, capability: Capability.VIEW_DATA_TABLE },
-  { path: '/collection', element: <CollectionPage />, capability: Capability.RECORD_DATA },
-  { path: '/nodes/:nodeId', element: <NodePage />, capability: Capability.VIEW_DASHBOARD },
-  { path: '/notifications', element: <AlertsPage />, capability: Capability.VIEW_ALERTS },
-  { path: '/schedule', element: <SchedulePage />, capability: Capability.VIEW_SCHEDULE },
-  { path: '/admin', element: <AdminPage />, capability: Capability.MANAGE_USERS },
-  // Every signed-in role has a profile, so there is no capability gate.
+  { path: '/dashboard', element: <DashboardPage /> },
+  { path: '/map', element: <FleetMapPage /> },
+  { path: '/deploy', element: <DeployPage /> },
+  { path: '/table', element: <SapDataPage /> },
+  { path: '/collection', element: <CollectionPage /> },
+  { path: '/nodes/:nodeId', element: <NodePage /> },
+  { path: '/notifications', element: <AlertsPage /> },
+  { path: '/schedule', element: <SchedulePage /> },
+  { path: '/admin', element: <AdminPage /> },
   { path: '/profile', element: <ProfilePage /> },
 ];
 
@@ -98,12 +97,12 @@ export function AppRoutes() {
           </ProtectedRoute>
         }
       >
-        {PROTECTED.map(({ path, element, capability }) => (
+        {PROTECTED.map(({ path, element }) => (
           <Route
             key={path}
             path={path}
             element={
-              <ProtectedRoute capability={capability}>
+              <ProtectedRoute capability={ROUTE_CAPABILITIES[path] ?? undefined}>
                 <Suspense fallback={<PageFallback />}>{element}</Suspense>
               </ProtectedRoute>
             }
