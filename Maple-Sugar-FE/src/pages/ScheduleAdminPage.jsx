@@ -11,16 +11,21 @@ import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import MenuItem from '@mui/material/MenuItem';
 import Tab from '@mui/material/Tab';
+import ToggleButton from '@mui/material/ToggleButton';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
+import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import { DataGrid } from '@mui/x-data-grid';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import dayjs from 'dayjs';
 import { PageHeader } from '../components/common/PageHeader';
 import { ErrorBlock } from '../components/common/StateBlock';
 import { dateTime } from '../components/common/format';
+import { StudentScheduleView } from '../components/schedule/StudentScheduleView';
 import { assignShift, deleteShift, setShiftComplete, SHIFT_TASKS } from '../services/scheduleService';
 import { useAction, useBush, useSchedule, useUsers } from '../services/hooks';
 
@@ -50,8 +55,10 @@ function formFromSearch(params, bucketOptions) {
     Notes: notes || next.Notes,
   };
 }
+//ADDED IN A FUNCTION THAT WILL ALLOW THE ADMIN PAGE TO TOGGLE BETWEEN STUDENT VIEW AND ADMIN VIEW
 
-export function ScheduleAdminPage() {
+
+function AdminScheduleView() {
   const [params] = useSearchParams();
   const { data, loading, error, refresh } = useSchedule();
   const people = useUsers();
@@ -65,7 +72,7 @@ export function ScheduleAdminPage() {
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState('');
   const [tab, setTab] = useState('active');
-
+ 
   if (
     seedKey !== '||' &&
     seedKey !== seededKey &&
@@ -74,7 +81,7 @@ export function ScheduleAdminPage() {
     setSeededKey(seedKey);
     setForm(formFromSearch(params, bucketOptions));
   }
-
+ 
   const create = useAction(async (assignment) => {
     await assignShift(assignment);
     await refresh();
@@ -87,7 +94,7 @@ export function ScheduleAdminPage() {
     await setShiftComplete(slotId, isComplete);
     await refresh();
   });
-
+ 
   const students = (people.data?.users ?? []).filter((user) => user.usable);
   const activeSlots = useMemo(
     () => (data?.slots ?? []).filter((slot) => !slot.Is_Complete),
@@ -98,7 +105,7 @@ export function ScheduleAdminPage() {
     [data?.slots],
   );
   const visibleSlots = tab === 'completed' ? completedSlots : activeSlots;
-
+ 
   const submit = async (event) => {
     event.preventDefault();
     if (form.bucketIds.length === 0) {
@@ -124,7 +131,7 @@ export function ScheduleAdminPage() {
       setFormError('');
     }
   };
-
+ 
   const columns = [
     { field: 'Task', headerName: 'Task', width: 160 },
     { field: 'Stand', headerName: 'Site', width: 180 },
@@ -189,23 +196,13 @@ export function ScheduleAdminPage() {
       ),
     },
   ];
-
+ 
   if (error) {
-    return (
-      <>
-        <PageHeader title="Schedule Admin" subtitle="Post an open shift for students to claim, or assign someone now." />
-        <ErrorBlock error={error} onRetry={refresh} />
-      </>
-    );
+    return <ErrorBlock error={error} onRetry={refresh} />;
   }
-
+ 
   return (
     <>
-      <PageHeader
-        title="Schedule Admin"
-        subtitle="Post an open shift for students to claim, or assign someone now."
-      />
-
       <Card component="form" noValidate onSubmit={submit} sx={{ mb: 3 }}>
         <CardContent>
           <Grid container spacing={2}>
@@ -350,13 +347,13 @@ export function ScheduleAdminPage() {
           ) : null}
         </CardContent>
       </Card>
-
+ 
       {(remove.error || complete.error) ? (
         <Alert severity="error" sx={{ mb: 2 }}>
           {remove.error ?? complete.error}
         </Alert>
       ) : null}
-
+ 
       <Card sx={{ height: 560 }}>
         <Tabs
           value={tab}
@@ -397,6 +394,53 @@ export function ScheduleAdminPage() {
           />
         </Box>
       </Card>
+    </>
+  );
+}
+ 
+const VIEWS = ['admin', 'student'];
+ 
+export function ScheduleAdminPage() {
+  const [params, setParams] = useSearchParams();
+  const view = VIEWS.includes(params.get('view')) ? params.get('view') : 'admin';
+ 
+  const changeView = (_event, next) => {
+    if (!next) return; // ignore clicking the already-selected button
+    const nextParams = new URLSearchParams(params);
+    if (next === 'admin') nextParams.delete('view');
+    else nextParams.set('view', next);
+    setParams(nextParams, { replace: true });
+  };
+ 
+  return (
+    <>
+      <PageHeader
+        title="Schedule"
+        subtitle={
+          view === 'admin'
+            ? 'Post an open shift for students to claim, or assign someone now.'
+            : 'This is what students see when they open the schedule.'
+        }
+        action={
+          <ToggleButtonGroup
+            exclusive
+            size="small"
+            value={view}
+            onChange={changeView}
+            aria-label="Schedule view"
+          >
+            <ToggleButton value="admin" aria-label="Admin view">
+              <AdminPanelSettingsOutlinedIcon fontSize="small" sx={{ mr: 0.75 }} />
+              Admin
+            </ToggleButton>
+            <ToggleButton value="student" aria-label="Student view">
+              <SchoolOutlinedIcon fontSize="small" sx={{ mr: 0.75 }} />
+              Student
+            </ToggleButton>
+          </ToggleButtonGroup>
+        }
+      />
+      {view === 'admin' ? <AdminScheduleView /> : <StudentScheduleView />}
     </>
   );
 }

@@ -25,6 +25,7 @@ export const NAV_ITEMS = [
     label: 'Schedule',
     icon: CalendarMonthIcon,
     capability: Capability.VIEW_SCHEDULE,
+    hiddenWith: Capability.MANAGE_SCHEDULE,
   },
   {
     to: '/collection',
@@ -40,7 +41,7 @@ export const NAV_ITEMS = [
   },
   {
     to: '/schedule-admin',
-    label: 'Schedule Admin',
+    label: 'Schedule',
     icon: EditCalendarIcon,
     capability: Capability.MANAGE_SCHEDULE,
   },
@@ -53,7 +54,11 @@ export const NAV_ITEMS = [
 ];
 
 export function navItemsFor(role) {
-  return NAV_ITEMS.filter((item) => can(role, item.capability));
+  return NAV_ITEMS.filter(
+    (item) => 
+      can(role, item.capability) &&
+    !(item.hiddenWith && can(role,item.hiddenWith))
+  );
 }
 
 export function landingRouteFor(role) {
