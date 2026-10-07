@@ -273,7 +273,7 @@ export function CollectionPage() {
       />
 
       <Grid container spacing={2.5}>
-        <Grid size={{ xs: 12, lg: 5 }}>
+        <Grid size={12}>
           <Stack spacing={2}>
             {notice ? (
               <Alert severity={notice.severity} onClose={() => setNotice(null)}>
@@ -286,169 +286,175 @@ export function CollectionPage() {
               </Alert>
             ) : null}
             {targets.error ? <Alert severity="error">{targets.error}</Alert> : null}
-
-            <Card>
-              <CardContent>
-                <Stack spacing={2}>
-                  <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline', justifyContent: 'space-between' }}>
-                    <Typography variant="h5" component="h2">
-                      This round
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {trees.filter((candidate) => done.has(candidate.nodeId)).length} of {trees.length} trees logged
-                    </Typography>
-                  </Stack>
-                  <TextField
-                    label="Round label"
-                    value={round.label}
-                    onChange={(event) => setRound((prev) => ({ ...prev, label: event.target.value }))}
-                    placeholder="Morning round, north line"
-                    helperText="Optional. Tags every entry in this round."
-                    fullWidth
-                  />
-                  <TreeChecklist trees={trees} done={done} selectedId={activeId} onSelect={chooseTree} />
-                </Stack>
-              </CardContent>
-            </Card>
-
-            {showSummary ? (
-              <RoundSummary round={round} onNewRound={newRound} onKeepGoing={keepGoing} />
-            ) : (
-              <Card
-                component="form"
-                noValidate
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  submit();
-                }}
-              >
-                <CardContent>
-                  <Stack spacing={2}>
-                    <Typography variant="h5" component="h2">
-                      {tree ? tree.label : 'Pick a tree'}
-                    </Typography>
-                    {!tree ? (
-                      <Typography color="text.secondary">
-                        {trees.length === 0 && !targets.loading
-                          ? 'No trees are set up yet. An admin adds them on the Deploy page.'
-                          : 'Choose a tree above to log it.'}
-                      </Typography>
-                    ) : (
-                      <>
-                        <Typography variant="body2" color="text.secondary">
-                          Bucket {tree.barcode ?? 'unassigned'}
-                          {tree.tareWeight != null ? ` · empty bucket ${tree.tareWeight} lb` : ''}
-                        </Typography>
-                        {tree.isOffline ? (
-                          <Alert severity="warning">
-                            This tree&apos;s device is offline. You can still record the collection.
-                          </Alert>
-                        ) : null}
-                        {save.error ? <Alert severity="error">{save.error}</Alert> : null}
-
-                        <TextField
-                          label="Sap weight (lb)"
-                          type="number"
-                          value={weightValue}
-                          onChange={(event) => edit({ weight: event.target.value })}
-                          required
-                          error={Boolean(errors.Weight)}
-                          color={check.warnings.Weight ? 'warning' : 'primary'}
-                          helperText={errors.Weight || check.warnings.Weight || weightHelp(sensor, form.weight != null)}
-                          fullWidth
-                          slotProps={{ htmlInput: { min: 0, step: 0.1, inputMode: 'decimal' } }}
-                        />
-                        <FormControlLabel
-                          control={<Switch checked={iceValue} onChange={(event) => edit({ ice: event.target.checked })} />}
-                          label="Ice in the bucket"
-                        />
-                        <TextField
-                          label="Sugar content (Brix %)"
-                          type="number"
-                          value={form.sugar}
-                          onChange={(event) => edit({ sugar: event.target.value })}
-                          error={Boolean(errors.Sugar_Percent)}
-                          color={check.warnings.Sugar_Percent ? 'warning' : 'primary'}
-                          helperText={
-                            errors.Sugar_Percent ||
-                            check.warnings.Sugar_Percent ||
-                            ['Optional. Only fill this in if you tested the sap with a refractometer.', lastTested]
-                              .filter(Boolean)
-                              .join(' ')
-                          }
-                          fullWidth
-                          slotProps={{ htmlInput: { min: 0, step: 0.1, inputMode: 'decimal' } }}
-                        />
-
-                        <SyrupEstimate estimate={estimate} />
-
-                        {showNote || form.notes ? (
-                          <TextField
-                            label="Note"
-                            value={form.notes}
-                            onChange={(event) => edit({ notes: event.target.value })}
-                            multiline
-                            minRows={3}
-                            placeholder="Lid frozen, ice broken up, tap checked..."
-                            helperText="Optional."
-                            fullWidth
-                          />
-                        ) : null}
-
-                        {form.collectedAt ? (
-                          <Stack spacing={1}>
-                            <DateTimePicker
-                              label="Collected at"
-                              value={form.collectedAt}
-                              onChange={(value) => edit({ collectedAt: value ?? dayjs() })}
-                              disableFuture
-                              slotProps={{ textField: { fullWidth: true } }}
-                            />
-                            <Button onClick={() => edit({ collectedAt: null })} sx={{ alignSelf: 'flex-start' }}>
-                              Use the time I save
-                            </Button>
-                          </Stack>
-                        ) : null}
-
-                        {!(showNote || form.notes) || !form.collectedAt ? (
-                          <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-                            {!(showNote || form.notes) ? <Button onClick={() => setShowNote(true)}>Add a note</Button> : null}
-                            {!form.collectedAt ? (
-                              <Button onClick={() => edit({ collectedAt: dayjs() })}>Collected earlier? Change the time</Button>
-                            ) : null}
-                          </Stack>
-                        ) : null}
-
-                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-                          <Button
-                            type="submit"
-                            variant="contained"
-                            disabled={save.pending}
-                            sx={{ minHeight: 48, flexGrow: 1 }}
-                          >
-                            {remainingAfter.length ? 'Save & next tree' : 'Save & finish round'}
-                          </Button>
-                          {remainingAfter.length ? (
-                            <Button
-                              variant="outlined"
-                              disabled={save.pending}
-                              onClick={() => submit({ finish: true })}
-                              sx={{ minHeight: 48 }}
-                            >
-                              Save & stop here
-                            </Button>
-                          ) : null}
-                        </Stack>
-                      </>
-                    )}
-                  </Stack>
-                </CardContent>
-              </Card>
-            )}
           </Stack>
         </Grid>
 
-        <Grid size={{ xs: 12, lg: 7 }}>
+        <Grid size={{ xs: 12, md: 5 }}>
+          <Card>
+            <CardContent>
+              <Stack spacing={2}>
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline', justifyContent: 'space-between' }}>
+                  <Typography variant="h5" component="h2">
+                    This round
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {trees.filter((candidate) => done.has(candidate.nodeId)).length} of {trees.length} trees logged
+                  </Typography>
+                </Stack>
+                <TextField
+                  label="Round label"
+                  value={round.label}
+                  onChange={(event) => setRound((prev) => ({ ...prev, label: event.target.value }))}
+                  placeholder="Morning round, north line"
+                  helperText="Optional. Tags every entry in this round."
+                  fullWidth
+                />
+                <TreeChecklist trees={trees} done={done} selectedId={activeId} onSelect={chooseTree} />
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 7 }}>
+          {showSummary ? (
+            <RoundSummary round={round} onNewRound={newRound} onKeepGoing={keepGoing} />
+          ) : (
+            <Card
+              component="form"
+              noValidate
+              onSubmit={(event) => {
+                event.preventDefault();
+                submit();
+              }}
+            >
+              <CardContent>
+                <Stack spacing={2}>
+                  <Typography variant="h5" component="h2">
+                    {tree ? tree.label : 'Pick a tree'}
+                  </Typography>
+                  {!tree ? (
+                    <Typography color="text.secondary">
+                      {trees.length === 0 && !targets.loading
+                        ? 'No trees are set up yet. An admin adds them on the Deploy page.'
+                        : 'Choose a tree above to log it.'}
+                    </Typography>
+                  ) : (
+                    <>
+                      <Typography variant="body2" color="text.secondary">
+                        Bucket {tree.barcode ?? 'unassigned'}
+                        {tree.tareWeight != null ? ` · empty bucket ${tree.tareWeight} lb` : ''}
+                      </Typography>
+                      {tree.isOffline ? (
+                        <Alert severity="warning">
+                          This tree&apos;s device is offline. You can still record the collection.
+                        </Alert>
+                      ) : null}
+                      {save.error ? <Alert severity="error">{save.error}</Alert> : null}
+
+                      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                      <TextField
+                        label="Sap weight (lb)"
+                        type="number"
+                        value={weightValue}
+                        onChange={(event) => edit({ weight: event.target.value })}
+                        required
+                        error={Boolean(errors.Weight)}
+                        color={check.warnings.Weight ? 'warning' : 'primary'}
+                        helperText={errors.Weight || check.warnings.Weight || weightHelp(sensor, form.weight != null)}
+                        fullWidth
+                        slotProps={{ htmlInput: { min: 0, step: 0.1, inputMode: 'decimal' } }}
+                      />
+                      <TextField
+                        label="Sugar content (Brix %)"
+                        type="number"
+                        value={form.sugar}
+                        onChange={(event) => edit({ sugar: event.target.value })}
+                        error={Boolean(errors.Sugar_Percent)}
+                        color={check.warnings.Sugar_Percent ? 'warning' : 'primary'}
+                        helperText={
+                          errors.Sugar_Percent ||
+                          check.warnings.Sugar_Percent ||
+                          ['Optional. Only fill this in if you tested the sap with a refractometer.', lastTested]
+                            .filter(Boolean)
+                            .join(' ')
+                        }
+                        fullWidth
+                        slotProps={{ htmlInput: { min: 0, step: 0.1, inputMode: 'decimal' } }}
+                      />
+
+                      </Stack>
+                      <FormControlLabel
+                        control={<Switch checked={iceValue} onChange={(event) => edit({ ice: event.target.checked })} />}
+                        label="Ice in the bucket"
+                      />
+                      <SyrupEstimate estimate={estimate} />
+
+                      {showNote || form.notes ? (
+                        <TextField
+                          label="Note"
+                          value={form.notes}
+                          onChange={(event) => edit({ notes: event.target.value })}
+                          multiline
+                          minRows={3}
+                          placeholder="Lid frozen, ice broken up, tap checked..."
+                          helperText="Optional."
+                          fullWidth
+                        />
+                      ) : null}
+
+                      {form.collectedAt ? (
+                        <Stack spacing={1}>
+                          <DateTimePicker
+                            label="Collected at"
+                            value={form.collectedAt}
+                            onChange={(value) => edit({ collectedAt: value ?? dayjs() })}
+                            disableFuture
+                            slotProps={{ textField: { fullWidth: true } }}
+                          />
+                          <Button onClick={() => edit({ collectedAt: null })} sx={{ alignSelf: 'flex-start' }}>
+                            Use the time I save
+                          </Button>
+                        </Stack>
+                      ) : null}
+
+                      {!(showNote || form.notes) || !form.collectedAt ? (
+                        <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                          {!(showNote || form.notes) ? <Button onClick={() => setShowNote(true)}>Add a note</Button> : null}
+                          {!form.collectedAt ? (
+                            <Button onClick={() => edit({ collectedAt: dayjs() })}>Collected earlier? Change the time</Button>
+                          ) : null}
+                        </Stack>
+                      ) : null}
+
+                      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                        <Button
+                          type="submit"
+                          variant="contained"
+                          disabled={save.pending}
+                          sx={{ minHeight: 48, flexGrow: 1 }}
+                        >
+                          {remainingAfter.length ? 'Save & next tree' : 'Save & finish round'}
+                        </Button>
+                        {remainingAfter.length ? (
+                          <Button
+                            variant="outlined"
+                            disabled={save.pending}
+                            onClick={() => submit({ finish: true })}
+                            sx={{ minHeight: 48 }}
+                          >
+                            Save & stop here
+                          </Button>
+                        ) : null}
+                      </Stack>
+                    </>
+                  )}
+                </Stack>
+              </CardContent>
+            </Card>
+          )}
+        </Grid>
+
+        <Grid size={12}>
           <CollectionHistory entries={journal.data ?? []} loading={journal.loading} error={journal.error} />
         </Grid>
       </Grid>
