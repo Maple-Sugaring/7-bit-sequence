@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import dayjs from 'dayjs';
 import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
@@ -6,25 +7,38 @@ import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import { entriesInWeek, weekLabel, weekStart } from '../../business/weekWindows';
 import { dateTime } from '../common/format';
 
-const PAGE = 20;
-
 /**
- * What has been collected, newest first. Sugar shows only on entries where
+ * What has been collected, one Sunday to Saturday week at a time, newest
+ * first. Sugar shows only on entries where
  * someone tested it, so a row without it reads as untested, not as missing.
  */
 export function CollectionHistory({ entries, loading, error }) {
-  const [shown, setShown] = useState(PAGE);
-  const visible = entries.slice(0, shown);
+  const [start, setStart] = useState(() => weekStart(dayjs()));
+  const visible = entriesInWeek(entries, start);
+  const isCurrentWeek = start === weekStart(dayjs());
+  const move = (days) => setStart(dayjs(start).add(days, 'day').format('YYYY-MM-DD'));
 
   return (
     <Stack spacing={2}>
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
+        <Button onClick={() => move(-7)}>Previous week</Button>
+        <Typography variant="h6" component="h2">
+          {weekLabel(start)}
+        </Typography>
+        <Button onClick={() => move(7)} disabled={isCurrentWeek}>
+          Next week
+        </Button>
+      </Stack>
       {error ? <Alert severity="error">{error}</Alert> : null}
-      {entries.length === 0 && !loading ? (
+      {visible.length === 0 && !loading ? (
         <Card>
           <CardContent>
-            <Typography color="text.secondary">No collections logged yet.</Typography>
+            <Typography color="text.secondary">
+              {entries.length === 0 ? 'No collections logged yet.' : 'No collections logged this week.'}
+            </Typography>
           </CardContent>
         </Card>
       ) : null}
@@ -56,9 +70,6 @@ export function CollectionHistory({ entries, loading, error }) {
           </CardContent>
         </Card>
       ))}
-      {entries.length > shown ? (
-        <Button onClick={() => setShown((count) => count + PAGE)}>Show older entries</Button>
-      ) : null}
     </Stack>
   );
 }
