@@ -17,14 +17,14 @@ import {
   shelfLifeFromReadings,
   shelfLifeSeverity,
 } from '../business/shelfLife';
-import { estimatedSyrupGallons } from '../business/sugarContent';
+import { bushAverageSugar, syrupEstimate } from '../business/sugarContent';
 import { isFull } from '../business/yieldMetrics';
 import { LIVE_FROM, LIVE_NODE_IDS, LIVE_TO, bucketGallons, bucketPercent, recordedSugar } from '../business/liveWeight';
 import { SiteForecastChart } from '../components/charts/SeriesChart';
 import { MeterBar } from '../components/common/MeterBar';
 import { PageHeader } from '../components/common/PageHeader';
 import { dateTime } from '../components/common/format';
-import { useBush, useJournal, useLiveWeather, useReadings } from '../services/hooks';
+import { useBush, useLiveWeather, useReadings } from '../services/hooks';
 
 const STATUS = {
   0: { label: 'Offline', color: 'error' },
@@ -55,20 +55,25 @@ export function DashboardPage() {
   const bush = useBush();
   const live = useLiveWeather();
   const readings = useReadings({ from: LIVE_FROM, to: LIVE_TO });
-  const journal = useJournal();
   const weather = live.data?.Sites?.[0] ?? (live.data?.Configured ? live.data : null);
   const totals = useMemo(() => {
     const tracked = new Set(LIVE_NODE_IDS);
     const weights = (readings.data ?? []).filter((row) => tracked.has(row.NodeID) && row.Weight != null);
-    const sugars = recordedSugar([...(readings.data ?? []), ...(journal.data ?? [])]);
+    // A collection with a Brix test also files a reading carrying it, so the
+    // readings alone hold every test. Counting the journal too would count each
+    // test twice.
+    const sugars = recordedSugar(readings.data ?? []);
     const sugar = sugars.length ? sugars.reduce((sum, value) => sum + value, 0) / sugars.length : null;
+    const bushSugar = bushAverageSugar(bush.data);
     const syrup = (bush.data ?? []).reduce((sum, node) => {
       const gallons = bucketGallons(node.Weight, node.Tare_Weight ?? 0);
-      return sum + (estimatedSyrupGallons(gallons, node.Sugar_Percent) ?? 0);
+      // A tree's own last test, then the bush average, then 43:1.
+      const estimate = syrupEstimate({ sapGallons: gallons, tree: node.Sugar_Percent, bush: bushSugar });
+      return sum + (estimate?.syrupGallons ?? 0);
     }, 0);
     const measured = (bush.data ?? []).some((node) => node.Sugar_Percent != null);
     return { readings: weights.length, sugar, syrup, measured };
-  }, [readings.data, journal.data, bush.data]);
+  }, [readings.data, bush.data]);
 
   const shelfByNode = useMemo(() => {
     const ambient = weather?.Temperature_F ?? null;
@@ -194,8 +199,8 @@ export function DashboardPage() {
               <Typography variant="h4">{totals.syrup.toFixed(2)} gal</Typography>
               <Typography variant="body2" color="text.secondary">
                 {totals.measured
-                  ? '40:1, replaced where a student recorded sugar'
-                  : '40 gallons of sap per gallon of syrup'}
+                  ? 'Rule of 86 where a tree was tested, the bush average elsewhere'
+                  : '43 gallons of sap per gallon of syrup until a tree is tested'}
               </Typography>
             </Grid>
           </Grid>

@@ -1,6 +1,5 @@
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
-import EditCalendarIcon from '@mui/icons-material/EditCalendar';
 import RestoreIcon from '@mui/icons-material/Restore';
 import ParkIcon from '@mui/icons-material/Park';
 import SettingsInputAntennaIcon from '@mui/icons-material/SettingsInputAntenna';
@@ -25,7 +24,6 @@ export const NAV_ITEMS = [
     label: 'Schedule',
     icon: CalendarMonthIcon,
     capability: Capability.VIEW_SCHEDULE,
-    hiddenWith: Capability.MANAGE_SCHEDULE,
   },
   {
     to: '/collection',
@@ -40,12 +38,6 @@ export const NAV_ITEMS = [
     capability: Capability.VIEW_DATA_TABLE,
   },
   {
-    to: '/schedule-admin',
-    label: 'Schedule',
-    icon: EditCalendarIcon,
-    capability: Capability.MANAGE_SCHEDULE,
-  },
-  {
     to: '/admin',
     label: 'Admin',
     icon: AdminPanelSettingsIcon,
@@ -54,11 +46,7 @@ export const NAV_ITEMS = [
 ];
 
 export function navItemsFor(role) {
-  return NAV_ITEMS.filter(
-    (item) => 
-      can(role, item.capability) &&
-    !(item.hiddenWith && can(role,item.hiddenWith))
-  );
+  return NAV_ITEMS.filter((item) => can(role, item.capability));
 }
 
 export function landingRouteFor(role) {

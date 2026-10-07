@@ -20,23 +20,82 @@ const NODE_COLUMNS = `
   notes
 `;
 
-export async function createGateway({ Gateway_Code, Gateway_Name }) {
+const GATEWAY_COLUMNS = `
+  id,
+  gateway_code,
+  gateway_name,
+  status,
+  last_ping,
+  notes,
+  latitude,
+  longitude
+`;
+
+export async function createGateway({ Gateway_Code, Gateway_Name, Notes, Latitude, Longitude }) {
   const row = await queryOne(
-    `insert into gateway (gateway_code, gateway_name, status)
-     values ($1, $2, 'Offline')
-     returning id, gateway_code, gateway_name, status, last_ping`,
-    [Gateway_Code, Gateway_Name],
+    `insert into gateway (gateway_code, gateway_name, status, notes, latitude, longitude)
+     values ($1, $2, 'Offline', $3, $4, $5)
+     returning ${GATEWAY_COLUMNS}`,
+    [Gateway_Code, Gateway_Name, Notes || null, Latitude ?? null, Longitude ?? null],
   );
   return mapGateway(row);
 }
 
 export async function listGateways() {
-  const rows = await queryAll(`
-    select id, gateway_code, gateway_name, status, last_ping
-      from gateway
-     order by id
-  `);
+  const rows = await queryAll(`select ${GATEWAY_COLUMNS} from gateway order by id`);
   return rows.map(mapGateway);
+}
+
+export async function findGatewayById(id) {
+  const row = await queryOne(`select ${GATEWAY_COLUMNS} from gateway where id = $1`, [id]);
+  return row ? mapGateway(row) : null;
+}
+
+/** Status, last ping and IP belong to ingest, so they are not writable here. */
+const WRITABLE_GATEWAY_COLUMNS = {
+  Gateway_Code: 'gateway_code',
+  Gateway_Name: 'gateway_name',
+  Notes: 'notes',
+};
+
+export async function updateGateway(id, changes) {
+  const assignments = [];
+  const values = [id];
+
+  for (const [field, column] of Object.entries(WRITABLE_GATEWAY_COLUMNS)) {
+    if (field in changes) {
+      values.push(changes[field]);
+      assignments.push(`${column} = $${values.length}`);
+    }
+  }
+
+  // Location arrives nested from the client but is stored as two columns.
+  if ('Location' in changes) {
+    values.push(changes.Location?.lat ?? null);
+    assignments.push(`latitude = $${values.length}`);
+    values.push(changes.Location?.lon ?? null);
+    assignments.push(`longitude = $${values.length}`);
+  }
+
+  if (!assignments.length) return findGatewayById(id);
+
+  const row = await queryOne(
+    `update gateway set ${assignments.join(', ')} where id = $1 returning ${GATEWAY_COLUMNS}`,
+    values,
+  );
+  return row ? mapGateway(row) : null;
+}
+
+/** Removes a gateway. Its nodes stay deployed, just unassigned. */
+export async function deleteGateway(id) {
+  return transaction(async (client) => {
+    const existing = await client.query('select id from gateway where id = $1', [id]);
+    if (!existing.rows[0]) return false;
+
+    await client.query('update node set gateway_id = null where gateway_id = $1', [id]);
+    await client.query('delete from gateway where id = $1', [id]);
+    return true;
+  });
 }
 
 export async function listNodes() {
@@ -71,19 +130,31 @@ export async function listBoard() {
            b.status as bucket_status,
            m.weight,
            m.temperature,
-           m.sugar_percent,
+           s.sugar_percent,
+           s.recorded_at as sugar_recorded_at,
            m.ice_present,
            m.sap_flow_rate_lph,
            m.recorded_at
       from node n
       left join buckets b on b.node_id = n.id and b.node_id is not null
       left join lateral (
-        select weight, temperature, sugar_percent, ice_present, sap_flow_rate_lph, recorded_at
+        select weight, temperature, ice_present, sap_flow_rate_lph, recorded_at
           from metrics
          where node_id = n.id
          order by recorded_at desc
          limit 1
       ) m on true
+      -- Sensor rows carry no sugar, so the newest row almost never does. A
+      -- tree's sugar is the last one a student actually measured this season.
+      left join lateral (
+        select sugar_percent, recorded_at
+          from metrics
+         where node_id = n.id
+           and sugar_percent is not null
+           and sap_season(recorded_at) = sap_season(CURRENT_TIMESTAMP)
+         order by recorded_at desc
+         limit 1
+      ) s on true
      where n.tracked
      order by n.stand, n.id
   `);
@@ -107,7 +178,11 @@ export async function listBoard() {
     Bucket_Status: row.bucket_status,
     Weight: row.weight == null ? null : Number(row.weight),
     Temperature: row.temperature == null ? null : Number(row.temperature),
+    // Last measured this sap season, not the latest row's value. Null when no
+    // one has tested this tree yet.
     Sugar_Percent: row.sugar_percent == null ? null : Number(row.sugar_percent),
+    Sugar_Measured_At:
+      row.sugar_recorded_at instanceof Date ? row.sugar_recorded_at.toISOString() : (row.sugar_recorded_at ?? null),
     Sap_Flow_Rate_Lph: row.sap_flow_rate_lph == null ? null : Number(row.sap_flow_rate_lph),
     Ice_Present: Boolean(row.ice_present),
     Recorded_At: row.recorded_at instanceof Date ? row.recorded_at.toISOString() : row.recorded_at,

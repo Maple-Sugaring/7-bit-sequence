@@ -34,26 +34,34 @@ services:
   api:
     build:
       context: ./Maple-Sugar-BE
-    # Required before first run: cp Maple-Sugar-BE/.env.example Maple-Sugar-BE/.env
-    # and fill in JWT_SECRET plus a Google OAuth client (Cloud Console > APIs &
-    # Services > Credentials). See Maple-Sugar-BE/.env.example for every value
-    # this needs, including which ones must match the values below.
+    # This base file is the DEV stack (laptops). For local dev you only need to
+    # supply the Google OAuth client: copy Maple-Sugar-BE/.env.example to
+    # Maple-Sugar-BE/.env and fill in GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET.
+    # JWT_SECRET can be left blank in dev: a throwaway default is used when
+    # NODE_ENV is not production. Production on AWS uses Terraform's
+    # terraform/compose.production.yml overlay and SSM-provisioned secrets; deploy
+    # it through the Deploy Docker stack to EC2 GitHub Actions workflow.
     env_file:
+      # Optional for local development so a missing .env fails with a clear config
+      # error rather than a Compose error. Terraform's production overlay replaces
+      # this env_file with the SSM-provisioned backend environment file.
       - path: ./Maple-Sugar-BE/.env
-        required: true
+        required: false
     environment:
-      NODE_ENV: production
+      # Dev by default; the prod overlay flips this to production.
+      NODE_ENV: ${NODE_ENV:-development}
       PORT: 3000
       DATABASE_URL: postgresql://maple:maple@db:5432/maple_sugaring
       REDIS_URL: redis://cache:6379
       # Created if missing, then promoted to Admin with no expiry, on every API start.
       BOOTSTRAP_ADMIN_EMAILS: bda9885@g.rit.edu,nic4340@g.rit.edu,odg1896@g.rit.edu,bmm8699@g.rit.edu,ir8643@g.rit.edu,nlt8375@g.rit.edu,dy4385@g.rit.edu
-      # PUBLIC_API_URL / PUBLIC_WEB_URL are intentionally NOT set here: they
-      # come from .env so the same file that documents the Google OAuth
-      # redirect URIs is also what actually controls them. For this compose
-      # stack (nginx published on :8080) .env needs:
-      #   PUBLIC_API_URL=http://localhost:8080/api
-      #   PUBLIC_WEB_URL=http://localhost:8080
+      # Browser-facing URLs for this compose stack (nginx published on :8080).
+      # These defaults are for local development; production values come from the
+      # SSM-provisioned backend environment file used by Terraform.
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8080/api}
+      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-http://localhost:8080}
+      # JWT_SECRET / GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET come from
+      # Maple-Sugar-BE/.env in development and SSM in production.
     depends_on:
       db:
         condition: service_healthy

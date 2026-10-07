@@ -2,19 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
 import UsbIcon from '@mui/icons-material/Usb';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
-import IconButton from '@mui/material/IconButton';
 import LinearProgress from '@mui/material/LinearProgress';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
@@ -29,16 +25,20 @@ import Typography from '@mui/material/Typography';
 import { Capability } from '../business/permissions';
 import { PageHeader } from '../components/common/PageHeader';
 import { AsyncBlock, EmptyBlock } from '../components/common/StateBlock';
-import { dateTime, decibels } from '../components/common/format';
 import { useAuth } from '../context/auth';
 import { eraseHeltec, flashHeltec } from '../hardware/heltecFlash';
 import { useGateways, useNodes } from '../services/hooks';
+import { GatewayCard } from '../components/deploy/GatewayCard';
+import { NodeRow } from '../components/deploy/NodeRow';
+import { LocationPicker } from '../components/map/LocationPicker';
 import { useAction } from '../services/hooks/useAsync';
 import {
   createGateway,
   createNode,
+  deleteGateway,
   deleteNode,
   setReportInterval,
+  updateGateway,
   updateNodeDetails,
 } from '../services/nodeService';
 
@@ -65,6 +65,14 @@ const emptyDraft = () => ({
 
 function serialAvailable() {
   return typeof navigator !== 'undefined' && 'serial' in navigator;
+}
+
+/** The draft keeps coordinates as text; the map wants { lat, lon } or null. */
+function pointFromDraft(draft) {
+  if (draft.Latitude === '' || draft.Longitude === '') return null;
+  const lat = Number(draft.Latitude);
+  const lon = Number(draft.Longitude);
+  return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null;
 }
 
 function gatewayLabel(gateway) {
@@ -197,6 +205,12 @@ export function DeployPage() {
     setDialog('node');
   };
 
+  const openGatewayEdit = (gateway) => {
+    setTarget(gateway);
+    setNotice('');
+    setDialog('gateway');
+  };
+
   const openDelete = (node) => {
     setTarget(node);
     setNotice('');
@@ -215,23 +229,14 @@ export function DeployPage() {
     setSaved(false);
   };
 
-  const useMyLocation = () => {
-    if (!navigator.geolocation) {
-      setNotice('This browser cannot read a location. Type the latitude and longitude.');
-      return;
-    }
-    setNotice('');
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setDraft((current) => ({
-          ...current,
-          Latitude: position.coords.latitude.toFixed(6),
-          Longitude: position.coords.longitude.toFixed(6),
-        }));
-      },
-      () => setNotice('Location was blocked. Type the coordinates instead.'),
-      { enableHighAccuracy: true, timeout: 12000 },
-    );
+  const nodePoint = pointFromDraft(draft);
+  const setNodePoint = (point) => {
+    setDraft((current) => ({
+      ...current,
+      Latitude: point ? point.lat.toFixed(6) : '',
+      Longitude: point ? point.lon.toFixed(6) : '',
+    }));
+    setSaved(false);
   };
 
   const saveNode = useAction(async () => {
@@ -240,7 +245,7 @@ export function DeployPage() {
     if (!draft.Node_Name.trim()) throw new Error('Name the tree.');
     if (!draft.Stand.trim()) throw new Error('Choose a stand.');
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-      throw new Error('Add a location. Use this location, or type the coordinates.');
+      throw new Error('Place the tree on the map, or use your location.');
     }
     const minutes = Number(draft.Minutes);
     if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440) {
@@ -276,7 +281,10 @@ export function DeployPage() {
     return createdNode;
   });
 
-  const saveGateway = useAction(async (body) => createGateway(body));
+  const saveGateway = useAction(async (body) =>
+    target && dialog === 'gateway' ? updateGateway(target.GatewayID, body) : createGateway(body),
+  );
+  const removeGateway = useAction(async (gatewayId) => deleteGateway(gatewayId));
   const removeNode = useAction(async (nodeId) => deleteNode(nodeId));
 
   const runSerial = async (command) => {
@@ -443,16 +451,22 @@ export function DeployPage() {
                 Add a gateway before you can add a node.
               </Alert>
             ) : (
-              <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+              <Box
+                sx={{
+                  display: 'grid',
+                  gap: 1.5,
+                  gridTemplateColumns: { xs: '1fr', sm: 'repeat(auto-fill, minmax(280px, 1fr))' },
+                }}
+              >
                 {gatewayList.map((gateway) => (
-                  <Chip
+                  <GatewayCard
                     key={gateway.GatewayID}
-                    label={`${gatewayLabel(gateway)} · ${gateway.Status}`}
-                    color={gateway.Status === 'Online' ? 'success' : 'default'}
-                    variant="outlined"
+                    gateway={gateway}
+                    nodeCount={nodeList.filter((node) => node.GatewayID === gateway.GatewayID).length}
+                    onOpen={canDeploy ? () => openGatewayEdit(gateway) : undefined}
                   />
                 ))}
-              </Stack>
+              </Box>
             )}
           </Box>
 
@@ -514,60 +528,19 @@ export function DeployPage() {
             ) : filteredNodes.length === 0 ? (
               <EmptyBlock title="No matches" description="Try a different name, code, or stand." />
             ) : (
-              <Stack divider={<Divider flexItem />} spacing={0}>
-                {filteredNodes.map((node) => {
-                  const status = NODE_STATUS[node.Status_Code] ?? { label: 'Unknown', color: 'default' };
-                  return (
-                    <Stack
-                      key={node.NodeID}
-                      direction={{ xs: 'column', sm: 'row' }}
-                      spacing={1.5}
-                      sx={{
-                        py: 1.75,
-                        justifyContent: 'space-between',
-                        alignItems: { sm: 'center' },
-                      }}
-                    >
-                      <Box sx={{ minWidth: 0 }}>
-                        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', mb: 0.5 }}>
-                          <Typography variant="subtitle1" component="h3" sx={{ fontWeight: 600 }}>
-                            {node.Node_Name}
-                          </Typography>
-                          <Chip size="small" label={status.label} color={status.color} />
-                          <Chip size="small" variant="outlined" label={node.Node_Code} />
-                        </Stack>
-                        <Typography variant="body2" color="text.secondary">
-                          {[node.Stand, gatewayLabel(gatewayById.get(node.GatewayID))].filter(Boolean).join(' · ')}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
-                          Battery {node.Battery_Percent == null ? '—' : `${Math.round(node.Battery_Percent)}%`}
-                          {' · '}
-                          Signal {decibels(node.Signal_Rssi)}
-                          {' · '}
-                          Last seen {dateTime(node.Last_Seen)}
-                        </Typography>
-                      </Box>
-                      <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', flexShrink: 0 }}>
-                        <Button size="small" onClick={() => navigate(`/nodes/${node.NodeID}`)}>
-                          Open tree
-                        </Button>
-                        {canDeploy ? (
-                          <>
-                            <Button size="small" startIcon={<EditOutlinedIcon />} onClick={() => openEdit(node)}>
-                              Edit
-                            </Button>
-                            <IconButton
-                              aria-label={`More actions for ${node.Node_Name}`}
-                              onClick={(event) => setMenu({ anchor: event.currentTarget, node })}
-                            >
-                              <MoreVertIcon />
-                            </IconButton>
-                          </>
-                        ) : null}
-                      </Stack>
-                    </Stack>
-                  );
-                })}
+              <Stack spacing={1.25}>
+                {filteredNodes.map((node) => (
+                  <NodeRow
+                    key={node.NodeID}
+                    node={node}
+                    status={NODE_STATUS[node.Status_Code] ?? { label: 'Unknown', color: 'default' }}
+                    gatewayName={gatewayById.get(node.GatewayID)?.Gateway_Name}
+                    canDeploy={canDeploy}
+                    onOpen={() => navigate(`/nodes/${node.NodeID}`)}
+                    onEdit={() => openEdit(node)}
+                    onMore={(event) => setMenu({ anchor: event.currentTarget, node })}
+                  />
+                ))}
               </Stack>
             )}
           </Box>
@@ -614,19 +587,60 @@ export function DeployPage() {
       </Menu>
 
       <Dialog open={dialog === 'gateway'} onClose={closeDialog} fullWidth maxWidth="sm">
-        <DialogTitle>Register gateway</DialogTitle>
-        <GatewayForm
-          error={saveGateway.error}
-          pending={saveGateway.pending}
-          onCancel={closeDialog}
-          onSave={async (body) => {
-            const result = await saveGateway.execute(body);
-            if (!result.ok) return;
-            refresh();
-            closeDialog();
-            setNotice(`${result.data.Gateway_Name} is registered. Next, add a node and flash the Heltec.`);
-          }}
-        />
+        <DialogTitle>{target ? 'Edit gateway' : 'Register gateway'}</DialogTitle>
+        {dialog === 'gateway' ? (
+          <GatewayForm
+            key={target?.GatewayID ?? 'new'}
+            gateway={target}
+            error={saveGateway.error}
+            pending={saveGateway.pending}
+            onCancel={closeDialog}
+            onRemove={target ? () => setDialog('deleteGateway') : undefined}
+            onSave={async (body) => {
+              const wasEditing = Boolean(target);
+              const result = await saveGateway.execute(body);
+              if (!result.ok) return;
+              refresh();
+              closeDialog();
+              setNotice(
+                wasEditing
+                  ? `${result.data.Gateway_Name} was updated.`
+                  : `${result.data.Gateway_Name} is registered. Next, add a node and flash the Heltec.`,
+              );
+            }}
+          />
+        ) : null}
+      </Dialog>
+
+      <Dialog open={dialog === 'deleteGateway'} onClose={closeDialog} fullWidth maxWidth="sm">
+        <DialogTitle>Remove {target?.Gateway_Name}?</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <Typography>
+              <strong>{target?.Gateway_Code}</strong> leaves the app. Its nodes stay deployed but
+              have no gateway until you assign them another one.
+            </Typography>
+            {removeGateway.error ? <Alert severity="error">{removeGateway.error}</Alert> : null}
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={closeDialog}>Cancel</Button>
+          <Button
+            color="error"
+            variant="contained"
+            disabled={removeGateway.pending}
+            onClick={async () => {
+              const name = target.Gateway_Name;
+              const result = await removeGateway.execute(target.GatewayID);
+              if (!result.ok) return;
+              refresh();
+              closeDialog();
+              setNotice(`${name} was removed.`);
+            }}
+          >
+            Remove gateway
+          </Button>
+        </DialogActions>
       </Dialog>
 
       <Dialog open={dialog === 'node'} onClose={closeDialog} fullWidth maxWidth="sm">
@@ -658,11 +672,7 @@ export function DeployPage() {
                 </MenuItem>
               ))}
             </TextField>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-              <TextField label="Latitude" value={draft.Latitude} onChange={setField('Latitude')} fullWidth />
-              <TextField label="Longitude" value={draft.Longitude} onChange={setField('Longitude')} fullWidth />
-            </Stack>
-            <Button variant="outlined" onClick={useMyLocation}>Use this location</Button>
+            <LocationPicker value={nodePoint} onChange={setNodePoint} />
             <TextField
               label="Minutes between packets"
               type="number"
@@ -795,7 +805,7 @@ export function DeployPage() {
 
 function SetupSteps({ activeStep }) {
   return (
-    <Box sx={{ width: '100%', maxWidth: 560, mx: 'auto', mb: 1 }}>
+    <Box sx={{ width: '100%', maxWidth: 560, mx: 'auto', alignSelf: 'center', mb: 1 }}>
       <Stepper activeStep={activeStep} alternativeLabel>
         <Step completed={activeStep > 0}>
           <StepLabel>Register gateway</StepLabel>
@@ -811,10 +821,44 @@ function SetupSteps({ activeStep }) {
   );
 }
 
-function GatewayForm({ error, pending, onCancel, onSave }) {
-  const [code, setCode] = useState('');
-  const [name, setName] = useState('');
+function GatewayForm({ gateway, error, pending, onCancel, onRemove, onSave }) {
+  const [code, setCode] = useState(gateway?.Gateway_Code ?? '');
+  const [name, setName] = useState(gateway?.Gateway_Name ?? '');
+  const [notes, setNotes] = useState(gateway?.Notes ?? '');
+  const [point, setPoint] = useState(gateway?.Location ?? null);
   const [localError, setLocalError] = useState('');
+  const codeChanged = Boolean(gateway) && code.trim() !== gateway.Gateway_Code;
+
+  const submit = () => {
+    const nextCode = code.trim();
+    const nextName = name.trim();
+    if (!nextCode || !/^[A-Za-z0-9_-]+$/.test(nextCode)) {
+      setLocalError('Use letters, numbers, dashes, or underscores for the code.');
+      return;
+    }
+    if (!nextName) {
+      setLocalError('Give the gateway a display name.');
+      return;
+    }
+    setLocalError('');
+    if (!gateway) {
+      onSave({
+        Gateway_Code: nextCode,
+        Gateway_Name: nextName,
+        ...(notes.trim() ? { Notes: notes.trim() } : {}),
+        ...(point ? { Latitude: point.lat, Longitude: point.lon } : {}),
+      });
+      return;
+    }
+    // An edit sends every field so a cleared one is cleared on the server.
+    onSave({
+      Gateway_Code: nextCode,
+      Gateway_Name: nextName,
+      Notes: notes.trim(),
+      Latitude: point ? point.lat : null,
+      Longitude: point ? point.lon : null,
+    });
+  };
 
   return (
     <>
@@ -831,6 +875,12 @@ function GatewayForm({ error, pending, onCancel, onSave }) {
             required
             fullWidth
           />
+          {codeChanged ? (
+            <Alert severity="warning">
+              Change <code>GATEWAY_CODE</code> on the Pi to <code>{code.trim() || '…'}</code> too,
+              or its readings will be rejected.
+            </Alert>
+          ) : null}
           <TextField
             label="Display name"
             value={name}
@@ -839,29 +889,28 @@ function GatewayForm({ error, pending, onCancel, onSave }) {
             required
             fullWidth
           />
+          <LocationPicker value={point} onChange={setPoint} optional />
+          <TextField
+            label="Notes"
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            helperText="Optional. Where it is mounted, how it is powered."
+            multiline
+            minRows={2}
+            slotProps={{ htmlInput: { maxLength: 500 } }}
+            fullWidth
+          />
           {localError || error ? <Alert severity="error">{localError || error}</Alert> : null}
         </Stack>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
+        {onRemove ? (
+          <Button color="error" onClick={onRemove} disabled={pending} sx={{ mr: 'auto' }}>
+            Remove gateway
+          </Button>
+        ) : null}
         <Button onClick={onCancel}>Cancel</Button>
-        <Button
-          variant="contained"
-          disabled={pending}
-          onClick={() => {
-            const nextCode = code.trim();
-            const nextName = name.trim();
-            if (!nextCode || !/^[A-Za-z0-9_-]+$/.test(nextCode)) {
-              setLocalError('Use letters, numbers, dashes, or underscores for the code.');
-              return;
-            }
-            if (!nextName) {
-              setLocalError('Give the gateway a display name.');
-              return;
-            }
-            setLocalError('');
-            onSave({ Gateway_Code: nextCode, Gateway_Name: nextName });
-          }}
-        >
+        <Button variant="contained" disabled={pending} onClick={submit}>
           Save gateway
         </Button>
       </DialogActions>

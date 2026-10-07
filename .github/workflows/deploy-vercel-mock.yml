@@ -1,0 +1,53 @@
+name: Deploy mock frontend to Vercel
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "Maple-Sugar-FE/**"
+      - ".github/workflows/deploy-vercel-mock.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ritmaplesugaring-mock-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and deploy mock frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: Maple-Sugar-FE
+    env:
+      VERCEL_ORG_ID: team_E5NYBsuh3MysoBg8vHvhSWIL
+      VERCEL_PROJECT_ID: prj_NVwYVKuKAydzRk4kxD4dXf6LA6cp
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@59.6.0
+
+      - name: Pull Vercel production settings
+        run: vercel pull --yes --environment=production
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build mock frontend
+        run: vercel build --prod
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VITE_API_MODE: mock
+
+      - name: Deploy to Vercel production
+        run: vercel deploy --prebuilt --prod
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}

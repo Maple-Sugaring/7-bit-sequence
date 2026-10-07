@@ -1,4 +1,4 @@
-import { queryAll, queryOne } from '../db/pool.js';
+import { queryAll, queryOne, queryOneOn } from '../db/pool.js';
 import { mapMetric } from './mappers.js';
 
 const METRIC_COLUMNS = `
@@ -90,8 +90,10 @@ export async function findMetricByNodeAndTime(nodeId, recordedAt) {
   return row ? mapMetric(row) : null;
 }
 
-export async function createMetric(reading) {
-  const row = await queryOne(
+/** `client` is a transaction client when the reading is one write among several. */
+export async function createMetric(reading, client = null) {
+  const row = await queryOneOn(
+    client,
     `insert into metrics (node_id, bucket_id, recorded_by_user_id, recorded_at,
                           weight, temperature, sugar_percent, weather_conditions, ice_present,
                           sap_flow_rate_lph)

@@ -7,27 +7,16 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
+import Collapse from '@mui/material/Collapse';
 import Grid from '@mui/material/Grid';
-import IconButton from '@mui/material/IconButton';
 import MenuItem from '@mui/material/MenuItem';
-import Tab from '@mui/material/Tab';
-import ToggleButton from '@mui/material/ToggleButton';
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
-import Tabs from '@mui/material/Tabs';
+import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
-import Tooltip from '@mui/material/Tooltip';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
-import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
-import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
-import { DataGrid } from '@mui/x-data-grid';
+import Typography from '@mui/material/Typography';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import dayjs from 'dayjs';
-import { PageHeader } from '../components/common/PageHeader';
-import { ErrorBlock } from '../components/common/StateBlock';
-import { dateTime } from '../components/common/format';
-import { StudentScheduleView } from '../components/schedule/StudentScheduleView';
-import { assignShift, deleteShift, setShiftComplete, SHIFT_TASKS } from '../services/scheduleService';
-import { useAction, useBush, useSchedule, useUsers } from '../services/hooks';
+import { assignShift, SHIFT_TASKS } from '../../services/scheduleService';
+import { useAction, useBush, useUsers } from '../../services/hooks';
 
 function emptyForm() {
   const start = dayjs().add(1, 'day').hour(9).minute(0).second(0);
@@ -45,7 +34,7 @@ function emptyForm() {
 function formFromSearch(params, bucketOptions) {
   const next = emptyForm();
   const nodeId = Number(params.get('nodeId'));
-  const task = params.get('task');
+  const task = params.get('shiftTask');
   const notes = params.get('notes');
   const node = bucketOptions.find((item) => item.NodeID === nodeId);
   return {
@@ -55,24 +44,25 @@ function formFromSearch(params, bucketOptions) {
     Notes: notes || next.Notes,
   };
 }
-//ADDED IN A FUNCTION THAT WILL ALLOW THE ADMIN PAGE TO TOGGLE BETWEEN STUDENT VIEW AND ADMIN VIEW
 
-
-function AdminScheduleView() {
+/**
+ * Admin-only form on the Schedule page: post an open shift or assign one now.
+ * Opens by itself when the URL carries a tree/task (from an alert).
+ */
+export function ShiftAdminPanel({ onChanged }) {
   const [params] = useSearchParams();
-  const { data, loading, error, refresh } = useSchedule();
   const people = useUsers();
   const bush = useBush();
   const bucketOptions = useMemo(
     () => (bush.data ?? []).filter((node) => node.BucketID),
     [bush.data],
   );
-  const seedKey = `${params.get('nodeId') || ''}|${params.get('task') || ''}|${params.get('notes') || ''}`;
+  const seedKey = `${params.get('nodeId') || ''}|${params.get('shiftTask') || ''}|${params.get('notes') || ''}`;
   const [seededKey, setSeededKey] = useState('');
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState('');
-  const [tab, setTab] = useState('active');
- 
+  const [open, setOpen] = useState(seedKey !== '||');
+
   if (
     seedKey !== '||' &&
     seedKey !== seededKey &&
@@ -80,32 +70,16 @@ function AdminScheduleView() {
   ) {
     setSeededKey(seedKey);
     setForm(formFromSearch(params, bucketOptions));
+    setOpen(true);
   }
- 
+
   const create = useAction(async (assignment) => {
     await assignShift(assignment);
-    await refresh();
+    await onChanged();
   });
-  const remove = useAction(async (slotId) => {
-    await deleteShift(slotId);
-    await refresh();
-  });
-  const complete = useAction(async (slotId, isComplete) => {
-    await setShiftComplete(slotId, isComplete);
-    await refresh();
-  });
- 
+
   const students = (people.data?.users ?? []).filter((user) => user.usable);
-  const activeSlots = useMemo(
-    () => (data?.slots ?? []).filter((slot) => !slot.Is_Complete),
-    [data?.slots],
-  );
-  const completedSlots = useMemo(
-    () => (data?.slots ?? []).filter((slot) => slot.Is_Complete),
-    [data?.slots],
-  );
-  const visibleSlots = tab === 'completed' ? completedSlots : activeSlots;
- 
+
   const submit = async (event) => {
     event.preventDefault();
     if (form.bucketIds.length === 0) {
@@ -131,79 +105,19 @@ function AdminScheduleView() {
       setFormError('');
     }
   };
- 
-  const columns = [
-    { field: 'Task', headerName: 'Task', width: 160 },
-    { field: 'Stand', headerName: 'Site', width: 180 },
-    {
-      field: 'Starts_At',
-      headerName: 'Starts',
-      width: 180,
-      renderCell: (params) => (params.row.awaiting ? 'Awaiting a time' : dateTime(params.value)),
-    },
-    {
-      field: 'Bucket_Labels',
-      headerName: 'Buckets',
-      width: 180,
-      sortable: false,
-      renderCell: (params) =>
-        (params.value ?? []).length
-          ? (params.value ?? []).join(', ')
-          : '—',
-    },
-    {
-      field: 'assigned',
-      headerName: 'Student',
-      width: 200,
-      sortable: false,
-      renderCell: (params) =>
-        params.value.length ? (
-          params.value.map((person) => person.name).join(', ')
-        ) : (
-          <Chip label="Unclaimed" size="small" color="warning" variant="outlined" />
-        ),
-    },
-    {
-      field: 'Is_Complete',
-      headerName: 'Complete',
-      width: 110,
-      sortable: false,
-      renderCell: (params) => (
-        <Checkbox
-          checked={params.value}
-          onChange={(event) => complete.execute(params.row.SlotID, event.target.checked)}
-          disabled={complete.pending}
-          inputProps={{ 'aria-label': `Mark ${params.row.Task} complete` }}
-        />
-      ),
-    },
-    {
-      field: 'actions',
-      headerName: '',
-      width: 70,
-      sortable: false,
-      renderCell: (params) => (
-        <Tooltip title="Delete shift">
-          <IconButton
-            size="small"
-            onClick={() => remove.execute(params.row.SlotID)}
-            disabled={remove.pending}
-            aria-label={`Delete ${params.row.Task}`}
-          >
-            <DeleteOutlineIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
-      ),
-    },
-  ];
- 
-  if (error) {
-    return <ErrorBlock error={error} onRetry={refresh} />;
-  }
- 
+
   return (
-    <>
-      <Card component="form" noValidate onSubmit={submit} sx={{ mb: 3 }}>
+    <Box sx={{ mb: 3 }}>
+      <Stack direction="row" spacing={2} sx={{ alignItems: 'center', mb: open ? 1.5 : 0 }}>
+        <Typography variant="h6" component="h2" sx={{ flexGrow: 1 }}>
+          Manage shifts
+        </Typography>
+        <Button variant={open ? 'outlined' : 'contained'} onClick={() => setOpen((prev) => !prev)}>
+          {open ? 'Hide form' : 'New shift'}
+        </Button>
+      </Stack>
+      <Collapse in={open} unmountOnExit>
+      <Card component="form" noValidate onSubmit={submit}>
         <CardContent>
           <Grid container spacing={2}>
             <Grid size={{ xs: 12, md: 4 }}>
@@ -347,100 +261,7 @@ function AdminScheduleView() {
           ) : null}
         </CardContent>
       </Card>
- 
-      {(remove.error || complete.error) ? (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {remove.error ?? complete.error}
-        </Alert>
-      ) : null}
- 
-      <Card sx={{ height: 560 }}>
-        <Tabs
-          value={tab}
-          onChange={(_event, value) => setTab(value)}
-          sx={{ px: 2, borderBottom: 1, borderColor: 'divider' }}
-        >
-          <Tab
-            value="active"
-            label={`Active (${activeSlots.length})`}
-            id="schedule-admin-tab-active"
-            aria-controls="schedule-admin-panel-active"
-          />
-          <Tab
-            value="completed"
-            label={`Completed (${completedSlots.length})`}
-            id="schedule-admin-tab-completed"
-            aria-controls="schedule-admin-panel-completed"
-          />
-        </Tabs>
-        <Box
-          role="tabpanel"
-          id={tab === 'completed' ? 'schedule-admin-panel-completed' : 'schedule-admin-panel-active'}
-          aria-labelledby={tab === 'completed' ? 'schedule-admin-tab-completed' : 'schedule-admin-tab-active'}
-          sx={{ height: 'calc(100% - 49px)' }}
-        >
-          <DataGrid
-            rows={visibleSlots}
-            columns={columns}
-            loading={loading}
-            disableRowSelectionOnClick
-            getRowHeight={() => 'auto'}
-            pageSizeOptions={[25, 50]}
-            initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
-            localeText={{
-              noRowsLabel: tab === 'completed' ? 'No completed shifts yet.' : 'No active shifts.',
-            }}
-            sx={{ border: 0, height: '100%', '& .MuiDataGrid-cell': { py: 1 } }}
-          />
-        </Box>
-      </Card>
-    </>
-  );
-}
- 
-const VIEWS = ['admin', 'student'];
- 
-export function ScheduleAdminPage() {
-  const [params, setParams] = useSearchParams();
-  const view = VIEWS.includes(params.get('view')) ? params.get('view') : 'admin';
- 
-  const changeView = (_event, next) => {
-    if (!next) return; // ignore clicking the already-selected button
-    const nextParams = new URLSearchParams(params);
-    if (next === 'admin') nextParams.delete('view');
-    else nextParams.set('view', next);
-    setParams(nextParams, { replace: true });
-  };
- 
-  return (
-    <>
-      <PageHeader
-        title="Schedule"
-        subtitle={
-          view === 'admin'
-            ? 'Post an open shift for students to claim, or assign someone now.'
-            : 'This is what students see when they open the schedule.'
-        }
-        action={
-          <ToggleButtonGroup
-            exclusive
-            size="small"
-            value={view}
-            onChange={changeView}
-            aria-label="Schedule view"
-          >
-            <ToggleButton value="admin" aria-label="Admin view">
-              <AdminPanelSettingsOutlinedIcon fontSize="small" sx={{ mr: 0.75 }} />
-              Admin
-            </ToggleButton>
-            <ToggleButton value="student" aria-label="Student view">
-              <SchoolOutlinedIcon fontSize="small" sx={{ mr: 0.75 }} />
-              Student
-            </ToggleButton>
-          </ToggleButtonGroup>
-        }
-      />
-      {view === 'admin' ? <AdminScheduleView /> : <StudentScheduleView />}
-    </>
+      </Collapse>
+    </Box>
   );
 }

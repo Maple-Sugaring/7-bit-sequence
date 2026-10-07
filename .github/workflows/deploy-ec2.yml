@@ -1,0 +1,56 @@
+name: Deploy Docker stack to EC2
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: maple-app-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Package source and deploy through SSM
+        env:
+          INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+          ARTIFACT_BUCKET: ${{ vars.EC2_ARTIFACT_BUCKET }}
+        run: |
+          set -euo pipefail
+          test -n "$INSTANCE_ID" && test -n "$ARTIFACT_BUCKET"
+          revision="${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          key="releases/$revision.tar.gz"
+          python3 terraform/scripts/package-source.py release.tar.gz
+          aws s3 cp release.tar.gz "s3://$ARTIFACT_BUCKET/$key" --sse AES256 --only-show-errors
+          command="/opt/maple/bin/deploy.sh '$ARTIFACT_BUCKET' '$key' '$revision'"
+          jq -n --arg instance "$INSTANCE_ID" --arg command "$command" \
+            '{InstanceIds:[$instance],DocumentName:"AWS-RunShellScript",TimeoutSeconds:1200,Parameters:{commands:[$command],executionTimeout:["1200"]}}' > command.json
+          id=$(aws ssm send-command --cli-input-json file://command.json --query Command.CommandId --output text)
+          for attempt in $(seq 1 120); do
+            sleep 10
+            if ! aws ssm get-command-invocation --command-id "$id" --instance-id "$INSTANCE_ID" > result.json 2>/dev/null; then continue; fi
+            status=$(jq -r .Status result.json)
+            case "$status" in
+              Pending|InProgress|Delayed) continue ;;
+              Success) jq -r '.StandardOutputContent, .StandardErrorContent' result.json; exit 0 ;;
+              *) jq -r '.StandardOutputContent, .StandardErrorContent' result.json; exit 1 ;;
+            esac
+          done
+          echo 'Deployment timed out'; exit 1
+      - name: Verify HTTPS frontend and API
+        run: |
+          curl --fail --retry 12 --retry-delay 10 --retry-all-errors https://ritmaplesugaring.privatedns.org/ -o /dev/null
+          curl --fail https://ritmaplesugaring.privatedns.org/api/health

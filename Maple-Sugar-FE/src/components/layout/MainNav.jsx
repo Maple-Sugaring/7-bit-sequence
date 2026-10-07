@@ -18,12 +18,11 @@ export function MainNav({ direction = 'row', onNavigate }) {
       sx={{
         display: 'flex',
         flexDirection: direction,
-        flexWrap: 'nowrap',
+        flexWrap: stacked ? 'nowrap' : 'wrap',
         justifyContent: stacked ? 'flex-start' : 'center',
         gap: 0.5,
         px: 1,
         whiteSpace: 'nowrap',
-        flexShrink: 0,
       }}
     >
       {items.map((item) => {
