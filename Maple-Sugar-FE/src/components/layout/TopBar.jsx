@@ -51,7 +51,7 @@ export function TopBar() {
 
   const profileItems = [
     { to: '/profile', label: 'Profile & settings', Icon: SettingsIcon },
-    ...(can(Capability.VIEW_SCHEDULE) ? [{ to: '/schedule?show=mine&upcoming=1', label: 'My upcoming shifts', Icon: EventIcon }] : []),
+    ...(can(Capability.VIEW_SCHEDULE) ? [{ to: '/schedule?show=mine', label: 'My upcoming shifts', Icon: EventIcon }] : []),
     { to: '/notifications', label: 'Notifications', Icon: NotificationsIcon },
   ];
 

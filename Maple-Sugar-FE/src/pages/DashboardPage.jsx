@@ -17,13 +17,14 @@ import {
   shelfLifeFromReadings,
   shelfLifeSeverity,
 } from '../business/shelfLife';
+import { weekForecastRows, weekLabel, weekStart } from '../business/weekWindows';
 import { bushAverageSugar, syrupEstimate } from '../business/sugarContent';
 import { isFull } from '../business/yieldMetrics';
 import { LIVE_FROM, LIVE_NODE_IDS, LIVE_TO, bucketGallons, bucketPercent, recordedSugar } from '../business/liveWeight';
 import { SiteForecastChart } from '../components/charts/SeriesChart';
 import { MeterBar } from '../components/common/MeterBar';
 import { PageHeader } from '../components/common/PageHeader';
-import { dateTime } from '../components/common/format';
+import { dateOnly, dateTime } from '../components/common/format';
 import { useBush, useLiveWeather, useReadings } from '../services/hooks';
 
 const STATUS = {
@@ -118,22 +119,31 @@ export function DashboardPage() {
       <Box sx={{ mb: 3 }}>
         <Card>
           <CardContent>
-            <Typography variant="h5" component="h2">
-              RIT weather
-            </Typography>
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline', justifyContent: 'space-between' }}>
+              <Typography variant="h5" component="h2">
+                RIT weather
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {dateOnly(new Date())}
+              </Typography>
+            </Stack>
             {live.error ? <Alert severity="warning">{live.error}</Alert> : null}
             {!live.data?.Configured && live.data?.Message ? <Alert severity="info">{live.data.Message}</Alert> : null}
             {weather ? (
               <>
-                <Typography variant="h3" sx={{ mt: 1 }}>
-                  {weather.Temperature_F}°F
-                </Typography>
+                <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', mt: 1 }}>
+                  <Typography variant="h3">{weather.Temperature_F}°F</Typography>
+                  <Chip label={weather.Description ?? weather.Conditions} size="small" variant="outlined" />
+                </Stack>
                 <Typography color="text.secondary">
-                  {weather.Description ?? weather.Conditions} · low {weather.Temp_Min_F}° · afternoon high {weather.Temp_Max_F}°
+                  L {weather.Temp_Min_F}° · H {weather.Temp_Max_F}°
                 </Typography>
                 <Typography sx={{ mt: 1, mb: 1 }}>{weather.Summary}</Typography>
+                <Typography variant="overline" color="text.secondary">
+                  Week of {weekLabel(weekStart(new Date()))}
+                </Typography>
                 <Box sx={{ height: 240 }}>
-                  <SiteForecastChart rows={weather.Forecast ?? []} />
+                  <SiteForecastChart rows={weekForecastRows(weather.Forecast)} />
                 </Box>
               </>
             ) : null}

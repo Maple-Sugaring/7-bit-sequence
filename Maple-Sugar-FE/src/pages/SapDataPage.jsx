@@ -5,7 +5,9 @@ import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import FormGroup from '@mui/material/FormGroup';
+import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
@@ -38,7 +40,7 @@ const PRESETS = [
   ['today', 'Today'],
   ['7d', '7 days'],
   ['30d', '30 days'],
-  ['2026', '2026'],
+  ['2026', 'Overall year'],
 ];
 
 function nodeLabel(node) {
@@ -114,92 +116,131 @@ export function SapDataPage() {
 
   const loading = bush.loading || readings.loading;
 
+  const exportActions = can(Capability.EXPORT_DATA) ? (
+    <Stack direction="row" spacing={1}>
+      <Button
+        size="small"
+        variant="outlined"
+        disabled={weights.ranged.length === 0}
+        onClick={() => exportCsv(weights.ranged, from?.format('YYYY-MM-DD'), to?.format('YYYY-MM-DD'))}
+      >
+        Export CSV
+      </Button>
+      <Button
+        size="small"
+        variant="outlined"
+        disabled={weights.ranged.length === 0 || pdfState.busy}
+        onClick={async () => {
+          const start = from?.format('YYYY-MM-DD');
+          const end = to?.format('YYYY-MM-DD');
+          setPdfState({ busy: true, error: '' });
+          try {
+            const doc = await buildPdf(exportRows(weights.ranged, start, end), {
+              from: start,
+              to: end,
+              user: user?.fullName ?? user?.email,
+            });
+            download(doc.output('blob'), exportFileName(start, end, 'pdf'));
+            setPdfState({ busy: false, error: '' });
+          } catch {
+            setPdfState({ busy: false, error: 'Could not create the PDF. Try again.' });
+          }
+        }}
+      >
+        {pdfState.busy ? 'Preparing PDF…' : 'Export PDF'}
+      </Button>
+    </Stack>
+  ) : null;
+
   return (
     <>
       <PageHeader
         title="Sugar Woods"
         subtitle="Chart gallons in each bucket over time, then export a CSV or PDF when you need it."
-        actions={
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center', justifyContent: 'center', width: '100%' }}>
-            {PRESETS.map(([id, label]) => (
-              <Button
-                key={id}
-                size="small"
-                variant={preset === id ? 'contained' : 'outlined'}
-                onClick={() => {
-                  const range = presetRange(id);
-                  setPreset(id);
-                  setFrom(dayjs(range.from));
-                  setTo(dayjs(range.to));
-                }}
-              >
-                {label}
-              </Button>
-            ))}
-            {TIME_UNITS.map(([id, label]) => (
-              <Button key={id} size="small" variant={unit === id ? 'contained' : 'outlined'} onClick={() => setUnit(id)}>
-                {label}
-              </Button>
-            ))}
-            <DatePicker
-              label="From"
-              value={from}
-              onChange={(value) => {
-                setPreset('');
-                setFrom(value);
-              }}
-              slotProps={{ textField: { size: 'small' } }}
-              sx={{ flex: { xs: '1 1 140px', sm: '0 1 auto' }, minWidth: 0 }}
-            />
-            <DatePicker
-              label="To"
-              value={to}
-              minDate={from ?? undefined}
-              onChange={(value) => {
-                setPreset('');
-                setTo(value);
-              }}
-              slotProps={{ textField: { size: 'small' } }}
-              sx={{ flex: { xs: '1 1 140px', sm: '0 1 auto' }, minWidth: 0 }}
-            />
-            {can(Capability.EXPORT_DATA) ? (
-              <Button
-                variant="outlined"
-                sx={{ flex: { xs: '1 1 100%', sm: '0 0 auto' } }}
-                disabled={weights.ranged.length === 0}
-                onClick={() => exportCsv(weights.ranged, from?.format('YYYY-MM-DD'), to?.format('YYYY-MM-DD'))}
-              >
-                Export CSV
-              </Button>
-            ) : null}
-            {can(Capability.EXPORT_DATA) ? (
-              <Button
-                variant="outlined"
-                sx={{ flex: { xs: '1 1 100%', sm: '0 0 auto' } }}
-                disabled={weights.ranged.length === 0 || pdfState.busy}
-                onClick={async () => {
-                  const start = from?.format('YYYY-MM-DD');
-                  const end = to?.format('YYYY-MM-DD');
-                  setPdfState({ busy: true, error: '' });
-                  try {
-                    const doc = await buildPdf(exportRows(weights.ranged, start, end), {
-                      from: start,
-                      to: end,
-                      user: user?.fullName ?? user?.email,
-                    });
-                    download(doc.output('blob'), exportFileName(start, end, 'pdf'));
-                    setPdfState({ busy: false, error: '' });
-                  } catch {
-                    setPdfState({ busy: false, error: 'Could not create the PDF. Try again.' });
-                  }
-                }}
-              >
-                {pdfState.busy ? 'Preparing PDF…' : 'Export PDF'}
-              </Button>
-            ) : null}
-          </Box>
-        }
       />
+
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.7fr)' },
+          gridTemplateRows: { md: 'auto auto' },
+          columnGap: 2,
+          rowGap: 1.5,
+          maxWidth: 900,
+          mx: 'auto',
+          mb: 2,
+        }}
+      >
+        <Typography variant="subtitle2" component="h2">
+          Time period
+        </Typography>
+        <Typography variant="subtitle2" component="h2">
+          Time increment
+        </Typography>
+        <Typography variant="subtitle2" component="h2">
+          Date selection
+        </Typography>
+        <TextField
+          select
+          size="small"
+          label="Select"
+          value={preset}
+          onChange={(event) => {
+            const range = presetRange(event.target.value);
+            setPreset(event.target.value);
+            setFrom(dayjs(range.from));
+            setTo(dayjs(range.to));
+          }}
+          slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
+        >
+          {preset === '' ? (
+            <MenuItem value="" disabled>
+              Custom dates
+            </MenuItem>
+          ) : null}
+          {PRESETS.map(([id, label]) => (
+            <MenuItem key={id} value={id}>
+              {label}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          select
+          size="small"
+          label="Select"
+          value={unit}
+          onChange={(event) => setUnit(event.target.value)}
+        >
+          {TIME_UNITS.map(([id, label]) => (
+            <MenuItem key={id} value={id}>
+              {label}
+            </MenuItem>
+          ))}
+        </TextField>
+        <Stack direction="row" spacing={1}>
+          <DatePicker
+            label="From"
+            value={from}
+            onChange={(value) => {
+              setPreset('');
+              setFrom(value);
+            }}
+            slotProps={{ textField: { size: 'small' } }}
+            sx={{ flex: 1, minWidth: 0 }}
+          />
+          <DatePicker
+            label="To"
+            value={to}
+            minDate={from ?? undefined}
+            onChange={(value) => {
+              setPreset('');
+              setTo(value);
+            }}
+            slotProps={{ textField: { size: 'small' } }}
+            sx={{ flex: 1, minWidth: 0 }}
+          />
+        </Stack>
+      </Box>
 
       {pdfState.error ? (
         <Typography color="error" role="alert" sx={{ mb: 1 }}>
@@ -281,6 +322,7 @@ export function SapDataPage() {
             <ChartCard
               title="2026 weight"
               description={chartDescription}
+              action={exportActions}
               height={phone ? 300 : 420}
               loading={loading}
               isEmpty={weights.rows.length === 0}

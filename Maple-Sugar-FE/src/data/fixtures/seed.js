@@ -688,6 +688,7 @@ const FORECAST_DAYS = [
   { low: 22, high: 47, precip: 0.2, conditions: 'light rain' },
   { low: 30, high: 48, precip: 0, conditions: 'overcast clouds' },
   { low: 36, high: 55, precip: 0, conditions: 'sky is clear' },
+  { low: 31, high: 50, precip: 0, conditions: 'few clouds' },
 ];
 
 /** Mirrors sapRunFromTemps in Maple-Sugar-BE/src/business/sapFlow.js. */
@@ -726,7 +727,7 @@ export function buildLiveWeather() {
     const forecast = days.map((day, offset) => {
       const run = modelSapRun(day);
       return {
-        Date: dayjs().add(offset, 'day').format('YYYY-MM-DD'),
+        Date: dayjs().startOf('week').add(offset, 'day').format('YYYY-MM-DD'),
         Temp_Min_F: day.low,
         Temp_Max_F: day.high,
         Precip_In: day.precip,
@@ -737,7 +738,7 @@ export function buildLiveWeather() {
         Ice_Present: run.ice,
       };
     });
-    const today = days[0];
+    const today = days[dayjs().day()];
     const run = modelSapRun(today);
     const middle = (today.low + today.high) / 2;
     const swing = (today.high - today.low) / 2;
@@ -761,7 +762,7 @@ export function buildLiveWeather() {
   const run = modelSapRun({
     low: primary.Temp_Min_F,
     high: primary.Temp_Max_F,
-    precip: FORECAST_DAYS[0].precip,
+    precip: FORECAST_DAYS[dayjs().day()].precip,
   });
 
   return {
