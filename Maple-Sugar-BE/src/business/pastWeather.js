@@ -54,3 +54,37 @@ export function pastDaysFromSnapshots(rows, { today, weekStart, timeZone = SUGAR
     };
   });
 }
+
+/** Dates from the week start up to, but not including, today. */
+export function weekDatesBefore(today, weekStart) {
+  const dates = [];
+  for (let date = weekStart; date < today; date = addDays(date, 1)) dates.push(date);
+  return dates;
+}
+
+/** One Call 3.0 day_summary, in imperial units, to the same shape as a forecast day. */
+export function dayFromSummary(date, summary) {
+  const min = summary?.temperature?.min;
+  const max = summary?.temperature?.max;
+  if (min == null || max == null) return null;
+  const precipIn = Math.round((Number(summary.precipitation?.total ?? 0) / 25.4) * 1000) / 1000;
+  const modeled = sapRunFromTemps({ tempMinF: Number(min), tempMaxF: Number(max), precipIn });
+  return {
+    Date: date,
+    Temp_Min_F: round1(min),
+    Temp_Max_F: round1(max),
+    Precip_In: precipIn,
+    Conditions: precipIn > 0 ? 'Rain' : 'Clear',
+    Sap_Run: modeled.sapRun,
+    Flow_Index: modeled.flowIndex,
+    Flow_Gal: modeled.flowGal,
+    Ice_Present: modeled.ice,
+  };
+}
+
+/** Provider day summaries win; stored snapshots cover whatever dates they miss. */
+export function mergePastDays(summaries, snapshots) {
+  const byDate = new Map((snapshots ?? []).map((day) => [day.Date, day]));
+  for (const day of summaries ?? []) byDate.set(day.Date, day);
+  return [...byDate.values()].sort((a, b) => a.Date.localeCompare(b.Date));
+}
