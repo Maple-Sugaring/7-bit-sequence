@@ -1,3 +1,5 @@
+import process from 'node:process';
+
 const CATEGORIES = new Set(['Idea', 'Bug', 'Other']);
 
 export default async function handler(request, response) {
