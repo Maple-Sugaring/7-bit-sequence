@@ -82,7 +82,7 @@ export function AuthProvider({ children }) {
       signOut,
       refreshUser,
     };
-  }, [session, restoring, signIn, signOut, refreshUser]);
+  }, [session, restoring, signIn, signOut, signedOut, refreshUser]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
