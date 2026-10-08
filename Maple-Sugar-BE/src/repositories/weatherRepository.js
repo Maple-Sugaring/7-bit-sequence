@@ -130,6 +130,16 @@ export async function latestLive() {
   );
 }
 
+export async function liveSince(sinceIso) {
+  return queryAll(
+    `select observed_at, temp_min_f, temp_max_f, precip_in, conditions
+       from weather_live
+      where observed_at >= $1
+      order by observed_at asc`,
+    [sinceIso],
+  );
+}
+
 export async function insertLive(snapshot) {
   await query(
     `insert into weather_live

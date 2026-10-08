@@ -11,27 +11,19 @@ import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import {
-  formatShelfLife,
-  remainingShelfLifeHours,
-  shelfLifeFromReadings,
-  shelfLifeSeverity,
-} from '../business/shelfLife';
-import { estimatedSyrupGallons } from '../business/sugarContent';
+import { batchesByNode, shelfLifeSummary } from '../business/shelfLife';
+import { weekForecastRows, weekLabel, weekStart } from '../business/weekWindows';
+import { bushAverageSugar, syrupEstimate } from '../business/sugarContent';
+import { MapStatus, STATUS_META } from '../business/nodeMapStatus';
 import { isFull } from '../business/yieldMetrics';
 import { LIVE_FROM, LIVE_NODE_IDS, LIVE_TO, bucketGallons, bucketPercent, recordedSugar } from '../business/liveWeight';
 import { SiteForecastChart } from '../components/charts/SeriesChart';
+import { FleetMapCard } from '../components/map/FleetMapCard';
+import { NodeStatusChip } from '../components/common/NodeStatusChip';
 import { MeterBar } from '../components/common/MeterBar';
 import { PageHeader } from '../components/common/PageHeader';
-import { dateTime } from '../components/common/format';
-import { useBush, useJournal, useLiveWeather, useReadings } from '../services/hooks';
-
-const STATUS = {
-  0: { label: 'Offline', color: 'error' },
-  1: { label: 'Online', color: 'success' },
-  2: { label: 'Degraded', color: 'warning' },
-  3: { label: 'Maintenance', color: 'info' },
-};
+import { dateOnly, dateTime } from '../components/common/format';
+import { useBucketShelfLife, useFleetMap, useLiveWeather, useReadings } from '../services/hooks';
 
 function Meter({ label, value, percent, detail, color }) {
   return (
@@ -50,58 +42,42 @@ function Meter({ label, value, percent, detail, color }) {
   );
 }
 
+const NO_BATCHES = [];
+
 export function DashboardPage() {
   const navigate = useNavigate();
-  const bush = useBush();
+  // One fetch feeds the cards below and the fleet map, so they cannot disagree.
+  const fleet = useFleetMap();
+  const bushNodes = fleet.nodes;
   const live = useLiveWeather();
   const readings = useReadings({ from: LIVE_FROM, to: LIVE_TO });
-  const journal = useJournal();
   const weather = live.data?.Sites?.[0] ?? (live.data?.Configured ? live.data : null);
   const totals = useMemo(() => {
     const tracked = new Set(LIVE_NODE_IDS);
     const weights = (readings.data ?? []).filter((row) => tracked.has(row.NodeID) && row.Weight != null);
-    const sugars = recordedSugar([...(readings.data ?? []), ...(journal.data ?? [])]);
+    // A collection with a Brix test also files a reading carrying it, so the
+    // readings alone hold every test. Counting the journal too would count each
+    // test twice.
+    const sugars = recordedSugar(readings.data ?? []);
     const sugar = sugars.length ? sugars.reduce((sum, value) => sum + value, 0) / sugars.length : null;
-    const syrup = (bush.data ?? []).reduce((sum, node) => {
+    const bushSugar = bushAverageSugar(bushNodes);
+    const syrup = bushNodes.reduce((sum, node) => {
       const gallons = bucketGallons(node.Weight, node.Tare_Weight ?? 0);
-      return sum + (estimatedSyrupGallons(gallons, node.Sugar_Percent) ?? 0);
+      // A tree's own last test, then the bush average, then 43:1.
+      const estimate = syrupEstimate({ sapGallons: gallons, tree: node.Sugar_Percent, bush: bushSugar });
+      return sum + (estimate?.syrupGallons ?? 0);
     }, 0);
-    const measured = (bush.data ?? []).some((node) => node.Sugar_Percent != null);
+    const measured = bushNodes.some((node) => node.Sugar_Percent != null);
     return { readings: weights.length, sugar, syrup, measured };
-  }, [readings.data, journal.data, bush.data]);
+  }, [readings.data, bushNodes]);
 
-  const shelfByNode = useMemo(() => {
-    const ambient = weather?.Temperature_F ?? null;
-    const map = new Map();
-    for (const node of bush.data ?? []) {
-      const rows = (readings.data ?? []).filter((row) => row.NodeID === node.NodeID);
-      const fromProbe = shelfLifeFromReadings(rows);
-      if (fromProbe) {
-        map.set(node.NodeID, { ...fromProbe, source: 'sap temperature' });
-        continue;
-      }
-      if (ambient == null || !node.Recorded_At) continue;
-      const hours = remainingShelfLifeHours({
-        filledAt: node.Recorded_At,
-        temperatureF: ambient,
-        sugarPercent: node.Sugar_Percent,
-      });
-      map.set(node.NodeID, {
-        hours,
-        label: formatShelfLife(hours),
-        severity: shelfLifeSeverity(hours),
-        source: 'air temperature',
-      });
-    }
-    return map;
-  }, [bush.data, readings.data, weather]);
+  // Shelf life belongs to the sap in a bucket, so each tree shows whichever
+  // bucket is sitting on it now, and a tree with an empty bucket shows none.
+  const batches = useBucketShelfLife(weather?.Temperature_F ?? null).data ?? NO_BATCHES;
+  const batchByNode = useMemo(() => batchesByNode(batches), [batches]);
 
-  const offlineNodes = (bush.data ?? []).filter((node) => node.Status_Code === 0);
-  const shortestShelf = [...shelfByNode.values()].reduce((soonest, entry) => {
-    if (entry.hours == null) return soonest;
-    if (!soonest || entry.hours < soonest.hours) return entry;
-    return soonest;
-  }, null);
+  const offlineNodes = bushNodes.filter((node) => node.mapStatus === MapStatus.OFFLINE);
+  const { shortest: shortestShelf, holdingSap } = useMemo(() => shelfLifeSummary(batches), [batches]);
 
   return (
     <>
@@ -113,22 +89,31 @@ export function DashboardPage() {
       <Box sx={{ mb: 3 }}>
         <Card>
           <CardContent>
-            <Typography variant="h5" component="h2">
-              RIT weather
-            </Typography>
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline', justifyContent: 'space-between' }}>
+              <Typography variant="h6" component="h2">
+                RIT weather
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {dateOnly(new Date())}
+              </Typography>
+            </Stack>
             {live.error ? <Alert severity="warning">{live.error}</Alert> : null}
             {!live.data?.Configured && live.data?.Message ? <Alert severity="info">{live.data.Message}</Alert> : null}
             {weather ? (
               <>
-                <Typography variant="h3" sx={{ mt: 1 }}>
-                  {weather.Temperature_F}°F
-                </Typography>
+                <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', mt: 1 }}>
+                  <Typography variant="h3">{weather.Temperature_F}°F</Typography>
+                  <Chip label={weather.Description ?? weather.Conditions} size="small" variant="outlined" />
+                </Stack>
                 <Typography color="text.secondary">
-                  {weather.Description ?? weather.Conditions} · low {weather.Temp_Min_F}° · afternoon high {weather.Temp_Max_F}°
+                  L {weather.Temp_Min_F}° · H {weather.Temp_Max_F}°
                 </Typography>
                 <Typography sx={{ mt: 1, mb: 1 }}>{weather.Summary}</Typography>
+                <Typography variant="overline" color="text.secondary">
+                  Week of {weekLabel(weekStart(new Date()))}
+                </Typography>
                 <Box sx={{ height: 240 }}>
-                  <SiteForecastChart rows={weather.Forecast ?? []} />
+                  <SiteForecastChart rows={weekForecastRows(weather.Forecast)} />
                 </Box>
               </>
             ) : null}
@@ -140,7 +125,7 @@ export function DashboardPage() {
         <CardContent>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ justifyContent: 'space-between' }}>
             <Box>
-              <Typography variant="h5" component="h2">
+              <Typography variant="h6" component="h2">
                 2026 weight
               </Typography>
               <Typography variant="body2" color="text.secondary">
@@ -154,13 +139,13 @@ export function DashboardPage() {
           <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid size={{ xs: 12, sm: 6, md: 4 }}>
               <Typography variant="overline">In the buckets now</Typography>
-              {(bush.data ?? []).map((node) => {
+              {bushNodes.map((node) => {
                 const gallons = bucketGallons(node.Weight, node.Tare_Weight ?? 0);
                 const full = isFull(node.Weight, node.Tare_Weight ?? 0);
                 return (
                   <Stack key={node.NodeID} direction="row" sx={{ justifyContent: 'space-between', py: 0.5 }}>
                     <Typography>{node.Node_Name}</Typography>
-                    <Typography fontWeight={700}>
+                    <Typography sx={{ fontWeight: 700 }}>
                       {gallons == null ? '—' : `${gallons.toFixed(1)} gal · ${Number(node.Weight).toFixed(1)} lb`}
                       {full ? ' · full' : ''}
                     </Typography>
@@ -186,7 +171,11 @@ export function DashboardPage() {
               <Typography variant="overline">Shelf life</Typography>
               <Typography variant="h4">{shortestShelf?.label ?? '—'}</Typography>
               <Typography variant="body2" color="text.secondary">
-                {shortestShelf ? `Shortest window, from ${shortestShelf.source}` : 'Needs a temperature and a reading'}
+                {shortestShelf
+                  ? `Bucket ${shortestShelf.barcode ?? shortestShelf.bucketId} is closest, from ${shortestShelf.source}`
+                  : holdingSap
+                    ? 'Needs a temperature to time the sap in the buckets'
+                    : 'No sap in any bucket yet'}
               </Typography>
             </Grid>
             <Grid size={{ xs: 6, sm: 3, md: 2 }}>
@@ -194,12 +183,12 @@ export function DashboardPage() {
               <Typography variant="h4">{totals.syrup.toFixed(2)} gal</Typography>
               <Typography variant="body2" color="text.secondary">
                 {totals.measured
-                  ? '40:1, replaced where a student recorded sugar'
-                  : '40 gallons of sap per gallon of syrup'}
+                  ? 'Rule of 86 where a tree was tested, the bush average elsewhere'
+                  : '43 gallons of sap per gallon of syrup until a tree is tested'}
               </Typography>
             </Grid>
           </Grid>
-          {(bush.data ?? []).some((node) => isFull(node.Weight, node.Tare_Weight ?? 0)) ? (
+          {bushNodes.some((node) => isFull(node.Weight, node.Tare_Weight ?? 0)) ? (
             <Alert severity="warning" sx={{ mt: 2 }} action={<Button color="inherit" onClick={() => navigate('/notifications')}>Alerts</Button>}>
               A bucket is full. Collect it before it spills, or open the alerts.
             </Alert>
@@ -212,15 +201,17 @@ export function DashboardPage() {
         </CardContent>
       </Card>
 
+      <FleetMapCard fleet={fleet} />
+
       <Grid container spacing={2}>
-        {(bush.data ?? []).map((node) => {
-          const status = STATUS[node.Status_Code] ?? STATUS[1];
+        {bushNodes.map((node) => {
+          const status = node.mapStatus;
           const gallons = bucketGallons(node.Weight, node.Tare_Weight ?? 0);
           const fill = bucketPercent(node.Weight, node.Tare_Weight ?? 0);
-          const shelf = shelfByNode.get(node.NodeID);
+          const shelf = batchByNode.get(node.NodeID);
           const tip = [
             node.Node_Name,
-            `Status ${status.label}`,
+            `Status ${STATUS_META[status].label}`,
             node.Signal_Rssi != null ? `Signal ${node.Signal_Rssi} dBm` : null,
             node.Sugar_Percent != null ? `Sugar ${node.Sugar_Percent}%` : null,
             node.Ice_Present ? 'Ice in the bucket' : null,
@@ -238,7 +229,7 @@ export function DashboardPage() {
                     <CardContent>
                       <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
                         <Typography variant="h6">{node.Stand}</Typography>
-                        <Chip size="small" label={status.label} color={status.color} />
+                        <NodeStatusChip status={status} />
                       </Stack>
                       <Typography variant="body2" color="text.secondary">
                         {node.Node_Name}
@@ -267,9 +258,14 @@ export function DashboardPage() {
                         Sugar {node.Sugar_Percent == null ? '— not recorded' : `${node.Sugar_Percent}% Brix`}
                       </Typography>
                       <Typography variant="body2" color={shelf ? `${shelf.severity}.main` : 'text.secondary'}>
-                        Shelf life {shelf?.label ?? '—'}
-                        {shelf ? ` · ${shelf.source}` : ''}
+                        Shelf life {shelf?.label ?? 'none, no sap in the bucket'}
+                        {shelf?.source ? ` · ${shelf.source}` : ''}
                       </Typography>
+                      {shelf ? (
+                        <Typography variant="caption" color="text.secondary">
+                          {shelf.barcode ? `Bucket ${shelf.barcode} · ` : ''}filling since {dateTime(shelf.startedAt)}
+                        </Typography>
+                      ) : null}
                       {node.Temperature != null ? (
                         <Typography variant="body2" color="text.secondary">
                           Sap temperature {node.Temperature}°F

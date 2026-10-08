@@ -16,7 +16,7 @@ import {
   seasonOf,
 } from '../business/aggregation';
 import { assessSpoilage, SpoilageRisk } from '../business/spoilage';
-import { shelfLifeFromReadings } from '../business/shelfLife';
+import { shelfLifeByBucket } from '../business/shelfLife';
 import { totalCollected, yieldEfficiency } from '../business/yieldMetrics';
 import { enrichReadings } from './metricsService';
 
@@ -70,16 +70,16 @@ export async function getDashboard({ season } = {}) {
     const avgNet = average(current, 'netWeight');
     const collected = totalCollected(currentLogs);
 
-    // Shelf life and spoilage are per-node, so evaluate each node's own
-    // recent readings rather than averaging across the whole sugarbush.
-    const perNode = nodes.map((node) => {
-      const readings = current.filter((row) => row.NodeID === node.NodeID);
-      return {
-        node,
-        spoilage: assessSpoilage(readings),
-        shelfLife: shelfLifeFromReadings(readings),
-      };
-    });
+    // Spoilage is read per tree; shelf life is read per bucket, since the sap
+    // is in the bucket and buckets move. Neither is averaged across the bush.
+    const perNode = nodes.map((node) => ({
+      node,
+      spoilage: assessSpoilage(current.filter((row) => row.NodeID === node.NodeID)),
+    }));
+    const nodeNameById = new Map(nodes.map((node) => [node.NodeID, node.Node_Name]));
+    const batches = [...shelfLifeByBucket({ readings: current, buckets, collections: logs }).values()].filter(
+      (batch) => batch.hours != null,
+    );
 
     const atRisk = perNode.filter(
       (entry) =>
@@ -87,9 +87,7 @@ export async function getDashboard({ season } = {}) {
         entry.spoilage.risk === SpoilageRisk.CRITICAL,
     );
 
-    const shelfLifeHours = perNode
-      .map((entry) => entry.shelfLife?.hours)
-      .filter((value) => value != null);
+    const shelfLifeHours = batches.map((batch) => batch.hours);
 
     return {
       season: activeSeason,
@@ -127,14 +125,9 @@ export async function getDashboard({ season } = {}) {
         seasons,
       },
 
-      shelfLife: perNode
-        .filter((entry) => entry.shelfLife)
-        .map((entry) => ({
-          nodeId: entry.node.NodeID,
-          nodeName: entry.node.Node_Name,
-          ...entry.shelfLife,
-        }))
-        .sort((a, b) => (a.hours ?? Infinity) - (b.hours ?? Infinity)),
+      shelfLife: batches
+        .map((batch) => ({ ...batch, nodeName: nodeNameById.get(batch.nodeId) ?? null }))
+        .sort((a, b) => a.hours - b.hours),
 
       spoilage: atRisk.map((entry) => ({
         nodeId: entry.node.NodeID,

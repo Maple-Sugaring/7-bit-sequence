@@ -14,26 +14,28 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import dayjs from 'dayjs';
-import { estimatedSyrupGallons } from '../business/sugarContent';
+import { basisLabel, bushAverageSugar, syrupEstimate } from '../business/sugarContent';
+import { statusFromCode } from '../business/nodeMapStatus';
 import { Capability } from '../business/permissions';
 import { LIVE_FROM, LIVE_TO, TIME_UNITS, bucketGallons, bucketPercent, dailyWeightRows } from '../business/liveWeight';
 import { ChartCard } from '../components/charts/ChartCard';
 import { WeightChart } from '../components/charts/SeriesChart';
 import { PageHeader } from '../components/common/PageHeader';
 import { dateTime } from '../components/common/format';
+import { LocationWidget } from '../components/map/LocationWidget';
 import { useAuth } from '../context/auth';
-import { useBush, useReadings } from '../services/hooks';
+import { useBush, useNodeStatuses, useReadings } from '../services/hooks';
 import { useAction, useAsync } from '../services/hooks/useAsync';
 import { getUsers } from '../services/adminService';
 import { flagNode } from '../services/alertService';
+import { NodeStatusChip } from '../components/common/NodeStatusChip';
 import { runNodeAction } from '../services/nodeService';
 import { assignShift, SHIFT_TASKS } from '../services/scheduleService';
 
-const STATUS = {
-  0: { label: 'Offline', color: 'error' },
-  1: { label: 'Online', color: 'success' },
-  2: { label: 'Degraded', color: 'warning' },
-  3: { label: 'Maintenance', color: 'info' },
+const ACTION_DONE = {
+  collect: 'Bucket collected.',
+  maintenance: 'Marked for maintenance.',
+  online: 'Marked online.',
 };
 
 export function NodePage() {
@@ -41,11 +43,16 @@ export function NodePage() {
   const navigate = useNavigate();
   const { can } = useAuth();
   const bush = useBush();
+  const statuses = useNodeStatuses(bush.data);
   const canSchedule = can(Capability.MANAGE_SCHEDULE);
   const canDeploy = can(Capability.DEPLOY_NODES);
+  const canCollect = can(Capability.RECORD_DATA);
+  // Status changes and field reports both need the flag capability (admins have it too).
+  const canFlag = can(Capability.FLAG_NODE);
   const people = useAsync(useCallback(() => getUsers(), []), { enabled: canSchedule, initialData: null });
   const node = (bush.data ?? []).find((item) => item.NodeID === Number(nodeId));
   const [notes, setNotes] = useState('');
+  const [done, setDone] = useState(null);
   const [unit, setUnit] = useState('day');
   const [shift, setShift] = useState(() => {
     const start = dayjs().add(1, 'day').hour(9).minute(0).second(0);
@@ -58,16 +65,22 @@ export function NodePage() {
     to: LIVE_TO,
   });
   const action = useAction(async (name) => {
+    setDone(null);
     await runNodeAction(Number(nodeId), { Action: name, Notes: notes });
     await bush.refresh();
+    setDone(ACTION_DONE[name]);
   });
   const report = useAction(async (type) => {
+    setDone(null);
     await flagNode(Number(nodeId), {
       type,
       description: notes.trim() || (type === 'Spill' ? 'Bucket spilled. Needs a manual check.' : 'Ice in the bucket. Weight may sit above 10 gallons.'),
     });
+    setDone(type === 'Spill' ? 'Spill reported.' : 'Freezing reported.');
   });
+  const [shiftDone, setShiftDone] = useState(null);
   const createShift = useAction(async () => {
+    setShiftDone(null);
     await assignShift({
       Task: shift.Task,
       UserID: shift.UserID,
@@ -76,11 +89,18 @@ export function NodePage() {
       Ends_At: shift.Ends_At.toISOString(),
       Notes: shift.Notes || `Assigned from ${node.Node_Name}`,
     });
+    const person = (people.data?.users ?? []).find((user) => user.UserID === shift.UserID);
+    setShiftDone(`Shift assigned to ${person?.fullName ?? 'that student'}.`);
   });
 
-  const status = STATUS[node?.Status_Code] ?? STATUS[1];
+  const status = statuses.get(node?.NodeID) ?? statusFromCode(node?.Status_Code);
   const gallons = node ? bucketGallons(node.Weight, node.Tare_Weight ?? 0) : null;
   const fill = node ? bucketPercent(node.Weight, node.Tare_Weight ?? 0) : null;
+  const estimate = syrupEstimate({
+    sapGallons: gallons,
+    tree: node?.Sugar_Percent,
+    bush: bushAverageSugar(bush.data),
+  });
   const weights = dailyWeightRows(history.data ?? [], { nodeIds: [Number(nodeId)], unit });
   const intervalMinutes = node?.Report_Interval_Seconds == null
     ? 15
@@ -118,7 +138,7 @@ export function NodePage() {
       />
       <Stack direction="row" spacing={1} sx={{ mb: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
         <Chip label={node?.Stand} />
-        <Chip label={status.label} color={status.color} />
+        <NodeStatusChip status={status} size="medium" />
         {node?.Node_Code ? <Chip label={node.Node_Code} variant="outlined" /> : null}
         {node?.Ice_Present ? <Chip label="Ice in the bucket" color="info" /> : null}
         <Chip label={node?.Barcode_ID ?? 'No bucket'} variant="outlined" />
@@ -151,16 +171,15 @@ export function NodePage() {
                   : gallons > 10
                     ? `${gallons.toFixed(1)} gal · past 10 gal because the sap froze`
                     : `${gallons.toFixed(1)} of 10 gal`}
-                {gallons == null
-                  ? ''
-                  : ` · ${estimatedSyrupGallons(gallons, node?.Sugar_Percent).toFixed(2)} gal syrup`}
-                {gallons == null ? '' : node?.Sugar_Percent != null ? ` · ${node.Sugar_Percent}% sugar` : ' · 40:1'}
+                {estimate ? ` · about ${estimate.syrupGallons.toFixed(2)} gal syrup, using ${basisLabel(estimate)}` : ''}
                 {node?.Recorded_At ? ` · ${dateTime(node.Recorded_At)}` : ''}
               </Typography>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
+
+      <LocationWidget location={node?.Location} title="Where this tree is" sx={{ mb: 2 }} />
 
       <Card sx={{ mb: 2 }}>
         <CardContent>
@@ -203,44 +222,57 @@ export function NodePage() {
       </Box>
 
       <Grid container spacing={2}>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" sx={{ mb: 1 }}>
-                At the tree
-              </Typography>
-              <TextField
-                label="Note"
-                value={notes}
-                onChange={(event) => setNotes(event.target.value)}
-                fullWidth
-                sx={{ mb: 2 }}
-              />
-              {action.error || report.error ? (
-                <Alert severity="error" sx={{ mb: 2 }}>
-                  {action.error ?? report.error}
-                </Alert>
-              ) : null}
-              <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
-                <Button variant="contained" disabled={action.pending} onClick={() => action.execute('collect')}>
-                  Collect bucket
-                </Button>
-                <Button variant="outlined" disabled={action.pending} onClick={() => action.execute('maintenance')}>
-                  Maintenance
-                </Button>
-                <Button variant="outlined" disabled={action.pending} onClick={() => action.execute('online')}>
-                  Mark online
-                </Button>
-                <Button variant="outlined" color="warning" disabled={report.pending} onClick={() => report.execute('Spill')}>
-                  Report a spill
-                </Button>
-                <Button variant="outlined" color="info" disabled={report.pending} onClick={() => report.execute('Freezing')}>
-                  Report freezing
-                </Button>
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
+        {canCollect || canFlag ? (
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" sx={{ mb: 1 }}>
+                  At the tree
+                </Typography>
+                <TextField
+                  label="Note"
+                  value={notes}
+                  onChange={(event) => setNotes(event.target.value)}
+                  fullWidth
+                  sx={{ mb: 2 }}
+                />
+                {action.error || report.error ? (
+                  <Alert severity="error" sx={{ mb: 2 }}>
+                    {action.error ?? report.error}
+                  </Alert>
+                ) : null}
+                {done ? (
+                  <Alert severity="success" sx={{ mb: 2 }} onClose={() => setDone(null)}>
+                    {done}
+                  </Alert>
+                ) : null}
+                <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                  {canCollect ? (
+                    <Button variant="contained" disabled={action.pending} onClick={() => action.execute('collect')}>
+                      Collect bucket
+                    </Button>
+                  ) : null}
+                  {canFlag ? (
+                    <>
+                      <Button variant="outlined" disabled={action.pending} onClick={() => action.execute('maintenance')}>
+                        Maintenance
+                      </Button>
+                      <Button variant="outlined" disabled={action.pending} onClick={() => action.execute('online')}>
+                        Mark online
+                      </Button>
+                      <Button variant="outlined" color="warning" disabled={report.pending} onClick={() => report.execute('Spill')}>
+                        Report a spill
+                      </Button>
+                      <Button variant="outlined" color="info" disabled={report.pending} onClick={() => report.execute('Freezing')}>
+                        Report freezing
+                      </Button>
+                    </>
+                  ) : null}
+                </Stack>
+              </CardContent>
+            </Card>
+          </Grid>
+        ) : null}
 
         {can(Capability.MANAGE_SCHEDULE) && node?.BucketID ? (
           <Grid size={{ xs: 12, md: 6 }}>
@@ -293,6 +325,11 @@ export function NodePage() {
                     slotProps={{ textField: { fullWidth: true } }}
                   />
                   {createShift.error ? <Alert severity="error">{createShift.error}</Alert> : null}
+                  {shiftDone ? (
+                    <Alert severity="success" onClose={() => setShiftDone(null)}>
+                      {shiftDone}
+                    </Alert>
+                  ) : null}
                   <Button
                     variant="contained"
                     disabled={createShift.pending || !shift.UserID}

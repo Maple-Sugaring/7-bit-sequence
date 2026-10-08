@@ -5,11 +5,15 @@ import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import FormGroup from '@mui/material/FormGroup';
+import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import dayjs from 'dayjs';
 import { LIVE_FROM, LIVE_TO, TIME_UNITS, dailyWeightRows, presetRange } from '../business/liveWeight';
+import { exportFileName, exportRows, buildPdf, toCsv } from '../business/weightExport';
 import { Capability } from '../business/permissions';
 import { ChartCard } from '../components/charts/ChartCard';
 import { WeightChart } from '../components/charts/SeriesChart';
@@ -18,37 +22,25 @@ import { EmptyBlock } from '../components/common/StateBlock';
 import { useAuth } from '../context/auth';
 import { useBush, useReadings } from '../services/hooks';
 
-function exportWeights(readings, from, to) {
-  const lines = ['date,node,tree,stand,weight_lb,sugar_percent'];
-  for (const row of readings) {
-    const date = String(row.Recorded_At).slice(0, 10);
-    if (from && date < from) continue;
-    if (to && date > to) continue;
-    lines.push(
-      [
-        date,
-        row.NodeID,
-        `"${row.nodeName ?? ''}"`,
-        `"${row.stand ?? ''}"`,
-        row.Weight ?? '',
-        row.Sugar_Percent ?? '',
-      ].join(','),
-    );
-  }
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+function download(blob, name) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `sugar-woods-${from ?? 'start'}-to-${to ?? 'end'}.csv`;
+  link.download = name;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function exportCsv(readings, from, to) {
+  const csv = toCsv(exportRows(readings, from, to));
+  download(new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8' }), exportFileName(from, to, 'csv'));
 }
 
 const PRESETS = [
   ['today', 'Today'],
   ['7d', '7 days'],
   ['30d', '30 days'],
-  ['2026', '2026'],
+  ['2026', 'Overall year'],
 ];
 
 function nodeLabel(node) {
@@ -58,7 +50,8 @@ function nodeLabel(node) {
 
 export function SapDataPage() {
   const navigate = useNavigate();
-  const { can } = useAuth();
+  const phone = useMediaQuery('(max-width:600px)');
+  const { can, user } = useAuth();
   const canDeploy = can(Capability.DEPLOY_NODES);
   const bush = useBush();
   const initial = presetRange('7d');
@@ -66,7 +59,9 @@ export function SapDataPage() {
   const [to, setTo] = useState(dayjs(initial.to));
   const [preset, setPreset] = useState('7d');
   const [unit, setUnit] = useState('day');
-  const [picked, setPicked] = useState([]);
+  // null = untouched (every tree selected); an array is the user's explicit choice, possibly empty.
+  const [picked, setPicked] = useState(null);
+  const [pdfState, setPdfState] = useState({ busy: false, error: '' });
   const readings = useReadings({ from: LIVE_FROM, to: LIVE_TO });
 
   const nodes = useMemo(() => {
@@ -78,7 +73,7 @@ export function SapDataPage() {
   }, [bush.data]);
 
   const boardIds = useMemo(() => new Set(nodes.map((node) => node.NodeID)), [nodes]);
-  const selectedIds = picked.length ? picked : nodes.map((node) => node.NodeID);
+  const selectedIds = useMemo(() => picked ?? nodes.map((node) => node.NodeID), [picked, nodes]);
 
   const tracked = useMemo(
     () => (readings.data ?? []).filter((row) => boardIds.has(row.NodeID)),
@@ -89,7 +84,7 @@ export function SapDataPage() {
     const start = from?.format('YYYY-MM-DD');
     const end = to?.format('YYYY-MM-DD');
     const ranged = tracked.filter((row) => {
-      if (selectedIds.length && !selectedIds.includes(row.NodeID)) return false;
+      if (!selectedIds.includes(row.NodeID)) return false;
       const date = String(row.Recorded_At).slice(0, 10);
       if (start && date < start) return false;
       if (end && date > end) return false;
@@ -98,11 +93,11 @@ export function SapDataPage() {
     return {
       ranged,
       ...dailyWeightRows(ranged, {
-        nodeIds: selectedIds.length ? selectedIds : [...boardIds],
+        nodeIds: selectedIds,
         unit,
       }),
     };
-  }, [tracked, selectedIds, from, to, unit, boardIds]);
+  }, [tracked, selectedIds, from, to, unit]);
 
   const stands = useMemo(() => {
     const names = [...new Set(nodes.map((node) => node.Stand).filter(Boolean))];
@@ -115,71 +110,151 @@ export function SapDataPage() {
 
   const emptyTitle = nodes.length === 0
     ? 'No trees deployed yet'
-    : 'No weight in this range';
+    : selectedIds.length === 0
+      ? 'No trees selected'
+      : 'No weight in this range';
   const emptyDescription = nodes.length === 0
     ? 'Register a gateway and add nodes on Deploy, then flash the Heltecs. Readings show up here once packets arrive.'
-    : 'Widen the dates, or wait for the next LoRa packet from a selected tree.';
+    : selectedIds.length === 0
+      ? 'Pick at least one tree to chart its weight.'
+      : 'Widen the dates, or wait for the next LoRa packet from a selected tree.';
 
   const loading = bush.loading || readings.loading;
+
+  const exportActions = can(Capability.EXPORT_DATA) ? (
+    <Stack direction="row" spacing={1}>
+      <Button
+        size="small"
+        variant="outlined"
+        disabled={weights.ranged.length === 0}
+        onClick={() => exportCsv(weights.ranged, from?.format('YYYY-MM-DD'), to?.format('YYYY-MM-DD'))}
+      >
+        Export CSV
+      </Button>
+      <Button
+        size="small"
+        variant="outlined"
+        disabled={weights.ranged.length === 0 || pdfState.busy}
+        onClick={async () => {
+          const start = from?.format('YYYY-MM-DD');
+          const end = to?.format('YYYY-MM-DD');
+          setPdfState({ busy: true, error: '' });
+          try {
+            const doc = await buildPdf(exportRows(weights.ranged, start, end), {
+              from: start,
+              to: end,
+              user: user?.fullName ?? user?.email,
+            });
+            download(doc.output('blob'), exportFileName(start, end, 'pdf'));
+            setPdfState({ busy: false, error: '' });
+          } catch {
+            setPdfState({ busy: false, error: 'Could not create the PDF. Try again.' });
+          }
+        }}
+      >
+        {pdfState.busy ? 'Preparing PDF…' : 'Export PDF'}
+      </Button>
+    </Stack>
+  ) : null;
 
   return (
     <>
       <PageHeader
         title="Sugar Woods"
-        subtitle="Chart gallons in each bucket over time, then export a CSV when you need it."
-        actions={
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'center' }, flexWrap: 'wrap', justifyContent: 'center' }}>
-            {PRESETS.map(([id, label]) => (
-              <Button
-                key={id}
-                size="small"
-                variant={preset === id ? 'contained' : 'outlined'}
-                onClick={() => {
-                  const range = presetRange(id);
-                  setPreset(id);
-                  setFrom(dayjs(range.from));
-                  setTo(dayjs(range.to));
-                }}
-              >
-                {label}
-              </Button>
-            ))}
-            {TIME_UNITS.map(([id, label]) => (
-              <Button key={id} size="small" variant={unit === id ? 'contained' : 'outlined'} onClick={() => setUnit(id)}>
-                {label}
-              </Button>
-            ))}
-            <DatePicker
-              label="From"
-              value={from}
-              onChange={(value) => {
-                setPreset('');
-                setFrom(value);
-              }}
-              slotProps={{ textField: { size: 'small' } }}
-            />
-            <DatePicker
-              label="To"
-              value={to}
-              minDate={from ?? undefined}
-              onChange={(value) => {
-                setPreset('');
-                setTo(value);
-              }}
-              slotProps={{ textField: { size: 'small' } }}
-            />
-            {can(Capability.EXPORT_DATA) ? (
-              <Button
-                variant="outlined"
-                disabled={weights.ranged.length === 0}
-                onClick={() => exportWeights(weights.ranged, from?.format('YYYY-MM-DD'), to?.format('YYYY-MM-DD'))}
-              >
-                Export CSV
-              </Button>
-            ) : null}
-          </Stack>
-        }
+        subtitle="Chart gallons in each bucket over time, then export a CSV or PDF when you need it."
       />
+
+      <Box
+        sx={{
+          display: 'grid',
+          // One column on phones, where `order` puts each heading above its own control.
+          gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.7fr)' },
+          gridTemplateRows: { md: 'auto auto' },
+          columnGap: 2,
+          rowGap: 1.5,
+          maxWidth: 900,
+          mx: 'auto',
+          mb: 2,
+        }}
+      >
+        <Typography variant="subtitle2" component="h2" sx={{ order: { xs: 1, md: 0 } }}>
+          Time period
+        </Typography>
+        <Typography variant="subtitle2" component="h2" sx={{ order: { xs: 3, md: 0 } }}>
+          Time increment
+        </Typography>
+        <Typography variant="subtitle2" component="h2" sx={{ order: { xs: 5, md: 0 } }}>
+          Date selection
+        </Typography>
+        <TextField
+          select
+          size="small"
+          label="Select"
+          value={preset}
+          onChange={(event) => {
+            const range = presetRange(event.target.value);
+            setPreset(event.target.value);
+            setFrom(dayjs(range.from));
+            setTo(dayjs(range.to));
+          }}
+          slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
+          sx={{ order: { xs: 2, md: 0 } }}
+        >
+          {preset === '' ? (
+            <MenuItem value="" disabled>
+              Custom dates
+            </MenuItem>
+          ) : null}
+          {PRESETS.map(([id, label]) => (
+            <MenuItem key={id} value={id}>
+              {label}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          select
+          size="small"
+          label="Select"
+          value={unit}
+          onChange={(event) => setUnit(event.target.value)}
+          sx={{ order: { xs: 4, md: 0 } }}
+        >
+          {TIME_UNITS.map(([id, label]) => (
+            <MenuItem key={id} value={id}>
+              {label}
+            </MenuItem>
+          ))}
+        </TextField>
+        <Stack direction="row" spacing={1} sx={{ order: { xs: 6, md: 0 } }}>
+          <DatePicker
+            label="From"
+            value={from}
+            onChange={(value) => {
+              setPreset('');
+              setFrom(value);
+            }}
+            slotProps={{ textField: { size: 'small' } }}
+            sx={{ flex: 1, minWidth: 0 }}
+          />
+          <DatePicker
+            label="To"
+            value={to}
+            minDate={from ?? undefined}
+            onChange={(value) => {
+              setPreset('');
+              setTo(value);
+            }}
+            slotProps={{ textField: { size: 'small' } }}
+            sx={{ flex: 1, minWidth: 0 }}
+          />
+        </Stack>
+      </Box>
+
+      {pdfState.error ? (
+        <Typography color="error" role="alert" sx={{ mb: 1 }}>
+          {pdfState.error}
+        </Typography>
+      ) : null}
 
       {nodes.length === 0 && !loading ? (
         <EmptyBlock
@@ -220,10 +295,10 @@ export function SapDataPage() {
                     control={
                       <Checkbox
                         size="small"
-                        checked={picked.length === 0 || picked.includes(node.NodeID)}
+                        checked={selectedIds.includes(node.NodeID)}
                         onChange={() =>
                           setPicked((current) => {
-                            const base = current.length ? current : nodes.map((item) => item.NodeID);
+                            const base = current ?? nodes.map((item) => item.NodeID);
                             return base.includes(node.NodeID)
                               ? base.filter((id) => id !== node.NodeID)
                               : [...base, node.NodeID];
@@ -245,17 +320,22 @@ export function SapDataPage() {
                 ))}
               </FormGroup>
             )}
-            {picked.length > 0 ? (
-              <Button size="small" sx={{ mt: 1 }} onClick={() => setPicked([])}>
-                Select all
+            {nodes.length > 0 ? (
+              <Button
+                size="small"
+                sx={{ mt: 1 }}
+                onClick={() => setPicked(selectedIds.length === nodes.length ? [] : null)}
+              >
+                {selectedIds.length === nodes.length ? 'Clear all' : 'Select all'}
               </Button>
             ) : null}
           </Box>
-          <Box sx={{ flex: 1 }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
             <ChartCard
               title="2026 weight"
               description={chartDescription}
-              height={420}
+              action={exportActions}
+              height={phone ? 300 : 420}
               loading={loading}
               isEmpty={weights.rows.length === 0}
               emptyTitle={emptyTitle}

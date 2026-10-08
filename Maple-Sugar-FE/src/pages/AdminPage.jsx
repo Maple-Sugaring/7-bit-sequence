@@ -20,7 +20,9 @@ import Typography from '@mui/material/Typography';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import MoreTimeIcon from '@mui/icons-material/MoreTime';
 import PersonAddAltIcon from '@mui/icons-material/PersonAddAlt';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import { DataGrid } from '@mui/x-data-grid';
+import { ColumnCards } from '../components/common/ColumnCards';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import dayjs from 'dayjs';
 import { ROLE_LABELS } from '../business/permissions';
@@ -217,8 +219,40 @@ export function AdminPage() {
     await refresh();
   });
 
+  const phone = useMediaQuery('(max-width:600px)');
   const columns = [
     { field: 'fullName', headerName: 'Name', width: 180 },
+    // Second, not last: the columns are wider than the page, so a trailing column is scrolled off.
+    {
+      field: 'actions',
+      headerName: '',
+      width: 110,
+      sortable: false,
+      filterable: false,
+      renderCell: (params) => (
+        <Stack direction="row">
+          <Tooltip title="Set end date">
+            <IconButton
+              size="small"
+              onClick={() => setExpiryUser(params.row)}
+              aria-label={`Set end date for ${params.row.fullName}`}
+            >
+              <MoreTimeIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Remove user">
+            <IconButton
+              size="small"
+              onClick={() => setPendingRemoval(params.row)}
+              disabled={remove.pending || params.row.UserID === currentUser?.id}
+              aria-label={`Remove ${params.row.fullName}`}
+            >
+              <DeleteOutlineIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+      ),
+    },
     {
       field: 'Pronouns',
       headerName: 'Pronouns',
@@ -251,6 +285,20 @@ export function AdminPage() {
       ),
     },
     {
+      field: 'Is_Active',
+      headerName: 'Active',
+      width: 90,
+      sortable: false,
+      renderCell: (params) => (
+        <Switch
+          checked={params.value}
+          onChange={(event) => toggleActive.execute(params.row.UserID, event.target.checked)}
+          disabled={toggleActive.pending || params.row.UserID === currentUser?.id}
+          slotProps={{ input: { 'aria-label': `Active status for ${params.row.fullName}` } }}
+        />
+      ),
+    },
+    {
       field: 'expiry',
       headerName: 'Account status',
       width: 160,
@@ -275,50 +323,6 @@ export function AdminPage() {
         ) : (
           dateTime(params.value)
         ),
-    },
-    {
-      field: 'Is_Active',
-      headerName: 'Active',
-      width: 90,
-      sortable: false,
-      renderCell: (params) => (
-        <Switch
-          checked={params.value}
-          onChange={(event) => toggleActive.execute(params.row.UserID, event.target.checked)}
-          disabled={toggleActive.pending || params.row.UserID === currentUser?.id}
-          inputProps={{ 'aria-label': `Active status for ${params.row.fullName}` }}
-        />
-      ),
-    },
-    {
-      field: 'actions',
-      headerName: '',
-      width: 110,
-      sortable: false,
-      filterable: false,
-      renderCell: (params) => (
-        <Stack direction="row">
-          <Tooltip title="Set end date">
-            <IconButton
-              size="small"
-              onClick={() => setExpiryUser(params.row)}
-              aria-label={`Set end date for ${params.row.fullName}`}
-            >
-              <MoreTimeIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Remove user">
-            <IconButton
-              size="small"
-              onClick={() => setPendingRemoval(params.row)}
-              disabled={remove.pending || params.row.UserID === currentUser?.id}
-              aria-label={`Remove ${params.row.fullName}`}
-            >
-              <DeleteOutlineIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        </Stack>
-      ),
     },
   ];
 
@@ -368,7 +372,7 @@ export function AdminPage() {
         ].map((stat) => (
           <Grid size={{ xs: 6, md: 3 }} key={stat.label}>
             <Card sx={{ p: 2 }}>
-              <Typography variant="caption" color="text.secondary" display="block">
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                 {stat.label}
               </Typography>
               <Typography variant="h4" component="p">
@@ -379,17 +383,27 @@ export function AdminPage() {
         ))}
       </Grid>
 
-      <Card sx={{ height: 560 }}>
-        <DataGrid
+      {phone ? (
+        <ColumnCards
           rows={data?.users ?? []}
           columns={columns}
+          getRowId={(row) => row.UserID}
           loading={loading}
-          disableRowSelectionOnClick
-          pageSizeOptions={[10, 25, 50]}
-          initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
-          sx={{ border: 0 }}
+          emptyLabel="No users yet."
         />
-      </Card>
+      ) : (
+        <Card sx={{ height: 560 }}>
+          <DataGrid
+            rows={data?.users ?? []}
+            columns={columns}
+            loading={loading}
+            disableRowSelectionOnClick
+            pageSizeOptions={[10, 25, 50]}
+            initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
+            sx={{ border: 0 }}
+          />
+        </Card>
+      )}
 
       <ExpiryDialog
         key={expiryUser?.UserID ?? 'none'}

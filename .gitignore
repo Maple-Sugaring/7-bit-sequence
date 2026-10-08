@@ -15,3 +15,16 @@ client_secret*.json
 __pycache__/
 *.pyc
 .env
+
+# Terraform state, local plans, providers, and deployment/database archives.
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+!*.tfvars.example
+*.tfbackend
+!*.tfbackend.example
+terraform/.local/
+terraform/bootstrap/backend_override.tf
+*.dump

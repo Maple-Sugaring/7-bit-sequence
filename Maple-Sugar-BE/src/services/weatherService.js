@@ -11,12 +11,15 @@ import { ApiError } from '../lib/ApiError.js';
 import { CAMPUS_SITES } from '../business/sites.js';
 import { describeSapChange, sapRunFromTemps } from '../business/sapFlow.js';
 import { SUGARBUSH_TIME_ZONE, formatZoneDate } from '../business/availability.js';
+import { addDays, dayFromSummary, mergePastDays, pastDaysFromSnapshots, startOfWeek, weekDatesBefore } from '../business/pastWeather.js';
 import * as weatherRepository from '../repositories/weatherRepository.js';
 import * as alertsRepository from '../repositories/alertsRepository.js';
 import { cacheNamespaces } from '../cache/cacheKeys.js';
 import { invalidateNamespaces } from '../cache/redisCache.js';
 
 const OPEN_WEATHER = 'https://api.openweathermap.org/data/2.5';
+const ONE_CALL = 'https://api.openweathermap.org/data/3.0/onecall';
+const ONE_CALL_RETRY_MS = 60 * 60 * 1000;
 const CACHE_MS = 10 * 60 * 1000;
 
 let memory = null;
@@ -111,6 +114,37 @@ function harshWeather({ tempMinF, tempMaxF, precipIn, windMph, description }) {
   return found;
 }
 
+// A finished day never changes, so each site and date is fetched once per process.
+const summaryCache = new Map();
+let oneCallBlockedUntil = 0;
+
+/**
+ * Earlier days of the week from One Call day_summary. It needs a separate
+ * OpenWeather subscription, so any failure returns what it has and the caller
+ * falls back to stored snapshots. A refusal pauses further calls for an hour.
+ */
+async function fetchPastSummaries(site, dates, key) {
+  const found = [];
+  for (const date of dates) {
+    const cacheKey = `${site.latitude},${site.longitude},${date}`;
+    if (!summaryCache.has(cacheKey)) {
+      if (Date.now() < oneCallBlockedUntil) continue;
+      try {
+        const url = `${ONE_CALL}/day_summary?lat=${site.latitude}&lon=${site.longitude}&date=${date}&units=imperial&appid=${key}`;
+        const day = dayFromSummary(date, await fetchJson(url));
+        if (day) summaryCache.set(cacheKey, day);
+      } catch (error) {
+        oneCallBlockedUntil = Date.now() + ONE_CALL_RETRY_MS;
+        logger.warn({ err: error, date }, 'OpenWeather day_summary unavailable, using stored snapshots');
+        continue;
+      }
+    }
+    const day = summaryCache.get(cacheKey);
+    if (day) found.push(day);
+  }
+  return found;
+}
+
 async function fetchJson(url) {
   const response = await fetch(url);
   const payload = await response.json().catch(() => null);
@@ -175,6 +209,22 @@ export async function getLive() {
         today,
         modeled,
       };
+    }),
+  );
+
+  // The week chart starts on Sunday, but OpenWeather only looks ahead. Fill the
+  // days already behind us from what earlier reads stored.
+  const todayKey = formatZoneDate(new Date(), SUGARBUSH_TIME_ZONE);
+  const weekStartKey = startOfWeek(todayKey);
+  const stored = await weatherRepository.liveSince(`${addDays(weekStartKey, -1)}T00:00:00Z`);
+  const snapshotDays = pastDaysFromSnapshots(stored, { today: todayKey, weekStart: weekStartKey });
+  const pastDates = weekDatesBefore(todayKey, weekStartKey);
+  await Promise.all(
+    sites.map(async (entry) => {
+      const summaries = await fetchPastSummaries(entry.site, pastDates, key);
+      const past = mergePastDays(summaries, snapshotDays);
+      const have = new Set(entry.days.map((day) => day.Date));
+      entry.days = [...past.filter((day) => !have.has(day.Date)), ...entry.days];
     }),
   );
 

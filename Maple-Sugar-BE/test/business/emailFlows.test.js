@@ -5,7 +5,7 @@ import { createServer } from 'node:http';
 import { createServer as createTcpServer } from 'node:net';
 import { after, before, beforeEach, describe, mock, test } from 'node:test';
 
-import { signSessionToken } from '../../src/auth/jwt.js';
+import { signAccessToken } from '../../src/auth/jwt.js';
 import { config } from '../../src/config.js';
 import { closePool, pool } from '../../src/db/pool.js';
 import * as alertsRepository from '../../src/repositories/alertsRepository.js';
@@ -340,7 +340,7 @@ beforeEach(() => {
 });
 
 function tokenFor(user) {
-  return signSessionToken({ UserID: user.id, Email: user.email, RoleID: user.role_id });
+  return signAccessToken({ UserID: user.id, Email: user.email, RoleID: user.role_id });
 }
 
 async function call(user, method, path, body) {

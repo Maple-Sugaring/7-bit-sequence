@@ -81,9 +81,9 @@ export async function setResolved(id, isResolved) {
 }
 
 /** Closes every open alert of the given types on one node. */
-export async function resolveOpenByTypes(nodeId, types) {
+export async function resolveOpenByTypes(nodeId, types, client) {
   if (!types?.length) return 0;
-  const result = await query(
+  const result = await (client ?? { query }).query(
     `update alerts
         set is_resolved = true
       where node_id = $1

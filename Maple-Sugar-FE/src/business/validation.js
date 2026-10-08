@@ -7,6 +7,7 @@
  */
 
 import {
+  RAW_SAP_ICE_TYPICAL_MAX,
   RAW_SAP_MAX_PERCENT,
   RAW_SAP_MIN_PERCENT,
   RAW_SAP_TYPICAL_MAX,
@@ -17,6 +18,8 @@ import {
   BUCKET_CAPACITY_LB,
   ICE_CAPACITY_GALLONS,
   ICE_CAPACITY_LB,
+  gallonsFromWeight,
+  netWeight,
 } from './yieldMetrics';
 
 /** Plausible ambient range for a Rochester sap season, in Fahrenheit. */
@@ -57,8 +60,13 @@ export function validateReading(form) {
       errors.Sugar_Percent = 'Sugar content must be a number.';
     } else if (sugar < RAW_SAP_MIN_PERCENT || sugar > RAW_SAP_MAX_PERCENT) {
       errors.Sugar_Percent = `Raw sap readings fall between ${RAW_SAP_MIN_PERCENT}% and ${RAW_SAP_MAX_PERCENT}%.`;
-    } else if (sugar < RAW_SAP_TYPICAL_MIN || sugar > RAW_SAP_TYPICAL_MAX) {
-      warnings.Sugar_Percent = `Outside the typical ${RAW_SAP_TYPICAL_MIN}-${RAW_SAP_TYPICAL_MAX}% band. Double-check the refractometer.`;
+    } else {
+      // Ice is nearly pure water, so the liquid left around it reads much
+      // sweeter. That is expected, not a typo.
+      const typicalMax = form.Ice_Present ? RAW_SAP_ICE_TYPICAL_MAX : RAW_SAP_TYPICAL_MAX;
+      if (sugar < RAW_SAP_TYPICAL_MIN || sugar > typicalMax) {
+        warnings.Sugar_Percent = `Outside the typical ${RAW_SAP_TYPICAL_MIN}-${typicalMax}% band. Double-check the refractometer.`;
+      }
     }
   }
 
@@ -94,6 +102,32 @@ export function validateReading(form) {
     errors.Recorded_At = 'A date and time is required.';
   } else if (new Date(form.Recorded_At) > new Date(Date.now() + 60_000)) {
     errors.Recorded_At = 'Readings cannot be dated in the future.';
+  }
+
+  return { errors, warnings, isValid: Object.keys(errors).length === 0 };
+}
+
+/**
+ * Validates one collection from the round form. Weight is required, because it
+ * becomes the volume collected. Sugar is optional: it is only there when the
+ * student tested the sap. This is the same rule the API enforces; this copy
+ * saves the round trip.
+ */
+export function validateCollectionEntry(form, { tareWeight = null } = {}) {
+  // The form stamps the time when it saves, so a blank one means "now".
+  const { errors, warnings } = validateReading({
+    ...form,
+    Recorded_At: isBlank(form.Recorded_At) ? new Date().toISOString() : form.Recorded_At,
+  });
+
+  // validateReading wants a weight or a sugar value. Here sugar alone is not
+  // enough, and sugar left blank is not an error.
+  if (isBlank(form.Sugar_Percent)) delete errors.Sugar_Percent;
+
+  if (isBlank(form.Weight)) {
+    errors.Weight = 'Enter the sap weight.';
+  } else if (!errors.Weight && !(gallonsFromWeight(netWeight(Number(form.Weight), tareWeight ?? 0)) > 0)) {
+    errors.Weight = `That is not more than the empty bucket (${tareWeight ?? 0} lb). Check the scale.`;
   }
 
   return { errors, warnings, isValid: Object.keys(errors).length === 0 };

@@ -2,6 +2,7 @@ import dayjs from 'dayjs';
 import * as bucketsRepository from '../data/repositories/bucketsRepository';
 import * as nodesRepository from '../data/repositories/nodesRepository';
 import { NODE_STATUS } from '../data/fixtures/seed';
+import { STALE_AFTER_MINUTES } from '../business/nodeMapStatus';
 
 /**
  * Device health (EIR-005, EIR-008, FR-012, FR-047).
@@ -25,8 +26,7 @@ export const RSSI_POOR = -115;
 export const BATTERY_LOW_PERCENT = 20;
 export const BATTERY_CRITICAL_PERCENT = 10;
 
-/** A node that has not reported in this long is treated as stale. */
-export const STALE_AFTER_MINUTES = 45;
+export { STALE_AFTER_MINUTES };
 
 export function batterySeverity(percent) {
   if (percent == null) return 'info';
@@ -100,6 +100,14 @@ export function listGateways() {
 
 export function createGateway(body) {
   return nodesRepository.createGateway(body);
+}
+
+export function updateGateway(gatewayId, body) {
+  return nodesRepository.updateGateway(gatewayId, body);
+}
+
+export function deleteGateway(gatewayId) {
+  return nodesRepository.deleteGateway(gatewayId);
 }
 
 export function listNodes() {

@@ -26,6 +26,11 @@ export const RAW_SAP_MAX_PERCENT = 12;
 /** Typical band; outside it the reading is suspect but not rejected. */
 export const RAW_SAP_TYPICAL_MIN = 1.5;
 export const RAW_SAP_TYPICAL_MAX = 3.5;
+/**
+ * Frozen sap sheds its water as ice, so the liquid left in an iced bucket reads
+ * much sweeter. The sponsor sees 2% climb to 10% there, which is expected.
+ */
+export const RAW_SAP_ICE_TYPICAL_MAX = 10;
 
 // --- Yield (see src/business/yieldMetrics.js) ---
 
