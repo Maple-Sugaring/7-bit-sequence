@@ -1,4 +1,4 @@
-import { queryAll, queryOne } from '../db/pool.js';
+import { queryAll, queryOne, queryOneOn } from '../db/pool.js';
 import { mapMetric } from './mappers.js';
 
 const METRIC_COLUMNS = `
@@ -11,7 +11,8 @@ const METRIC_COLUMNS = `
   temperature,
   sugar_percent,
   weather_conditions,
-  ice_present
+  ice_present,
+  sap_flow_rate_lph
 `;
 
 /**
@@ -89,11 +90,14 @@ export async function findMetricByNodeAndTime(nodeId, recordedAt) {
   return row ? mapMetric(row) : null;
 }
 
-export async function createMetric(reading) {
-  const row = await queryOne(
+/** `client` is a transaction client when the reading is one write among several. */
+export async function createMetric(reading, client = null) {
+  const row = await queryOneOn(
+    client,
     `insert into metrics (node_id, bucket_id, recorded_by_user_id, recorded_at,
-                          weight, temperature, sugar_percent, weather_conditions, ice_present)
-     values ($1, $2, $3, coalesce($4, CURRENT_TIMESTAMP), $5, $6, $7, $8, $9)
+                          weight, temperature, sugar_percent, weather_conditions, ice_present,
+                          sap_flow_rate_lph)
+     values ($1, $2, $3, coalesce($4, CURRENT_TIMESTAMP), $5, $6, $7, $8, $9, $10)
      returning ${METRIC_COLUMNS}`,
     [
       reading.NodeID,
@@ -105,6 +109,7 @@ export async function createMetric(reading) {
       reading.Sugar_Percent ?? null,
       reading.Weather_Conditions ?? null,
       Boolean(reading.Ice_Present),
+      reading.Sap_Flow_Rate_Lph ?? null,
     ],
   );
   return mapMetric(row);

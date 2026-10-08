@@ -1,4 +1,4 @@
-import { query, queryAll, queryOne } from '../db/pool.js';
+import { query, queryAll, queryOne, transaction } from '../db/pool.js';
 import { mapGateway, mapNode } from './mappers.js';
 
 const NODE_COLUMNS = `
@@ -15,16 +15,87 @@ const NODE_COLUMNS = `
   stand,
   last_seen,
   report_interval_seconds,
-  tracked
+  tracked,
+  rf_tag,
+  notes
 `;
 
+const GATEWAY_COLUMNS = `
+  id,
+  gateway_code,
+  gateway_name,
+  status,
+  last_ping,
+  notes,
+  latitude,
+  longitude
+`;
+
+export async function createGateway({ Gateway_Code, Gateway_Name, Notes, Latitude, Longitude }) {
+  const row = await queryOne(
+    `insert into gateway (gateway_code, gateway_name, status, notes, latitude, longitude)
+     values ($1, $2, 'Offline', $3, $4, $5)
+     returning ${GATEWAY_COLUMNS}`,
+    [Gateway_Code, Gateway_Name, Notes || null, Latitude ?? null, Longitude ?? null],
+  );
+  return mapGateway(row);
+}
+
 export async function listGateways() {
-  const rows = await queryAll(`
-    select id, gateway_code, gateway_name, status, last_ping
-      from gateway
-     order by id
-  `);
+  const rows = await queryAll(`select ${GATEWAY_COLUMNS} from gateway order by id`);
   return rows.map(mapGateway);
+}
+
+export async function findGatewayById(id) {
+  const row = await queryOne(`select ${GATEWAY_COLUMNS} from gateway where id = $1`, [id]);
+  return row ? mapGateway(row) : null;
+}
+
+/** Status, last ping and IP belong to ingest, so they are not writable here. */
+const WRITABLE_GATEWAY_COLUMNS = {
+  Gateway_Code: 'gateway_code',
+  Gateway_Name: 'gateway_name',
+  Notes: 'notes',
+};
+
+export async function updateGateway(id, changes) {
+  const assignments = [];
+  const values = [id];
+
+  for (const [field, column] of Object.entries(WRITABLE_GATEWAY_COLUMNS)) {
+    if (field in changes) {
+      values.push(changes[field]);
+      assignments.push(`${column} = $${values.length}`);
+    }
+  }
+
+  // Location arrives nested from the client but is stored as two columns.
+  if ('Location' in changes) {
+    values.push(changes.Location?.lat ?? null);
+    assignments.push(`latitude = $${values.length}`);
+    values.push(changes.Location?.lon ?? null);
+    assignments.push(`longitude = $${values.length}`);
+  }
+
+  if (!assignments.length) return findGatewayById(id);
+
+  const row = await queryOne(
+    `update gateway set ${assignments.join(', ')} where id = $1 returning ${GATEWAY_COLUMNS}`,
+    values,
+  );
+  return row ? mapGateway(row) : null;
+}
+
+/** Removes a gateway. Its nodes stay deployed, just unassigned. */
+export async function deleteGateway(id) {
+  return transaction(async (client) => {
+    const existing = await client.query('select id from gateway where id = $1', [id]);
+    if (!existing.rows[0]) return false;
+
+    await client.query('update node set gateway_id = null where gateway_id = $1', [id]);
+    await client.query('delete from gateway where id = $1', [id]);
+    return true;
+  });
 }
 
 export async function listNodes() {
@@ -47,24 +118,43 @@ export async function listBoard() {
            n.battery_level,
            n.signal_rssi,
            n.last_seen,
+           n.node_code,
+           n.report_interval_seconds,
+           n.latitude,
+           n.longitude,
+           n.rf_tag,
+           n.notes,
            b.id as bucket_id,
            b.barcode_id,
            b.tare_weight,
            b.status as bucket_status,
            m.weight,
            m.temperature,
-           m.sugar_percent,
+           s.sugar_percent,
+           s.recorded_at as sugar_recorded_at,
            m.ice_present,
+           m.sap_flow_rate_lph,
            m.recorded_at
       from node n
       left join buckets b on b.node_id = n.id and b.node_id is not null
       left join lateral (
-        select weight, temperature, sugar_percent, ice_present, recorded_at
+        select weight, temperature, ice_present, sap_flow_rate_lph, recorded_at
           from metrics
          where node_id = n.id
          order by recorded_at desc
          limit 1
       ) m on true
+      -- Sensor rows carry no sugar, so the newest row almost never does. A
+      -- tree's sugar is the last one a student actually measured this season.
+      left join lateral (
+        select sugar_percent, recorded_at
+          from metrics
+         where node_id = n.id
+           and sugar_percent is not null
+           and sap_season(recorded_at) = sap_season(CURRENT_TIMESTAMP)
+         order by recorded_at desc
+         limit 1
+      ) s on true
      where n.tracked
      order by n.stand, n.id
   `);
@@ -77,13 +167,23 @@ export async function listBoard() {
     Battery_Percent: row.battery_level == null ? null : Number(row.battery_level),
     Signal_Rssi: row.signal_rssi,
     Last_Seen: row.last_seen instanceof Date ? row.last_seen.toISOString() : row.last_seen,
+    Node_Code: row.node_code,
+    Report_Interval_Seconds: row.report_interval_seconds == null ? null : Number(row.report_interval_seconds),
+    Location: row.latitude == null || row.longitude == null ? null : { lat: Number(row.latitude), lon: Number(row.longitude) },
+    Rf_Tag: row.rf_tag ?? null,
+    Notes: row.notes ?? null,
     BucketID: row.bucket_id,
     Barcode_ID: row.barcode_id,
     Tare_Weight: row.tare_weight == null ? null : Number(row.tare_weight),
     Bucket_Status: row.bucket_status,
     Weight: row.weight == null ? null : Number(row.weight),
     Temperature: row.temperature == null ? null : Number(row.temperature),
+    // Last measured this sap season, not the latest row's value. Null when no
+    // one has tested this tree yet.
     Sugar_Percent: row.sugar_percent == null ? null : Number(row.sugar_percent),
+    Sugar_Measured_At:
+      row.sugar_recorded_at instanceof Date ? row.sugar_recorded_at.toISOString() : (row.sugar_recorded_at ?? null),
+    Sap_Flow_Rate_Lph: row.sap_flow_rate_lph == null ? null : Number(row.sap_flow_rate_lph),
     Ice_Present: Boolean(row.ice_present),
     Recorded_At: row.recorded_at instanceof Date ? row.recorded_at.toISOString() : row.recorded_at,
   }));
@@ -179,6 +279,9 @@ const WRITABLE_NODE_COLUMNS = {
   Battery_Percent: 'battery_level',
   Signal_Rssi: 'signal_rssi',
   LoRa_Device_ID: 'lora_device_id',
+  Report_Interval_Seconds: 'report_interval_seconds',
+  Rf_Tag: 'rf_tag',
+  Notes: 'notes',
 };
 
 export async function updateNode(id, changes) {
@@ -207,6 +310,72 @@ export async function updateNode(id, changes) {
     values,
   );
   return row ? mapNode(row) : null;
+}
+
+/**
+ * Registers a tree that is about to be flashed. The node code is assigned here
+ * so the web flasher can write the same id into the Heltec.
+ */
+export async function createDeployedNode(input) {
+  return transaction(async (client) => {
+    const next = await client.query(
+      `select coalesce(max(substring(node_code from 6)::int), 0) + 1 as n
+         from node
+        where node_code ~ '^NODE-[0-9]+$'`,
+    );
+    const nodeCode = `NODE-${String(next.rows[0].n).padStart(3, '0')}`;
+    const gateway = input.GatewayID
+      ? await client.query('select id from gateway where id = $1', [input.GatewayID])
+      : await client.query('select id from gateway order by id limit 1');
+    const inserted = await client.query(
+      `insert into node (
+         gateway_id, node_code, lora_device_id, node_name, status_code,
+         latitude, longitude, stand, tracked, rf_tag, notes
+       )
+       values ($1, $2, $2, $3, 0, $4, $5, $6, true, $7, $8)
+       returning ${NODE_COLUMNS}`,
+      [
+        gateway.rows[0]?.id ?? null,
+        nodeCode,
+        input.Node_Name,
+        input.Latitude,
+        input.Longitude,
+        input.Stand,
+        input.Rf_Tag || null,
+        input.Notes || null,
+      ],
+    );
+    const node = inserted.rows[0];
+    await client.query(
+      `insert into buckets (node_id, barcode_id, status, tare_weight, capacity_liters, tree_species)
+       values ($1, $2, 'At Tree', $3, 37.85, $4)`,
+      [
+        node.id,
+        input.Barcode_ID || `BKT-${String(node.id).padStart(3, '0')}`,
+        input.Tare_Weight ?? 2.5,
+        input.Tree_Species || 'Sugar Maple',
+      ],
+    );
+    return mapNode(node);
+  });
+}
+
+/** Removes a deployed node and the rows that point at it. */
+export async function deleteNode(id) {
+  return transaction(async (client) => {
+    const existing = await client.query('select id from node where id = $1', [id]);
+    if (!existing.rows[0]) return false;
+
+    await client.query('update schedule_slots set node_id = null where node_id = $1', [id]);
+    await client.query('delete from sap_daily where node_id = $1', [id]);
+    await client.query('delete from collection_journal where node_id = $1', [id]);
+    await client.query('delete from collection_logs where node_id = $1', [id]);
+    await client.query('delete from alerts where node_id = $1', [id]);
+    await client.query('delete from metrics where node_id = $1', [id]);
+    await client.query('delete from buckets where node_id = $1', [id]);
+    await client.query('delete from node where id = $1', [id]);
+    return true;
+  });
 }
 
 /** Tare weight of the bucket currently on a node, needed for net-weight rules. */

@@ -31,10 +31,13 @@ import { metricsRouter } from './routes/metrics.js';
 import { ingestRouter } from './routes/ingest.js';
 import { alertsRouter } from './routes/alerts.js';
 import { collectionLogsRouter } from './routes/collectionLogs.js';
+import { collectionsRouter } from './routes/collections.js';
 import { usersRouter } from './routes/users.js';
 import { scheduleRouter } from './routes/schedule.js';
 import { weatherRouter } from './routes/weather.js';
 import { journalRouter } from './routes/journal.js';
+import { notificationsRouter } from './routes/notifications.js';
+import { profileRouter } from './routes/profile.js';
 import { settingsRouter } from './routes/settings.js';
 
 export function createApp() {
@@ -42,7 +45,7 @@ export function createApp() {
 
   // Behind nginx: needed for req.protocol and the client IP to be the real ones,
   // which `secure` cookies and rate limiting depend on.
-  app.set('trust proxy', 1);
+  app.set('trust proxy', config.trustProxyHops);
   app.disable('x-powered-by');
 
   app.use(
@@ -103,11 +106,14 @@ export function createApp() {
   app.use('/ingest', ingestRouter);
   app.use('/alerts', alertsRouter);
   app.use('/collection-logs', collectionLogsRouter);
+  app.use('/collections', collectionsRouter);
   app.use('/users', usersRouter);
   app.use('/schedule', scheduleRouter);
   app.use('/weather', weatherRouter);
   app.use('/journal', journalRouter);
   app.use('/settings', settingsRouter);
+  app.use('/notifications', notificationsRouter);
+  app.use('/profile', profileRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

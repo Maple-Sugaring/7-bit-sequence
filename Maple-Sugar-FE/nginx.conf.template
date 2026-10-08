@@ -2,6 +2,11 @@
 # only substitutes variables that actually exist in the environment. That is
 # why ${API_UPSTREAM} is filled in while nginx's own $uri and $host are not.
 
+map $http_x_forwarded_proto $maple_forwarded_proto {
+    default $scheme;
+    https https;
+}
+
 server {
     listen 80;
     # The image only auto-adds an IPv6 listener to its own stock config, not a
@@ -29,6 +34,13 @@ server {
         access_log off;
     }
 
+    # The browser flasher downloads these by name. A cached image would
+    # write last week's firmware onto the next board.
+    location /firmware/ {
+        add_header Cache-Control "no-cache, must-revalidate";
+        include /etc/nginx/security-headers.conf;
+    }
+
     # index.html must never be cached, or clients keep loading the old asset
     # manifest after a deploy.
     location = /index.html {
@@ -51,7 +63,7 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto $maple_forwarded_proto;
 
         proxy_read_timeout 60s;
     }

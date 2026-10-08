@@ -1,157 +1,351 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import FormGroup from '@mui/material/FormGroup';
+import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import dayjs from 'dayjs';
+import { LIVE_FROM, LIVE_TO, TIME_UNITS, dailyWeightRows, presetRange } from '../business/liveWeight';
+import { exportFileName, exportRows, buildPdf, toCsv } from '../business/weightExport';
 import { Capability } from '../business/permissions';
 import { ChartCard } from '../components/charts/ChartCard';
-import { OverlayChart } from '../components/charts/SeriesChart';
+import { WeightChart } from '../components/charts/SeriesChart';
 import { PageHeader } from '../components/common/PageHeader';
+import { EmptyBlock } from '../components/common/StateBlock';
 import { useAuth } from '../context/auth';
-import { useSapCompare } from '../services/hooks';
+import { useBush, useReadings } from '../services/hooks';
 
-const COLORS = ['#F76902', '#009CBD', '#84BD00'];
-
-function exportSeason(nodes, from, to) {
-  const lines = ['date,site,tree,flow_gal,afternoon_high_f,sugar_percent,weight_lb'];
-  for (const node of nodes) {
-    for (const point of node.Points) {
-      if (from && point.Date < from) continue;
-      if (to && point.Date > to) continue;
-      lines.push(
-        [
-          point.Date,
-          node.Stand,
-          `"${node.Node_Name}"`,
-          point.Flow_Gal ?? '',
-          point.Temp_Max_F ?? '',
-          point.Sugar_Percent ?? '',
-          point.Weight_Lb ?? '',
-        ].join(','),
-      );
-    }
-  }
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+function download(blob, name) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `sugar-woods-${from ?? 'start'}-to-${to ?? 'end'}.csv`;
+  link.download = name;
   link.click();
   URL.revokeObjectURL(url);
 }
 
-export function SapDataPage() {
-  const { can } = useAuth();
-  const [from, setFrom] = useState(dayjs('2024-02-01'));
-  const [to, setTo] = useState(dayjs('2024-04-15'));
-  const [picked, setPicked] = useState([]);
-  const year = from?.year() ?? 2024;
-  const compare = useSapCompare(year);
-  const nodes = compare.data?.Nodes ?? [];
-  const selected = nodes.filter((node) => (picked.length ? picked.includes(node.NodeID) : true));
+function exportCsv(readings, from, to) {
+  const csv = toCsv(exportRows(readings, from, to));
+  download(new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8' }), exportFileName(from, to, 'csv'));
+}
 
-  const rows = useMemo(() => {
+const PRESETS = [
+  ['today', 'Today'],
+  ['7d', '7 days'],
+  ['30d', '30 days'],
+  ['2026', 'Overall year'],
+];
+
+function nodeLabel(node) {
+  const code = node.Node_Code ? ` · ${node.Node_Code}` : '';
+  return `${node.Node_Name}${code}`;
+}
+
+export function SapDataPage() {
+  const navigate = useNavigate();
+  const phone = useMediaQuery('(max-width:600px)');
+  const { can, user } = useAuth();
+  const canDeploy = can(Capability.DEPLOY_NODES);
+  const bush = useBush();
+  const initial = presetRange('7d');
+  const [from, setFrom] = useState(dayjs(initial.from));
+  const [to, setTo] = useState(dayjs(initial.to));
+  const [preset, setPreset] = useState('7d');
+  const [unit, setUnit] = useState('day');
+  // null = untouched (every tree selected); an array is the user's explicit choice, possibly empty.
+  const [picked, setPicked] = useState(null);
+  const [pdfState, setPdfState] = useState({ busy: false, error: '' });
+  const readings = useReadings({ from: LIVE_FROM, to: LIVE_TO });
+
+  const nodes = useMemo(() => {
+    return [...(bush.data ?? [])].sort((a, b) => {
+      const stand = String(a.Stand ?? '').localeCompare(String(b.Stand ?? ''));
+      if (stand) return stand;
+      return String(a.Node_Name ?? '').localeCompare(String(b.Node_Name ?? ''));
+    });
+  }, [bush.data]);
+
+  const boardIds = useMemo(() => new Set(nodes.map((node) => node.NodeID)), [nodes]);
+  const selectedIds = useMemo(() => picked ?? nodes.map((node) => node.NodeID), [picked, nodes]);
+
+  const tracked = useMemo(
+    () => (readings.data ?? []).filter((row) => boardIds.has(row.NodeID)),
+    [readings.data, boardIds],
+  );
+
+  const weights = useMemo(() => {
     const start = from?.format('YYYY-MM-DD');
     const end = to?.format('YYYY-MM-DD');
-    const byDate = new Map();
-    for (const node of selected) {
-      for (const point of node.Points) {
-        if (start && point.Date < start) continue;
-        if (end && point.Date > end) continue;
-        const row = byDate.get(point.Date) ?? { Date: point.Date };
-        row[`${node.NodeID}-flow`] = point.Flow_Gal;
-        row[`${node.NodeID}-temp`] = point.Temp_Max_F;
-        byDate.set(point.Date, row);
-      }
-    }
-    return [...byDate.values()];
-  }, [selected, from, to]);
+    const ranged = tracked.filter((row) => {
+      if (!selectedIds.includes(row.NodeID)) return false;
+      const date = String(row.Recorded_At).slice(0, 10);
+      if (start && date < start) return false;
+      if (end && date > end) return false;
+      return true;
+    });
+    return {
+      ranged,
+      ...dailyWeightRows(ranged, {
+        nodeIds: selectedIds,
+        unit,
+      }),
+    };
+  }, [tracked, selectedIds, from, to, unit]);
 
-  const flowSeries = selected.map((node, index) => ({
-    key: `${node.NodeID}-flow`,
-    name: `${node.Stand} sap`,
-    color: COLORS[index % COLORS.length],
-  }));
-  const tempSeries = selected.map((node, index) => ({
-    key: `${node.NodeID}-temp`,
-    name: `${node.Stand} afternoon high`,
-    color: COLORS[index % COLORS.length],
-  }));
+  const stands = useMemo(() => {
+    const names = [...new Set(nodes.map((node) => node.Stand).filter(Boolean))];
+    return names;
+  }, [nodes]);
+
+  const chartDescription = nodes.length
+    ? `${stands.length === 1 ? stands[0] : 'Deployed trees'} · ${nodes.length} node${nodes.length === 1 ? '' : 's'}. All start selected.`
+    : 'Weight history for every tree registered on Deploy.';
+
+  const emptyTitle = nodes.length === 0
+    ? 'No trees deployed yet'
+    : selectedIds.length === 0
+      ? 'No trees selected'
+      : 'No weight in this range';
+  const emptyDescription = nodes.length === 0
+    ? 'Register a gateway and add nodes on Deploy, then flash the Heltecs. Readings show up here once packets arrive.'
+    : selectedIds.length === 0
+      ? 'Pick at least one tree to chart its weight.'
+      : 'Widen the dates, or wait for the next LoRa packet from a selected tree.';
+
+  const loading = bush.loading || readings.loading;
+
+  const exportActions = can(Capability.EXPORT_DATA) ? (
+    <Stack direction="row" spacing={1}>
+      <Button
+        size="small"
+        variant="outlined"
+        disabled={weights.ranged.length === 0}
+        onClick={() => exportCsv(weights.ranged, from?.format('YYYY-MM-DD'), to?.format('YYYY-MM-DD'))}
+      >
+        Export CSV
+      </Button>
+      <Button
+        size="small"
+        variant="outlined"
+        disabled={weights.ranged.length === 0 || pdfState.busy}
+        onClick={async () => {
+          const start = from?.format('YYYY-MM-DD');
+          const end = to?.format('YYYY-MM-DD');
+          setPdfState({ busy: true, error: '' });
+          try {
+            const doc = await buildPdf(exportRows(weights.ranged, start, end), {
+              from: start,
+              to: end,
+              user: user?.fullName ?? user?.email,
+            });
+            download(doc.output('blob'), exportFileName(start, end, 'pdf'));
+            setPdfState({ busy: false, error: '' });
+          } catch {
+            setPdfState({ busy: false, error: 'Could not create the PDF. Try again.' });
+          }
+        }}
+      >
+        {pdfState.busy ? 'Preparing PDF…' : 'Export PDF'}
+      </Button>
+    </Stack>
+  ) : null;
 
   return (
     <>
       <PageHeader
         title="Sugar Woods"
-        actions={
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-            <DatePicker
-              label="From"
-              value={from}
-              onChange={(value) => setFrom(value)}
-              slotProps={{ textField: { size: 'small' } }}
-            />
-            <DatePicker
-              label="To"
-              value={to}
-              minDate={from ?? undefined}
-              onChange={(value) => setTo(value)}
-              slotProps={{ textField: { size: 'small' } }}
-            />
-            {can(Capability.EXPORT_DATA) ? (
+        subtitle="Chart gallons in each bucket over time, then export a CSV or PDF when you need it."
+      />
+
+      <Box
+        sx={{
+          display: 'grid',
+          // One column on phones, where `order` puts each heading above its own control.
+          gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.7fr)' },
+          gridTemplateRows: { md: 'auto auto' },
+          columnGap: 2,
+          rowGap: 1.5,
+          maxWidth: 900,
+          mx: 'auto',
+          mb: 2,
+        }}
+      >
+        <Typography variant="subtitle2" component="h2" sx={{ order: { xs: 1, md: 0 } }}>
+          Time period
+        </Typography>
+        <Typography variant="subtitle2" component="h2" sx={{ order: { xs: 3, md: 0 } }}>
+          Time increment
+        </Typography>
+        <Typography variant="subtitle2" component="h2" sx={{ order: { xs: 5, md: 0 } }}>
+          Date selection
+        </Typography>
+        <TextField
+          select
+          size="small"
+          label="Select"
+          value={preset}
+          onChange={(event) => {
+            const range = presetRange(event.target.value);
+            setPreset(event.target.value);
+            setFrom(dayjs(range.from));
+            setTo(dayjs(range.to));
+          }}
+          slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
+          sx={{ order: { xs: 2, md: 0 } }}
+        >
+          {preset === '' ? (
+            <MenuItem value="" disabled>
+              Custom dates
+            </MenuItem>
+          ) : null}
+          {PRESETS.map(([id, label]) => (
+            <MenuItem key={id} value={id}>
+              {label}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          select
+          size="small"
+          label="Select"
+          value={unit}
+          onChange={(event) => setUnit(event.target.value)}
+          sx={{ order: { xs: 4, md: 0 } }}
+        >
+          {TIME_UNITS.map(([id, label]) => (
+            <MenuItem key={id} value={id}>
+              {label}
+            </MenuItem>
+          ))}
+        </TextField>
+        <Stack direction="row" spacing={1} sx={{ order: { xs: 6, md: 0 } }}>
+          <DatePicker
+            label="From"
+            value={from}
+            onChange={(value) => {
+              setPreset('');
+              setFrom(value);
+            }}
+            slotProps={{ textField: { size: 'small' } }}
+            sx={{ flex: 1, minWidth: 0 }}
+          />
+          <DatePicker
+            label="To"
+            value={to}
+            minDate={from ?? undefined}
+            onChange={(value) => {
+              setPreset('');
+              setTo(value);
+            }}
+            slotProps={{ textField: { size: 'small' } }}
+            sx={{ flex: 1, minWidth: 0 }}
+          />
+        </Stack>
+      </Box>
+
+      {pdfState.error ? (
+        <Typography color="error" role="alert" sx={{ mb: 1 }}>
+          {pdfState.error}
+        </Typography>
+      ) : null}
+
+      {nodes.length === 0 && !loading ? (
+        <EmptyBlock
+          title="Nothing to chart yet"
+          description="Sugar Woods follows the trees registered on Deploy. Add the Alumni House nodes there, flash them, and weight packets will fill this chart."
+          action={
+            canDeploy ? (
+              <Button variant="contained" onClick={() => navigate('/deploy')}>
+                Open Deploy
+              </Button>
+            ) : null
+          }
+        />
+      ) : (
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+          <Box
+            sx={{
+              minWidth: { md: 240 },
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 2,
+              bgcolor: 'background.paper',
+              p: 2,
+            }}
+          >
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              Trees
+            </Typography>
+            {nodes.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                No deployed nodes yet.
+              </Typography>
+            ) : (
+              <FormGroup>
+                {nodes.map((node) => (
+                  <FormControlLabel
+                    key={node.NodeID}
+                    control={
+                      <Checkbox
+                        size="small"
+                        checked={selectedIds.includes(node.NodeID)}
+                        onChange={() =>
+                          setPicked((current) => {
+                            const base = current ?? nodes.map((item) => item.NodeID);
+                            return base.includes(node.NodeID)
+                              ? base.filter((id) => id !== node.NodeID)
+                              : [...base, node.NodeID];
+                          })
+                        }
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography variant="body2">{nodeLabel(node)}</Typography>
+                        {node.Stand ? (
+                          <Typography variant="caption" color="text.secondary">
+                            {node.Stand}
+                          </Typography>
+                        ) : null}
+                      </Box>
+                    }
+                  />
+                ))}
+              </FormGroup>
+            )}
+            {nodes.length > 0 ? (
               <Button
-                variant="outlined"
-                onClick={() => exportSeason(selected, from?.format('YYYY-MM-DD'), to?.format('YYYY-MM-DD'))}
+                size="small"
+                sx={{ mt: 1 }}
+                onClick={() => setPicked(selectedIds.length === nodes.length ? [] : null)}
               >
-                Export CSV
+                {selectedIds.length === nodes.length ? 'Clear all' : 'Select all'}
               </Button>
             ) : null}
-          </Stack>
-        }
-      />
-      <Typography color="text.secondary" sx={{ mt: -1, mb: 2, textAlign: 'center' }}>
-        Solid lines are sap flow. Dashed lines are the afternoon high, over the same days.
-      </Typography>
-
-      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-        <FormGroup sx={{ minWidth: 200 }}>
-          {nodes.map((node) => (
-            <FormControlLabel
-              key={node.NodeID}
-              control={
-                <Checkbox
-                  size="small"
-                  checked={picked.length === 0 || picked.includes(node.NodeID)}
-                  onChange={() =>
-                    setPicked((current) => {
-                      const base = current.length ? current : nodes.map((item) => item.NodeID);
-                      return base.includes(node.NodeID)
-                        ? base.filter((id) => id !== node.NodeID)
-                        : [...base, node.NodeID];
-                    })
-                  }
-                />
-              }
-              label={node.Stand}
-            />
-          ))}
-        </FormGroup>
-        <Box sx={{ flex: 1 }}>
-          <ChartCard
-            title="Flow over the afternoon high"
-            description="Pick any stretch of the sap year. All three taps start selected."
-            height={420}
-            loading={compare.loading}
-            isEmpty={rows.length === 0}
-          >
-            <OverlayChart rows={rows} flowSeries={flowSeries} tempSeries={tempSeries} />
-          </ChartCard>
-        </Box>
-      </Stack>
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <ChartCard
+              title="2026 weight"
+              description={chartDescription}
+              action={exportActions}
+              height={phone ? 300 : 420}
+              loading={loading}
+              isEmpty={weights.rows.length === 0}
+              emptyTitle={emptyTitle}
+              emptyDescription={emptyDescription}
+            >
+              <WeightChart rows={weights.rows} series={weights.series} unit={unit} />
+            </ChartCard>
+          </Box>
+        </Stack>
+      )}
     </>
   );
 }

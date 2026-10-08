@@ -1,8 +1,30 @@
 node_modules
+# iCloud skips *.nosync; node_modules is a symlink into it on synced Desktops.
+node_modules.nosync
 .vscode
 *.swp
 *.swo
 .DS_Store
-
+.claude
 # Google OAuth client secret downloads (e.g. client_secret_*.apps.googleusercontent.com.json)
 client_secret*.json
+
+# Hardware builds and the Pi gateway
+.pio
+.venv
+__pycache__/
+*.pyc
+.env
+
+# Terraform state, local plans, providers, and deployment/database archives.
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+!*.tfvars.example
+*.tfbackend
+!*.tfbackend.example
+terraform/.local/
+terraform/bootstrap/backend_override.tf
+*.dump

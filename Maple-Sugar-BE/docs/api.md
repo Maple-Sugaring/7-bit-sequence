@@ -62,6 +62,9 @@ Redirect URIs must match `PUBLIC_API_URL`:
 | GET | `/health` | Public | `{ status, database, cache, uptimeSeconds }`. |
 | GET | `/roles` | Session | |
 | GET | `/gateways` | Dashboard or nodes | |
+| POST | `/gateways` | Deploy nodes | `{ Gateway_Code, Gateway_Name, Notes?, Latitude?, Longitude? }`. |
+| PATCH | `/gateways/:id` | Deploy nodes | Any of `Gateway_Code`, `Gateway_Name`, `Notes`, `Latitude`, `Longitude`. Send `null` coordinates (both) to clear the location. A duplicate code is a 422. Changing the code means changing `GATEWAY_CODE` on the Pi. |
+| DELETE | `/gateways/:id` | Deploy nodes | 204. Its nodes stay deployed with no gateway. |
 | GET | `/buckets` | Dashboard or data table | |
 | GET | `/guides` | Guides | |
 
@@ -70,7 +73,7 @@ Redirect URIs must match `PUBLIC_API_URL`:
 | Method | Path | Auth | |
 | --- | --- | --- | --- |
 | GET | `/nodes` | Dashboard or nodes | All nodes. |
-| GET | `/nodes/board` | Dashboard or nodes | The three tracked taps with latest reading and bucket. |
+| GET | `/nodes/board` | Dashboard or nodes | The tracked taps with latest reading and bucket. `Sugar_Percent` and `Sugar_Measured_At` are the last sugar a student tested on that tree this sap season (null if none), not the newest row's value. Sensor rows carry no sugar. |
 | GET | `/nodes/:id` | Dashboard or nodes | |
 | PATCH | `/nodes/:id` | Admin | Name, stand, status, battery, location. |
 | POST | `/nodes/:id/flag` | Flag node | `{ type, description }` creates an alert. |
@@ -137,10 +140,35 @@ Liquid buckets reject gross weight above about 10 gallons plus tare slack. Ice m
 
 | Method | Path | Auth | |
 | --- | --- | --- | --- |
+| POST | `/collections` | Record | One collection, saved as a unit. See below. |
 | GET | `/collection-logs` | Dashboard or data table | Query `season`, `from`, `to`. |
-| POST | `/collection-logs` | Record | Volume emptied. |
+| POST | `/collection-logs` | Record | Volume emptied. The collection form no longer uses this; `/collections` writes the log. |
 | GET | `/journal` | Record | Own entries. Admins see every entry. |
 | POST | `/journal` | Record | `{ Title, Process_Notes, NodeID, BucketID, Collected_At, Weight, Sugar_Percent, Ice_Present }`. |
+
+### `POST /collections`
+
+The collection form's save. Body:
+
+```json
+{
+  "NodeID": 1,
+  "Weight": 40,
+  "Sugar_Percent": null,
+  "Ice_Present": false,
+  "Collected_At": "2026-03-02T14:00:00.000Z",
+  "Notes": "Lid was frozen.",
+  "Round_Label": "Morning round",
+  "Client_Ref": "7d1f0c5e-3b4a-4c6e-9a8d-0f1e2d3c4b5a"
+}
+```
+
+- `Weight` is required, in gross pounds off the scale. Volume is the net weight (the tree's bucket tare comes off) divided by 8.34 lb per gallon.
+- `Sugar_Percent` is optional and null unless the student tested the sap. Nothing is estimated or carried over server-side.
+- The bucket comes from the tree, never from the body.
+- One transaction writes a `metrics` reading, a `collection_logs` row, and a `collection_journal` entry, then resolves the tree's open Full Bucket and Collection Needed alerts. If any write fails, none are kept.
+- `Client_Ref` (UUID) makes a retry safe. The same reference returns `200` with the entry already stored and `"Duplicate": true`, including when several uploads race. A new collection returns `201`.
+- Response: `{ Entry, Log, Duplicate }`. `Entry` is the journal shape, with `Round_Label`. `422` carries field-keyed `details` (`Weight`, `Sugar_Percent`, `Collected_At`).
 
 ## Schedule
 

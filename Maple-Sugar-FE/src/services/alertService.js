@@ -1,5 +1,6 @@
 import dayjs from 'dayjs';
 import * as alertsRepository from '../data/repositories/alertsRepository';
+import * as bucketsRepository from '../data/repositories/bucketsRepository';
 import * as nodesRepository from '../data/repositories/nodesRepository';
 
 /**
@@ -38,8 +39,9 @@ export function severityOf(alertType) {
   return SEVERITY_BY_TYPE[alertType] ?? 'info';
 }
 
-function enrich(alert, nodeById) {
+function enrich(alert, nodeById, bucketByNode) {
   const node = nodeById.get(alert.NodeID);
+  const bucket = bucketByNode.get(alert.NodeID);
   const ageMinutes = dayjs().diff(dayjs(alert.Created_At), 'minute');
 
   return {
@@ -47,6 +49,7 @@ function enrich(alert, nodeById) {
     id: alert.AlertID,
     nodeName: alert.NodeID == null ? 'Sugarbush' : (node?.Node_Name ?? `Node ${alert.NodeID}`),
     stand: node?.Stand ?? null,
+    barcode: bucket?.Barcode_ID ?? null,
     severity: severityOf(alert.Alert_Type),
     ageMinutes,
     // FR-043: unacknowledged past the window, so an admin needs to see it.
@@ -55,15 +58,19 @@ function enrich(alert, nodeById) {
 }
 
 export async function getAlerts() {
-  const [alerts, nodes] = await Promise.all([
+  const [alerts, nodes, buckets] = await Promise.all([
     alertsRepository.listAlerts(),
     nodesRepository.listNodes(),
+    bucketsRepository.listBuckets(),
   ]);
 
   const nodeById = new Map(nodes.map((node) => [node.NodeID, node]));
+  const bucketByNode = new Map(
+    (buckets ?? []).filter((bucket) => bucket.NodeID != null).map((bucket) => [bucket.NodeID, bucket]),
+  );
 
   return alerts
-    .map((alert) => enrich(alert, nodeById))
+    .map((alert) => enrich(alert, nodeById, bucketByNode))
     .sort((a, b) => {
       if (a.Is_Resolved !== b.Is_Resolved) return a.Is_Resolved ? 1 : -1;
       const bySeverity = SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity];

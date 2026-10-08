@@ -4,11 +4,12 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/auth';
 import { navItemsFor } from '../../routes/navigation';
 
-export function MainNav() {
+export function MainNav({ direction = 'row', onNavigate }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { role } = useAuth();
   const items = navItemsFor(role);
+  const stacked = direction === 'column';
 
   return (
     <Box
@@ -16,10 +17,12 @@ export function MainNav() {
       aria-label="Primary"
       sx={{
         display: 'flex',
-        flexWrap: 'wrap',
-        justifyContent: 'center',
+        flexDirection: direction,
+        flexWrap: stacked ? 'nowrap' : 'wrap',
+        justifyContent: stacked ? 'flex-start' : 'center',
         gap: 0.5,
         px: 1,
+        whiteSpace: 'nowrap',
       }}
     >
       {items.map((item) => {
@@ -28,7 +31,10 @@ export function MainNav() {
         return (
           <Button
             key={item.to}
-            onClick={() => navigate(item.to)}
+            onClick={() => {
+              navigate(item.to);
+              onNavigate?.();
+            }}
             startIcon={<Icon sx={{ fontSize: 18 }} />}
             aria-current={selected ? 'page' : undefined}
             sx={{
@@ -37,6 +43,8 @@ export function MainNav() {
               borderRadius: 999,
               minHeight: 36,
               px: 1.5,
+              justifyContent: stacked ? 'flex-start' : 'center',
+              width: stacked ? '100%' : undefined,
               fontWeight: 600,
               fontSize: 14,
               '&:hover': { bgcolor: selected ? '#C75300' : 'rgba(255,255,255,0.08)' },

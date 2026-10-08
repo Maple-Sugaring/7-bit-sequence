@@ -104,12 +104,11 @@ describe('request schemas', () => {
     assert.throws(() => idParam.parse('1;drop'));
   });
 
-  test('a shift has to end after it starts and name a student and a bucket', () => {
+  test('a shift has to end after it starts and name a bucket', () => {
     const result = createSlotBody.safeParse({
       Task: 'Collect',
       Starts_At: '2026-03-11T16:00:00.000Z',
       Ends_At: '2026-03-11T15:00:00.000Z',
-      UserID: 5,
       BucketIDs: [1],
     });
     assert.equal(result.success, false);
@@ -118,10 +117,18 @@ describe('request schemas', () => {
       Task: 'Collect',
       Starts_At: '2026-03-11T15:00:00.000Z',
       Ends_At: '2026-03-11T17:00:00.000Z',
-      UserID: 5,
       BucketIDs: [],
     });
     assert.equal(missing.success, false);
+
+    const openShift = createSlotBody.safeParse({
+      Task: 'Collect',
+      Starts_At: '2026-03-11T15:00:00.000Z',
+      Ends_At: '2026-03-11T17:00:00.000Z',
+      BucketIDs: [1],
+    });
+    assert.equal(openShift.success, true);
+    assert.equal(openShift.data.UserID ?? null, null);
   });
 
   test('invites need a real email and a known role', () => {

@@ -40,6 +40,8 @@ describe('role capabilities', () => {
     assert.equal(can(Role.MSS, Capability.VIEW_ALERTS), false);
     assert.equal(can(Role.MSS, Capability.VIEW_SCHEDULE), false);
     assert.equal(can(Role.MSS, Capability.MANAGE_USERS), false);
+    assert.equal(can(Role.MSS, Capability.DEPLOY_NODES), true);
+    assert.equal(can(Role.STUDENT, Capability.DEPLOY_NODES), false);
   });
 });
 

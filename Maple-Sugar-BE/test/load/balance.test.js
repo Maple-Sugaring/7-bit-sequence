@@ -200,7 +200,10 @@ describe('nginx and compose contract', () => {
     assert.match(nginx, /resolver \$\{NGINX_LOCAL_RESOLVERS\}/);
     assert.match(nginx, /X-Real-IP \$remote_addr/);
     assert.match(nginx, /X-Forwarded-For \$proxy_add_x_forwarded_for/);
-    assert.match(nginx, /X-Forwarded-Proto \$scheme/);
+    assert.match(nginx, /map \$http_x_forwarded_proto \$maple_forwarded_proto/);
+    assert.match(nginx, /default \$scheme;/);
+    assert.match(nginx, /https https;/);
+    assert.match(nginx, /X-Forwarded-Proto \$maple_forwarded_proto/);
     assert.match(nginx, /try_files \$uri \$uri\/ \/index\.html/);
   });
 

@@ -20,7 +20,9 @@ import Typography from '@mui/material/Typography';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import MoreTimeIcon from '@mui/icons-material/MoreTime';
 import PersonAddAltIcon from '@mui/icons-material/PersonAddAlt';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import { DataGrid } from '@mui/x-data-grid';
+import { ColumnCards } from '../components/common/ColumnCards';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import dayjs from 'dayjs';
 import { ROLE_LABELS } from '../business/permissions';
@@ -217,73 +219,10 @@ export function AdminPage() {
     await refresh();
   });
 
+  const phone = useMediaQuery('(max-width:600px)');
   const columns = [
     { field: 'fullName', headerName: 'Name', width: 180 },
-    { field: 'Email', headerName: 'Email', width: 220 },
-    {
-      field: 'RoleID',
-      headerName: 'Role',
-      width: 170,
-      sortable: false,
-      renderCell: (params) => (
-        <Select
-          value={params.value}
-          size="small"
-          variant="standard"
-          onChange={(event) => updateRole.execute(params.row.UserID, event.target.value)}
-          // An admin demoting themselves would lock everyone out of this page.
-          disabled={updateRole.pending || params.row.UserID === currentUser?.id}
-          inputProps={{ 'aria-label': `Role for ${params.row.fullName}` }}
-          sx={{ minWidth: 130 }}
-        >
-          {(data?.roles ?? []).map((role) => (
-            <MenuItem key={role.RoleID} value={role.RoleID}>
-              {ROLE_LABELS[role.Role_Name] ?? role.Role_Name}
-            </MenuItem>
-          ))}
-        </Select>
-      ),
-    },
-    {
-      field: 'expiry',
-      headerName: 'Account status',
-      width: 160,
-      sortable: false,
-      renderCell: (params) => (
-        <Chip label={params.value.label} color={params.value.level} size="small" variant="outlined" />
-      ),
-    },
-    {
-      field: 'Account_Expiry',
-      headerName: 'Ends',
-      width: 190,
-      renderCell: (params) => (params.value ? dateTime(params.value) : 'No end date'),
-    },
-    {
-      field: 'Last_Login',
-      headerName: 'Last login',
-      width: 190,
-      renderCell: (params) =>
-        params.row.invitePending ? (
-          <Chip label="Invite pending" size="small" color="info" variant="outlined" />
-        ) : (
-          dateTime(params.value)
-        ),
-    },
-    {
-      field: 'Is_Active',
-      headerName: 'Active',
-      width: 90,
-      sortable: false,
-      renderCell: (params) => (
-        <Switch
-          checked={params.value}
-          onChange={(event) => toggleActive.execute(params.row.UserID, event.target.checked)}
-          disabled={toggleActive.pending || params.row.UserID === currentUser?.id}
-          inputProps={{ 'aria-label': `Active status for ${params.row.fullName}` }}
-        />
-      ),
-    },
+    // Second, not last: the columns are wider than the page, so a trailing column is scrolled off.
     {
       field: 'actions',
       headerName: '',
@@ -314,12 +253,83 @@ export function AdminPage() {
         </Stack>
       ),
     },
+    {
+      field: 'Pronouns',
+      headerName: 'Pronouns',
+      width: 110,
+      valueFormatter: (value) => value || '—',
+    },
+    { field: 'Email', headerName: 'Email', width: 220 },
+    {
+      field: 'RoleID',
+      headerName: 'Role',
+      width: 170,
+      sortable: false,
+      renderCell: (params) => (
+        <Select
+          value={params.value}
+          size="small"
+          variant="standard"
+          onChange={(event) => updateRole.execute(params.row.UserID, event.target.value)}
+          // An admin demoting themselves would lock everyone out of this page.
+          disabled={updateRole.pending || params.row.UserID === currentUser?.id}
+          inputProps={{ 'aria-label': `Role for ${params.row.fullName}` }}
+          sx={{ minWidth: 130 }}
+        >
+          {(data?.roles ?? []).map((role) => (
+            <MenuItem key={role.RoleID} value={role.RoleID}>
+              {ROLE_LABELS[role.Role_Name] ?? role.Role_Name}
+            </MenuItem>
+          ))}
+        </Select>
+      ),
+    },
+    {
+      field: 'Is_Active',
+      headerName: 'Active',
+      width: 90,
+      sortable: false,
+      renderCell: (params) => (
+        <Switch
+          checked={params.value}
+          onChange={(event) => toggleActive.execute(params.row.UserID, event.target.checked)}
+          disabled={toggleActive.pending || params.row.UserID === currentUser?.id}
+          slotProps={{ input: { 'aria-label': `Active status for ${params.row.fullName}` } }}
+        />
+      ),
+    },
+    {
+      field: 'expiry',
+      headerName: 'Account status',
+      width: 160,
+      sortable: false,
+      renderCell: (params) => (
+        <Chip label={params.value.label} color={params.value.level} size="small" variant="outlined" />
+      ),
+    },
+    {
+      field: 'Account_Expiry',
+      headerName: 'Ends',
+      width: 190,
+      renderCell: (params) => (params.value ? dateTime(params.value) : 'No end date'),
+    },
+    {
+      field: 'Last_Login',
+      headerName: 'Last login',
+      width: 190,
+      renderCell: (params) =>
+        params.row.invitePending ? (
+          <Chip label="Invite pending" size="small" color="info" variant="outlined" />
+        ) : (
+          dateTime(params.value)
+        ),
+    },
   ];
 
   if (error) {
     return (
       <>
-        <PageHeader title="Admin" />
+        <PageHeader title="Admin" subtitle="Invite accounts, change roles, and lock or extend access." />
         <ErrorBlock error={error} onRetry={refresh} />
       </>
     );
@@ -331,6 +341,7 @@ export function AdminPage() {
     <>
       <PageHeader
         title="Admin"
+        subtitle="Invite accounts, change roles, and lock or extend access."
         actions={
           <Button variant="contained" startIcon={<PersonAddAltIcon />} onClick={() => setInviteOpen(true)}>
             Invite user
@@ -361,7 +372,7 @@ export function AdminPage() {
         ].map((stat) => (
           <Grid size={{ xs: 6, md: 3 }} key={stat.label}>
             <Card sx={{ p: 2 }}>
-              <Typography variant="caption" color="text.secondary" display="block">
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                 {stat.label}
               </Typography>
               <Typography variant="h4" component="p">
@@ -372,17 +383,27 @@ export function AdminPage() {
         ))}
       </Grid>
 
-      <Card sx={{ height: 560 }}>
-        <DataGrid
+      {phone ? (
+        <ColumnCards
           rows={data?.users ?? []}
           columns={columns}
+          getRowId={(row) => row.UserID}
           loading={loading}
-          disableRowSelectionOnClick
-          pageSizeOptions={[10, 25, 50]}
-          initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
-          sx={{ border: 0 }}
+          emptyLabel="No users yet."
         />
-      </Card>
+      ) : (
+        <Card sx={{ height: 560 }}>
+          <DataGrid
+            rows={data?.users ?? []}
+            columns={columns}
+            loading={loading}
+            disableRowSelectionOnClick
+            pageSizeOptions={[10, 25, 50]}
+            initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
+            sx={{ border: 0 }}
+          />
+        </Card>
+      )}
 
       <ExpiryDialog
         key={expiryUser?.UserID ?? 'none'}

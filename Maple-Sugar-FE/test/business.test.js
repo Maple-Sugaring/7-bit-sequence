@@ -4,9 +4,10 @@ import { percentChange, seasonOf, semesterOf } from '../src/business/aggregation
 import { daysUntilExpiry, expiryStatus, isAccountUsable, Role } from '../src/business/permissions';
 import { shelfLifeHours, shelfLifeSeverity, formatShelfLife } from '../src/business/shelfLife';
 import { assessSpoilage, hoursAboveThreshold, riskFromTemperature, SpoilageRisk } from '../src/business/spoilage';
-import { classifyGrade, classifyReading, isFinished, sapToSyrupRatio } from '../src/business/sugarContent';
+import { classifyGrade, classifyReading, estimatedSyrupGallons, isFinished, sapToSyrupRatio } from '../src/business/sugarContent';
 import { validateInvite, validateLogin, validateReading, validateSlot } from '../src/business/validation';
 import {
+  BUCKET_CAPACITY_LB,
   fillPercent,
   flowRate,
   isFull,
@@ -78,6 +79,10 @@ describe('spoilage, sugar, and yield', () => {
   test('grades syrup and applies the rule of 86', () => {
     expect(sapToSyrupRatio(2)).toBe(43);
     expect(sapToSyrupRatio(0)).toBeNull();
+    // No sugar reading: the sponsor's observed 43 gallons of sap per gallon of syrup.
+    expect(estimatedSyrupGallons(10)).toBeCloseTo(10 / 43, 5);
+    expect(estimatedSyrupGallons(10, 2)).toBeCloseTo(10 / 43, 5);
+    expect(estimatedSyrupGallons(10, 2.5)).toBeCloseTo(10 / 34.4, 5);
     expect(isFinished(66.9)).toBe(true);
     expect(isFinished(2)).toBe(false);
     expect(classifyGrade(80)).toMatch(/Golden/);
@@ -91,8 +96,8 @@ describe('spoilage, sugar, and yield', () => {
     expect(netWeight(12, 2)).toBe(10);
     expect(netWeight(1, 2)).toBe(0);
     expect(isTipped(0.4, 2)).toBe(true);
-    expect(isFull(2 + 86, 2)).toBe(true);
-    expect(fillPercent(2 + 43, 2)).toBeCloseTo(50, 5);
+    expect(isFull(2 + BUCKET_CAPACITY_LB, 2)).toBe(true);
+    expect(fillPercent(2 + BUCKET_CAPACITY_LB / 2, 2)).toBeCloseTo(50, 5);
     expect(waterRemovalFraction(2)).toBeCloseTo(1 - 2 / 66.9, 5);
     expect(yieldEfficiency(2)).toBeCloseTo(100 / 43, 5);
     expect(totalCollected([{ Volume_Collected: 1.5 }, { Volume_Collected: null }, {}])).toBe(1.5);
@@ -160,11 +165,13 @@ describe('who can see what', () => {
     expect(labels).toContain('Sugar Woods');
     expect(labels).not.toContain('Admin');
     expect(labels).not.toContain('Schedule');
+    expect(labels).toContain('Deploy');
     expect(labels).not.toContain('Collection');
 
     const student = navItemsFor(Role.STUDENT).map((item) => item.to);
     expect(student).toContain('/schedule');
     expect(student).not.toContain('/admin');
+    expect(student).not.toContain('/deploy');
   });
 
   test('a raw exception is not shown to the user', () => {

@@ -32,14 +32,24 @@ body,
 }
 
 .main-content > h1,
+.page-container > h1,
 .page-header > h1{
   font-family: "Helvetica Neue", "Helvetica", "Roboto", "Arial", sans-serif;
   font-size: 40px;
   font-weight: 500;
   letter-spacing: -1.68px;
   text-align: center;
-  margin: 32px 0;
+  margin: 32px 0 8px;
   color: #08060d;
+}
+
+.page-header-subtitle{
+  margin: 0 auto 16px;
+  max-width: 42rem;
+  text-align: center;
+  color: #5c5666;
+  font-size: 1rem;
+  line-height: 1.45;
 }
 
 .page-header-actions{
@@ -52,4 +62,28 @@ body,
 .page-main{
   background-color: #ffffff;
   color:#000000;
+}
+
+@media (max-width: 600px){
+  .main-content{
+    padding: 0 12px 32px;
+  }
+
+  .main-content > h1,
+  .page-container > h1,
+  .page-header > h1{
+    font-size: 30px;
+    letter-spacing: -1px;
+    margin: 20px 0 8px;
+  }
+
+  .page-header-actions{
+    flex-wrap: wrap;
+  }
+}
+
+.page-container{
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
 }

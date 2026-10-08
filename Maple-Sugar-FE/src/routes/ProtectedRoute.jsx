@@ -25,7 +25,7 @@ function Forbidden() {
 
   return (
     <Stack spacing={2} sx={{ alignItems: 'center', textAlign: 'center', py: 8 }}>
-      <Typography variant="h3" component="h1">
+      <Typography variant="h2" component="h1">
         You do not have access to this page
       </Typography>
       <Typography variant="body1" color="text.secondary" sx={{ maxWidth: '52ch' }}>
@@ -45,6 +45,8 @@ function Forbidden() {
  */
 export function ProtectedRoute({ capability, children }) {
   const { isAuthenticated, restoring, can } = useAuth();
+  // One capability, or a list of which any one is enough.
+  const needed = capability ? [capability].flat() : [];
   const location = useLocation();
 
   if (restoring) return <FullPageSpinner />;
@@ -54,7 +56,7 @@ export function ProtectedRoute({ capability, children }) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
-  if (capability && !can(capability)) return <Forbidden />;
+  if (needed.length > 0 && !needed.some((candidate) => can(candidate))) return <Forbidden />;
 
   return children;
 }

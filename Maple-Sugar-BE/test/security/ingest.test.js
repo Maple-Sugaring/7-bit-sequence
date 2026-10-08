@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { mock, after, before, describe, test } from 'node:test';
 
 import '../env.js';
-import { signSessionToken } from '../../src/auth/jwt.js';
+import { signAccessToken } from '../../src/auth/jwt.js';
 import { config } from '../../src/config.js';
 import { pool, closePool } from '../../src/db/pool.js';
 
@@ -199,7 +199,7 @@ describe('POST /ingest', () => {
     assert.equal(wrong.status, 401);
     assert.equal(wrong.json.code, 'BAD_CREDENTIALS');
 
-    const userToken = signSessionToken({ UserID: 1, Email: 'ada@rit.edu', RoleID: 1 });
+    const userToken = signAccessToken({ UserID: 1, Email: 'ada@rit.edu', RoleID: 1 });
     const session = await send(sample, { token: userToken, header: 'bearer' });
     assert.equal(session.status, 401);
     assert.equal(state.created.length, 0);

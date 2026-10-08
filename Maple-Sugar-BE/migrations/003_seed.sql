@@ -7,7 +7,7 @@
 -- Reference rows are listed explicitly. The three seasons of sensor readings
 -- are generated, because reproducing ~5,800 rows from the frontend's seeded
 -- PRNG literally would be unreadable; the generator below reimplements the
--- same weather model instead.
+-- same weather model instead.  ``
 --
 -- Idempotent: every insert is guarded, so re-running is a no-op.
 
@@ -84,20 +84,7 @@ on conflict (email) do update
 
 select setval(pg_get_serial_sequence('users', 'id'), (select max(id) from users));
 
--- ---------------------------------------------------------------------------
--- Gateways: the Raspberry Pi units that bridge LoRa to the network.
--- ---------------------------------------------------------------------------
-
-insert into gateway (id, gateway_code, gateway_name, ip_address, status, last_ping)
-  overriding system value
-values
-  (1, 'GW-ALUMNI', 'Alumni House Pi',   '10.12.4.21', 'Online',  '2026-09-11T13:58:00Z'),
-  (2, 'GW-SHACK',  'Sugar Shack Pi',    '10.12.4.22', 'Online',  '2026-09-11T13:57:00Z'),
-  -- Down, which is what takes the two North Ridge nodes offline below.
-  (3, 'GW-RELAY',  'Hill Bottom Relay', '10.12.4.23', 'Offline', '2026-09-11T04:12:00Z')
-on conflict (id) do nothing;
-
-select setval(pg_get_serial_sequence('gateway', 'id'), (select max(id) from gateway));
+-- Gateways are registered from Deploy. None are seeded.
 
 -- ---------------------------------------------------------------------------
 -- Nodes: four stands, four tapped trees each. Ids run stand-major, so
@@ -109,23 +96,23 @@ insert into node (id, gateway_id, node_code, lora_device_id, node_name, status_c
                   installed_at, last_seen)
   overriding system value
 values
-  (1,  1, 'NODE-001', 'E8:9F:6D:11:A2:41', 'Hill Bottom - Tree 1',  1, 92.4, -71,  43.083012, -77.678734, 'Hill Bottom', 'active',   '2026-02-20T15:00:00Z', '2026-09-11T13:52:00Z'),
-  (2,  1, 'NODE-002', 'E8:9F:6D:12:A2:42', 'Hill Bottom - Tree 2',  2, 61.8, -104, 43.083411, -77.679210, 'Hill Bottom', 'degraded', '2026-02-20T15:20:00Z', '2026-09-11T13:47:00Z'),
-  (3,  1, 'NODE-003', 'E8:9F:6D:13:A2:43', 'Hill Bottom - Tree 3',  1, 78.2, -83,  43.082780, -77.678102, 'Hill Bottom', 'active',   '2026-02-20T15:40:00Z', '2026-09-11T13:55:00Z'),
-  (4,  1, 'NODE-004', 'E8:9F:6D:14:A2:44', 'Hill Bottom - Tree 4',  1, 88.1, -76,  43.083644, -77.679455, 'Hill Bottom', 'active',   '2026-02-20T16:00:00Z', '2026-09-11T13:50:00Z'),
-  (5,  1, 'NODE-005', 'E8:9F:6D:15:A2:45', 'Rabbi House - Tree 1',  1, 70.5, -88,  43.084912, -77.680340, 'Rabbi House', 'active',   '2026-02-21T14:00:00Z', '2026-09-11T13:44:00Z'),
-  (6,  1, 'NODE-006', 'E8:9F:6D:16:A2:46', 'Rabbi House - Tree 2',  1, 95.7, -68,  43.084388, -77.679812, 'Rabbi House', 'active',   '2026-02-21T14:25:00Z', '2026-09-11T13:53:00Z'),
-  (7,  1, 'NODE-007', 'E8:9F:6D:17:A2:47', 'Rabbi House - Tree 3',  1, 54.3, -95,  43.085104, -77.680688, 'Rabbi House', 'active',   '2026-02-21T14:50:00Z', '2026-09-11T13:41:00Z'),
-  (8,  1, 'NODE-008', 'E8:9F:6D:18:A2:48', 'Rabbi House - Tree 4',  2, 43.9, -101, 43.084566, -77.679977, 'Rabbi House', 'degraded', '2026-02-21T15:15:00Z', '2026-09-11T13:38:00Z'),
-  (9,  2, 'NODE-009', 'E8:9F:6D:19:A2:49', 'Sugar Shack - Tree 1',  1, 83.6, -74,  43.081744, -77.676188, 'Sugar Shack', 'active',   '2026-02-22T13:30:00Z', '2026-09-11T13:56:00Z'),
-  (10, 2, 'NODE-010', 'E8:9F:6D:1A:A2:4A', 'Sugar Shack - Tree 2',  1, 66.2, -90,  43.082233, -77.676902, 'Sugar Shack', 'active',   '2026-02-22T13:55:00Z', '2026-09-11T13:49:00Z'),
-  (11, 2, 'NODE-011', 'E8:9F:6D:1B:A2:4B', 'Sugar Shack - Tree 3',  1, 91.0, -70,  43.081588, -77.675944, 'Sugar Shack', 'active',   '2026-02-22T14:20:00Z', '2026-09-11T13:54:00Z'),
-  (12, 2, 'NODE-012', 'E8:9F:6D:1C:A2:4C', 'Sugar Shack - Tree 4',  1, 48.7, -98,  43.082077, -77.676733, 'Sugar Shack', 'active',   '2026-02-22T14:45:00Z', '2026-09-11T13:40:00Z'),
-  (13, 3, 'NODE-013', 'E8:9F:6D:1D:A2:4D', 'North Ridge - Tree 1',  1, 57.4, -93,  43.086288, -77.681455, 'North Ridge', 'active',   '2026-02-23T12:00:00Z', '2026-09-11T13:36:00Z'),
-  (14, 3, 'NODE-014', 'E8:9F:6D:1E:A2:4E', 'North Ridge - Tree 2',  1, 39.1, -100, 43.086744, -77.682210, 'North Ridge', 'active',   '2026-02-23T12:25:00Z', '2026-09-11T04:20:00Z'),
-  -- Behind the downed relay: offline, and the low-battery alert target.
-  (15, 3, 'NODE-015', 'E8:9F:6D:1F:A2:4F', 'North Ridge - Tree 3',  0, 6.2,  -118, 43.086102, -77.681788, 'North Ridge', 'offline',  '2026-02-23T12:50:00Z', '2026-09-11T02:14:00Z'),
-  (16, 3, 'NODE-016', 'E8:9F:6D:20:A2:50', 'North Ridge - Tree 4',  0, 11.8, -121, 43.086577, -77.682644, 'North Ridge', 'offline',  '2026-02-23T13:15:00Z', '2026-09-10T22:41:00Z')
+  (1,  null, 'NODE-001', 'E8:9F:6D:11:A2:41', 'Hill Bottom - Tree 1',  1, 92.4, -71,  43.083012, -77.678734, 'Hill Bottom', 'active',   '2026-02-20T15:00:00Z', '2026-09-11T13:52:00Z'),
+  (2,  null, 'NODE-002', 'E8:9F:6D:12:A2:42', 'Hill Bottom - Tree 2',  2, 61.8, -104, 43.083411, -77.679210, 'Hill Bottom', 'degraded', '2026-02-20T15:20:00Z', '2026-09-11T13:47:00Z'),
+  (3,  null, 'NODE-003', 'E8:9F:6D:13:A2:43', 'Hill Bottom - Tree 3',  1, 78.2, -83,  43.082780, -77.678102, 'Hill Bottom', 'active',   '2026-02-20T15:40:00Z', '2026-09-11T13:55:00Z'),
+  (4,  null, 'NODE-004', 'E8:9F:6D:14:A2:44', 'Hill Bottom - Tree 4',  1, 88.1, -76,  43.083644, -77.679455, 'Hill Bottom', 'active',   '2026-02-20T16:00:00Z', '2026-09-11T13:50:00Z'),
+  (5,  null, 'NODE-005', 'E8:9F:6D:15:A2:45', 'Rabbi House - Tree 1',  1, 70.5, -88,  43.084912, -77.680340, 'Rabbi House', 'active',   '2026-02-21T14:00:00Z', '2026-09-11T13:44:00Z'),
+  (6,  null, 'NODE-006', 'E8:9F:6D:16:A2:46', 'Rabbi House - Tree 2',  1, 95.7, -68,  43.084388, -77.679812, 'Rabbi House', 'active',   '2026-02-21T14:25:00Z', '2026-09-11T13:53:00Z'),
+  (7,  null, 'NODE-007', 'E8:9F:6D:17:A2:47', 'Rabbi House - Tree 3',  1, 54.3, -95,  43.085104, -77.680688, 'Rabbi House', 'active',   '2026-02-21T14:50:00Z', '2026-09-11T13:41:00Z'),
+  (8,  null, 'NODE-008', 'E8:9F:6D:18:A2:48', 'Rabbi House - Tree 4',  2, 43.9, -101, 43.084566, -77.679977, 'Rabbi House', 'degraded', '2026-02-21T15:15:00Z', '2026-09-11T13:38:00Z'),
+  (9,  null, 'NODE-009', 'E8:9F:6D:19:A2:49', 'Sugar Shack - Tree 1',  1, 83.6, -74,  43.081744, -77.676188, 'Sugar Shack', 'active',   '2026-02-22T13:30:00Z', '2026-09-11T13:56:00Z'),
+  (10, null, 'NODE-010', 'E8:9F:6D:1A:A2:4A', 'Sugar Shack - Tree 2',  1, 66.2, -90,  43.082233, -77.676902, 'Sugar Shack', 'active',   '2026-02-22T13:55:00Z', '2026-09-11T13:49:00Z'),
+  (11, null, 'NODE-011', 'E8:9F:6D:1B:A2:4B', 'Sugar Shack - Tree 3',  1, 91.0, -70,  43.081588, -77.675944, 'Sugar Shack', 'active',   '2026-02-22T14:20:00Z', '2026-09-11T13:54:00Z'),
+  (12, null, 'NODE-012', 'E8:9F:6D:1C:A2:4C', 'Sugar Shack - Tree 4',  1, 48.7, -98,  43.082077, -77.676733, 'Sugar Shack', 'active',   '2026-02-22T14:45:00Z', '2026-09-11T13:40:00Z'),
+  (13, null, 'NODE-013', 'E8:9F:6D:1D:A2:4D', 'North Ridge - Tree 1',  1, 57.4, -93,  43.086288, -77.681455, 'North Ridge', 'active',   '2026-02-23T12:00:00Z', '2026-09-11T13:36:00Z'),
+  (14, null, 'NODE-014', 'E8:9F:6D:1E:A2:4E', 'North Ridge - Tree 2',  1, 39.1, -100, 43.086744, -77.682210, 'North Ridge', 'active',   '2026-02-23T12:25:00Z', '2026-09-11T04:20:00Z'),
+  -- Offline, and the low-battery alert target.
+  (15, null, 'NODE-015', 'E8:9F:6D:1F:A2:4F', 'North Ridge - Tree 3',  0, 6.2,  -118, 43.086102, -77.681788, 'North Ridge', 'offline',  '2026-02-23T12:50:00Z', '2026-09-11T02:14:00Z'),
+  (16, null, 'NODE-016', 'E8:9F:6D:20:A2:50', 'North Ridge - Tree 4',  0, 11.8, -121, 43.086577, -77.682644, 'North Ridge', 'offline',  '2026-02-23T13:15:00Z', '2026-09-10T22:41:00Z')
 on conflict (id) do nothing;
 
 select setval(pg_get_serial_sequence('node', 'id'), (select max(id) from node));

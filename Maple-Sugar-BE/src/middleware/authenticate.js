@@ -9,7 +9,7 @@
 import crypto from 'node:crypto';
 import { config } from '../config.js';
 import { unauthorized, forbidden, unavailable } from '../lib/ApiError.js';
-import { verifySessionToken } from '../auth/jwt.js';
+import { verifyAccessToken } from '../auth/jwt.js';
 import { loadSessionUser } from '../services/authService.js';
 import { can, roleFromId } from '../business/permissions.js';
 
@@ -26,7 +26,7 @@ function tokenFrom(req) {
 
 export async function attachUser(req, res, next) {
   try {
-    const payload = verifySessionToken(tokenFrom(req));
+    const payload = verifyAccessToken(tokenFrom(req));
     // Reloaded from the database rather than trusted from the token, so a
     // revoked or expired account cannot keep working until its token lapses.
     const user = payload ? await loadSessionUser(payload) : null;

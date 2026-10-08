@@ -39,6 +39,7 @@ export const Capability = {
   FLAG_NODE: 'flag_node',
   MANAGE_USERS: 'manage_users',
   VIEW_GUIDES: 'view_guides',
+  DEPLOY_NODES: 'deploy_nodes',
 };
 
 /**
@@ -65,6 +66,7 @@ const CAPABILITIES_BY_ROLE = {
     Capability.VIEW_DATA_TABLE,
     Capability.EXPORT_DATA,
     Capability.VIEW_GUIDES,
+    Capability.DEPLOY_NODES,
   ],
 };
 
@@ -78,6 +80,10 @@ export function capabilitiesFor(role) {
 
 export function can(role, capability) {
   return capabilitiesFor(role).includes(capability);
+}
+
+export function canAny(role, capabilities) {
+  return capabilities.some((capability) => can(role, capability));
 }
 
 export function canAll(role, capabilities) {

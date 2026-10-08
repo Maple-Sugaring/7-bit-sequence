@@ -19,6 +19,11 @@ COPY src ./src
 COPY migrations ./migrations
 COPY data ./data
 
+# COPY keeps host file modes, and a checkout with a restrictive umask (or files
+# synced through iCloud) ends up 600/700, which the non-root user can't read.
+# Grant world read (+ traverse on dirs) so the image works regardless of host.
+RUN chmod -R a+rX package.json src migrations data
+
 ENV NODE_ENV=production
 ENV PORT=3000
 

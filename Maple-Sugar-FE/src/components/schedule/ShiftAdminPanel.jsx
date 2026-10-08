@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -6,21 +7,16 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
+import Collapse from '@mui/material/Collapse';
 import Grid from '@mui/material/Grid';
-import IconButton from '@mui/material/IconButton';
 import MenuItem from '@mui/material/MenuItem';
+import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
-import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
-import { DataGrid } from '@mui/x-data-grid';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import dayjs from 'dayjs';
-import { PageHeader } from '../components/common/PageHeader';
-import { ErrorBlock } from '../components/common/StateBlock';
-import { dateTime } from '../components/common/format';
-import { assignShift, deleteShift, setShiftComplete, SHIFT_TASKS } from '../services/scheduleService';
-import { useAction, useBush, useSchedule, useUsers } from '../services/hooks';
+import { assignShift, SHIFT_TASKS } from '../../services/scheduleService';
+import { useAction, useBush, useUsers } from '../../services/hooks';
 
 function emptyForm() {
   const start = dayjs().add(1, 'day').hour(9).minute(0).second(0);
@@ -31,38 +27,61 @@ function emptyForm() {
     Starts_At: start,
     Ends_At: start.add(2, 'hour'),
     Notes: '',
+    Capacity: '1',
   };
 }
 
-export function ScheduleAdminPage() {
-  const { data, loading, error, refresh } = useSchedule();
+function formFromSearch(params, bucketOptions) {
+  const next = emptyForm();
+  const nodeId = Number(params.get('nodeId'));
+  const task = params.get('shiftTask');
+  const notes = params.get('notes');
+  const node = bucketOptions.find((item) => item.NodeID === nodeId);
+  return {
+    ...next,
+    Task: SHIFT_TASKS.includes(task) ? task : next.Task,
+    bucketIds: node?.BucketID ? [node.BucketID] : next.bucketIds,
+    Notes: notes || next.Notes,
+  };
+}
+
+/**
+ * Admin-only form on the Schedule page: post an open shift or assign one now.
+ * Opens by itself when the URL carries a tree/task (from an alert).
+ */
+export function ShiftAdminPanel({ onChanged }) {
+  const [params] = useSearchParams();
   const people = useUsers();
   const bush = useBush();
-  const bucketOptions = (bush.data ?? []).filter((node) => node.BucketID);
+  const bucketOptions = useMemo(
+    () => (bush.data ?? []).filter((node) => node.BucketID),
+    [bush.data],
+  );
+  const seedKey = `${params.get('nodeId') || ''}|${params.get('shiftTask') || ''}|${params.get('notes') || ''}`;
+  const [seededKey, setSeededKey] = useState('');
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState('');
+  const [open, setOpen] = useState(seedKey !== '||');
+
+  if (
+    seedKey !== '||' &&
+    seedKey !== seededKey &&
+    !(params.get('nodeId') && bush.loading)
+  ) {
+    setSeededKey(seedKey);
+    setForm(formFromSearch(params, bucketOptions));
+    setOpen(true);
+  }
 
   const create = useAction(async (assignment) => {
     await assignShift(assignment);
-    await refresh();
-  });
-  const remove = useAction(async (slotId) => {
-    await deleteShift(slotId);
-    await refresh();
-  });
-  const complete = useAction(async (slotId, isComplete) => {
-    await setShiftComplete(slotId, isComplete);
-    await refresh();
+    await onChanged();
   });
 
   const students = (people.data?.users ?? []).filter((user) => user.usable);
 
   const submit = async (event) => {
     event.preventDefault();
-    if (!form.UserID) {
-      setFormError('Choose a student.');
-      return;
-    }
     if (form.bucketIds.length === 0) {
       setFormError('Choose at least one bucket.');
       return;
@@ -74,11 +93,12 @@ export function ScheduleAdminPage() {
     setFormError('');
     const result = await create.execute({
       Task: form.Task,
-      UserID: form.UserID,
+      ...(form.UserID ? { UserID: form.UserID } : {}),
       BucketIDs: form.bucketIds,
       Starts_At: form.Starts_At.toISOString(),
       Ends_At: form.Ends_At.toISOString(),
       Notes: form.Notes,
+      Capacity: Number(form.Capacity) || 1,
     });
     if (result?.ok) {
       setForm(emptyForm());
@@ -86,88 +106,18 @@ export function ScheduleAdminPage() {
     }
   };
 
-  const columns = [
-    { field: 'Task', headerName: 'Task', width: 160 },
-    { field: 'Stand', headerName: 'Site', width: 180 },
-    {
-      field: 'Starts_At',
-      headerName: 'Starts',
-      width: 180,
-      renderCell: (params) => (params.row.awaiting ? 'Awaiting a time' : dateTime(params.value)),
-    },
-    {
-      field: 'Bucket_Labels',
-      headerName: 'Buckets',
-      width: 180,
-      sortable: false,
-      renderCell: (params) =>
-        (params.value ?? []).length
-          ? (params.value ?? []).join(', ')
-          : '—',
-    },
-    {
-      field: 'assigned',
-      headerName: 'Student',
-      width: 200,
-      sortable: false,
-      renderCell: (params) =>
-        params.value.length ? (
-          params.value.map((person) => person.name).join(', ')
-        ) : (
-          <Chip label="Unclaimed" size="small" color="warning" variant="outlined" />
-        ),
-    },
-    {
-      field: 'Is_Complete',
-      headerName: 'Complete',
-      width: 110,
-      sortable: false,
-      renderCell: (params) => (
-        <Checkbox
-          checked={params.value}
-          onChange={(event) => complete.execute(params.row.SlotID, event.target.checked)}
-          disabled={complete.pending}
-          inputProps={{ 'aria-label': `Mark ${params.row.Task} complete` }}
-        />
-      ),
-    },
-    {
-      field: 'actions',
-      headerName: '',
-      width: 70,
-      sortable: false,
-      renderCell: (params) => (
-        <Tooltip title="Delete shift">
-          <IconButton
-            size="small"
-            onClick={() => remove.execute(params.row.SlotID)}
-            disabled={remove.pending}
-            aria-label={`Delete ${params.row.Task}`}
-          >
-            <DeleteOutlineIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
-      ),
-    },
-  ];
-
-  if (error) {
-    return (
-      <>
-        <PageHeader title="Schedule Admin" />
-        <ErrorBlock error={error} onRetry={refresh} />
-      </>
-    );
-  }
-
   return (
-    <>
-      <PageHeader title="Schedule Admin" />
-      <Typography sx={{ mt: -2, mb: 2 }}>
-        Assign a student to any buckets, on any day. A full-bucket alert is not required.
-      </Typography>
-
-      <Card component="form" noValidate onSubmit={submit} sx={{ mb: 3 }}>
+    <Box sx={{ mb: 3 }}>
+      <Stack direction="row" spacing={2} sx={{ alignItems: 'center', mb: open ? 1.5 : 0 }}>
+        <Typography variant="h6" component="h2" sx={{ flexGrow: 1 }}>
+          Manage shifts
+        </Typography>
+        <Button variant={open ? 'outlined' : 'contained'} onClick={() => setOpen((prev) => !prev)}>
+          {open ? 'Hide form' : 'New shift'}
+        </Button>
+      </Stack>
+      <Collapse in={open} unmountOnExit>
+      <Card component="form" noValidate onSubmit={submit}>
         <CardContent>
           <Grid container spacing={2}>
             <Grid size={{ xs: 12, md: 4 }}>
@@ -191,9 +141,12 @@ export function ScheduleAdminPage() {
                 label="Student"
                 value={form.UserID}
                 onChange={(event) => setForm((prev) => ({ ...prev, UserID: event.target.value }))}
+                helperText="Leave blank to post an open shift students can claim."
                 fullWidth
-                error={!form.UserID && Boolean(formError)}
               >
+                <MenuItem value="">
+                  <em>Unclaimed — open for signup</em>
+                </MenuItem>
                 {students.map((user) => (
                   <MenuItem key={user.UserID} value={user.UserID}>
                     {user.fullName}
@@ -247,7 +200,7 @@ export function ScheduleAdminPage() {
                 ))}
               </TextField>
             </Grid>
-            <Grid size={{ xs: 12, md: 4 }}>
+            <Grid size={{ xs: 12, md: 3 }}>
               <DateTimePicker
                 label="Starts"
                 value={form.Starts_At}
@@ -261,13 +214,24 @@ export function ScheduleAdminPage() {
                 slotProps={{ textField: { fullWidth: true } }}
               />
             </Grid>
-            <Grid size={{ xs: 12, md: 4 }}>
+            <Grid size={{ xs: 12, md: 3 }}>
               <DateTimePicker
                 label="Ends"
                 value={form.Ends_At}
                 onChange={(value) => setForm((prev) => ({ ...prev, Ends_At: value }))}
                 minDateTime={form.Starts_At}
                 slotProps={{ textField: { fullWidth: true } }}
+              />
+            </Grid>
+            <Grid size={{ xs: 12, md: 2 }}>
+              <TextField
+                label="Open spots"
+                type="number"
+                value={form.Capacity}
+                onChange={(event) => setForm((prev) => ({ ...prev, Capacity: event.target.value }))}
+                helperText="How many people can claim it."
+                fullWidth
+                slotProps={{ htmlInput: { min: 1, max: 20, step: 1 } }}
               />
             </Grid>
             <Grid size={{ xs: 12, md: 4 }}>
@@ -281,7 +245,7 @@ export function ScheduleAdminPage() {
             </Grid>
             <Grid size={12}>
               <Button type="submit" variant="contained" disabled={create.pending}>
-                Assign task
+                {form.UserID ? 'Assign shift' : 'Post open shift'}
               </Button>
             </Grid>
           </Grid>
@@ -297,25 +261,7 @@ export function ScheduleAdminPage() {
           ) : null}
         </CardContent>
       </Card>
-
-      {(remove.error || complete.error) ? (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {remove.error ?? complete.error}
-        </Alert>
-      ) : null}
-
-      <Card sx={{ height: 520 }}>
-        <DataGrid
-          rows={data?.slots ?? []}
-          columns={columns}
-          loading={loading}
-          disableRowSelectionOnClick
-          getRowHeight={() => 'auto'}
-          pageSizeOptions={[25, 50]}
-          initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
-          sx={{ border: 0, '& .MuiDataGrid-cell': { py: 1 } }}
-        />
-      </Card>
-    </>
+      </Collapse>
+    </Box>
   );
 }

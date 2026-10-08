@@ -26,6 +26,11 @@ export const RAW_SAP_MAX_PERCENT = 12;
 /** Typical band; outside it the reading is suspect but not rejected. */
 export const RAW_SAP_TYPICAL_MIN = 1.5;
 export const RAW_SAP_TYPICAL_MAX = 3.5;
+/**
+ * Frozen sap sheds its water as ice, so the liquid left in an iced bucket reads
+ * much sweeter. The sponsor sees 2% climb to 10% there, which is expected.
+ */
+export const RAW_SAP_ICE_TYPICAL_MAX = 10;
 
 // --- Yield (see src/business/yieldMetrics.js) ---
 
@@ -33,8 +38,11 @@ export const RAW_SAP_TYPICAL_MAX = 3.5;
 export const BUCKET_CAPACITY_GALLONS = 10;
 /** Frozen sap can stack above the rim, so an iced bucket may weigh more. */
 export const ICE_CAPACITY_GALLONS = 14;
-/** Sap weighs roughly this much per gallon at sap-season temperatures. */
-export const LB_PER_GALLON = 8.6;
+/**
+ * Raw sap is mostly water (about 2–3% sugar), so a gallon weighs about 8.34 lb.
+ * 10 gallons is 83.4 lb of sap. An empty bucket adds 2–3 lb. Ice can weigh more.
+ */
+export const LB_PER_GALLON = 8.34;
 /** Net sap weight at the 10 gallon liquid line. */
 export const BUCKET_CAPACITY_LB = BUCKET_CAPACITY_GALLONS * LB_PER_GALLON;
 /** Net sap weight allowed when the bucket is tagged as icy. */
@@ -49,3 +57,17 @@ export const MAX_TEMPERATURE_F = 90;
 
 /** Below this a node's battery warrants a swap. */
 export const LOW_BATTERY_PERCENT = 20;
+/** Weaker than this, the packet is arriving but the link is not trustworthy. */
+export const WEAK_RSSI_DBM = -110;
+/** A tracked node that has not reported for this long is treated as down. */
+export const STALE_AFTER_MINUTES = 45;
+/**
+ * Guang Ce YZC-1B full scale. A gross weight past this is the cell saturating
+ * or a unit error, not a heavier bucket.
+ */
+export const CELL_CAPACITY_LB = 110.23;
+/**
+ * Sap cannot appear this fast between two reports. A larger step is a bad
+ * sample, not a collection. A real empty-to-full bucket still takes hours.
+ */
+export const MAX_STEP_LB = 40;

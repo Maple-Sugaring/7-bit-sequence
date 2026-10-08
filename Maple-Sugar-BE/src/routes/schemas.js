@@ -21,7 +21,10 @@ const isoDateTime = z.string().refine((value) => !Number.isNaN(Date.parse(value)
   message: 'Must be a valid date and time.',
 });
 
-const nullableNumber = z.union([z.coerce.number(), z.null()]).optional();
+// null is tried first. z.coerce.number() runs Number(null), which is 0, so with
+// the order reversed an explicit null became 0: a blank sugar reading turned
+// into "0% sugar" and was rejected, and an unknown battery turned into 0%.
+const nullableNumber = z.union([z.null(), z.coerce.number()]).optional();
 
 export const metricsQuery = z.object({
   nodeId: z.coerce.number().int().positive().optional(),
@@ -52,6 +55,53 @@ export const updateMetricBody = z
     Ice_Present: z.boolean().optional(),
   })
   .refine((body) => Object.keys(body).length > 0, { message: 'Nothing to update.' });
+
+const registeredGatewayCode = z
+  .string()
+  .trim()
+  .min(1, 'Name the gateway.')
+  .max(50)
+  .regex(/^[A-Za-z0-9_-]+$/, 'Use letters, numbers, dashes, or underscores.');
+const gatewayName = z.string().trim().min(1, 'Give the gateway a label.').max(100);
+const latitude = z.coerce.number().min(-90).max(90);
+const longitude = z.coerce.number().min(-180).max(180);
+
+export const createGatewayBody = z.object({
+  Gateway_Code: registeredGatewayCode,
+  Gateway_Name: gatewayName,
+  Notes: z.string().trim().max(500).optional(),
+  Latitude: latitude.optional(),
+  Longitude: longitude.optional(),
+});
+
+// A gateway is placed by both coordinates or by neither. Notes and Location may
+// be cleared by sending an empty string / null.
+export const updateGatewayBody = z
+  .object({
+    Gateway_Code: registeredGatewayCode.optional(),
+    Gateway_Name: gatewayName.optional(),
+    Notes: z.string().trim().max(500).nullable().optional(),
+    Latitude: latitude.nullable().optional(),
+    Longitude: longitude.nullable().optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, { message: 'Nothing to update.' })
+  .refine((body) => (body.Latitude == null) === (body.Longitude == null), {
+    message: 'Give both latitude and longitude, or neither.',
+    path: ['Latitude'],
+  });
+
+export const createNodeBody = z.object({
+  Node_Name: z.string().trim().min(1, 'Name the tree.').max(100),
+  Stand: z.string().trim().min(1, 'Name the stand.').max(50),
+  Latitude: z.coerce.number().min(-90).max(90),
+  Longitude: z.coerce.number().min(-180).max(180),
+  Tare_Weight: z.coerce.number().min(0).max(30).optional(),
+  Barcode_ID: z.string().trim().max(50).optional(),
+  Tree_Species: z.string().trim().max(50).optional(),
+  Rf_Tag: z.string().trim().max(64).optional(),
+  Notes: z.string().trim().max(500).optional(),
+  GatewayID: z.coerce.number().int().positive().optional(),
+});
 
 export const updateNodeBody = z.object({
   Status_Code: z.coerce.number().int().min(0).max(3).optional(),
@@ -91,6 +141,22 @@ export const createCollectionLogBody = z.object({
   Quality_Notes: z.string().max(2000).optional().default(''),
 });
 
+/**
+ * One collection from the round form. Weight is gross pounds off the scale.
+ * Sugar_Percent is only sent when the student tested the sap; null means not
+ * tested. Client_Ref is made on the phone so a retried upload is recognized.
+ */
+export const createCollectionBody = z.object({
+  NodeID: z.coerce.number().int().positive({ message: 'Select the tree you collected from.' }),
+  Weight: nullableNumber,
+  Sugar_Percent: nullableNumber,
+  Ice_Present: z.boolean().optional().default(false),
+  Collected_At: isoDateTime.optional(),
+  Notes: z.string().trim().max(8000).optional().default(''),
+  Round_Label: z.string().trim().max(100).nullish(),
+  Client_Ref: z.uuid().nullish(),
+});
+
 export const inviteUserBody = z.object({
   email: z.string().trim().min(1, 'An email address is required.').email('Enter a valid email address.'),
   roleId: z.coerce.number().int().min(1).max(3).optional(),
@@ -126,20 +192,39 @@ export const scheduleQuery = z.object({
   to: isoDateTime.optional(),
 });
 
-/** An admin assigns a student to buckets at a chosen time. A full bucket is not required. */
+/** Admin opens a shift. Leave UserID empty so students can claim it. */
 export const createSlotBody = z
   .object({
     Task: z.string().trim().min(1, 'Name the task.').max(100),
     Starts_At: isoDateTime,
     Ends_At: isoDateTime,
-    UserID: z.coerce.number().int().positive({ message: 'Choose a student.' }),
+    UserID: z.coerce.number().int().positive({ message: 'Choose a student.' }).nullish(),
     BucketIDs: z.array(z.coerce.number().int().positive()).min(1, 'Choose at least one bucket.'),
     Notes: z.string().max(500).optional().default(''),
+    Capacity: z.coerce.number().int().min(1).max(20).optional().default(1),
   })
   .refine((body) => Date.parse(body.Ends_At) > Date.parse(body.Starts_At), {
     message: 'The shift must end after it starts.',
     path: ['Ends_At'],
   });
+
+export const nodeDetailsBody = z.object({
+  Node_Name: z.string().trim().min(1, 'Name the tree.').max(100),
+  Stand: z.string().trim().min(1, 'Name the stand.').max(50),
+  Latitude: z.coerce.number().min(-90).max(90),
+  Longitude: z.coerce.number().min(-180).max(180),
+  Rf_Tag: z.string().trim().max(64).optional(),
+  Notes: z.string().trim().max(500).optional(),
+  GatewayID: z.coerce.number().int().positive().optional(),
+});
+
+export const nodeIntervalBody = z.object({
+  Report_Interval_Minutes: z.coerce
+    .number()
+    .int()
+    .min(1, 'Use at least 1 minute.')
+    .max(1440, 'Use a day or less.'),
+});
 
 export const nodeActionBody = z.object({
   Action: z.enum(['collect', 'maintenance', 'online']),
@@ -199,8 +284,12 @@ const ingestReadingObject = z.object({
   Node_Code: z.string().trim().min(1).max(50).optional(),
   LoRa_Device_ID: z.string().trim().min(1).max(64).optional(),
   Recorded_At: isoDateTime,
-  Weight: z.coerce.number(),
+  Weight: z.number().finite().optional(),
+  Fault: z.enum(['load-cell', 'unstable', 'reversed', 'untared']).optional(),
   Sugar_Percent: nullableNumber,
+  // Sap probe only. Air temperature is OpenWeather and is not stored from the Pi.
+  Sap_Temperature: nullableNumber,
+  Sap_Flow_Rate_Lph: nullableNumber,
   Weather_Conditions: z.string().max(50).nullish(),
   Ice_Present: z.boolean().optional().default(false),
   Battery_Percent: z.union([z.coerce.number().min(0).max(100), z.null()]).optional(),
@@ -214,7 +303,10 @@ function withNodeIdentity(schema) {
   );
 }
 
-export const ingestReadingBody = withNodeIdentity(ingestReadingObject);
+export const ingestReadingBody = withNodeIdentity(ingestReadingObject).refine(
+  (reading) => reading.Weight != null || Boolean(reading.Fault),
+  { message: 'A reading needs a weight or a fault.', path: ['Weight'] },
+);
 
 /** A single reading, or a batch the gateway collected from several nodes. */
 export const ingestBody = z.union([
@@ -222,7 +314,10 @@ export const ingestBody = z.union([
     Gateway_Code: gatewayCode,
     Readings: z.array(ingestReadingBody).min(1).max(32),
   }),
-  withNodeIdentity(ingestReadingObject.extend({ Gateway_Code: gatewayCode })),
+  withNodeIdentity(ingestReadingObject.extend({ Gateway_Code: gatewayCode })).refine(
+    (reading) => reading.Weight != null || Boolean(reading.Fault),
+    { message: 'A reading needs a weight or a fault.', path: ['Weight'] },
+  ),
 ]);
 
 export const updateSettingsBody = z.object({
@@ -232,3 +327,22 @@ export const updateSettingsBody = z.object({
     .min(1, 'Use at least 1 minute.')
     .max(1440, 'Use a day or less.'),
 });
+
+/** Blank pronouns clear the field rather than storing an empty string. */
+export const updateProfileBody = z
+  .object({
+    First_Name: z.string().trim().min(1, 'Enter your first name.').max(100).optional(),
+    Last_Name: z.string().trim().max(100).optional(),
+    Pronouns: z
+      .string()
+      .trim()
+      .max(40, 'Keep pronouns under 40 characters.')
+      .nullish()
+      .transform((value) => (value ? value : value === undefined ? undefined : null)),
+    Email_Alerts: z.boolean().optional(),
+    Email_Shifts: z.boolean().optional(),
+  })
+  .strict()
+  .refine((body) => Object.values(body).some((value) => value !== undefined), {
+    message: 'Nothing to change.',
+  });

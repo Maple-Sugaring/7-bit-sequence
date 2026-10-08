@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
+import Divider from '@mui/material/Divider';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import GoogleIcon from '@mui/icons-material/Google';
@@ -9,19 +11,34 @@ import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import mapleLogo from '../assets/MapleLogo.png';
 import ritLogo from '../assets/RITLogo.png';
 import { useAuth } from '../context/auth';
-import { landingRouteFor } from '../routes/navigation';
+import { canVisit, landingRouteFor } from '../routes/navigation';
+import { demoAccounts } from '../services/authService';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? '/api').replace(/\/$/, '');
 const GOOGLE_START = `${API_BASE}/auth/google`;
+const DEMO_ACCOUNTS = demoAccounts();
 
 export function LoginPage() {
-  const { isAuthenticated, restoring, role } = useAuth();
+  const { isAuthenticated, restoring, role, signIn } = useAuth();
+  const [demoError, setDemoError] = useState(null);
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const banner = searchParams.get('error');
 
+  // The mock transport accepts any password for a seeded account.
+  const signInAsDemo = async (email) => {
+    setDemoError(null);
+    try {
+      await signIn({ email, password: 'mock' });
+    } catch (error) {
+      setDemoError(error.message);
+    }
+  };
+
   if (!restoring && isAuthenticated) {
-    return <Navigate to={location.state?.from ?? landingRouteFor(role)} replace />;
+    // A page remembered from the last session may belong to a different role.
+    const from = location.state?.from;
+    return <Navigate to={from && canVisit(role, from) ? from : landingRouteFor(role)} replace />;
   }
 
   return (
@@ -83,7 +100,7 @@ export function LoginPage() {
               The sugarbush
             </Typography>
             <Typography sx={{ mt: 1.5, color: '#4A4A4A' }}>
-              Alumni House, Chabad House, and the Red Barn.
+              Live taps at Alumni House, plus weather, alerts, and collection shifts.
             </Typography>
           </Box>
 
@@ -95,19 +112,38 @@ export function LoginPage() {
             ) : (
               <>
                 {banner ? <Alert severity="error">{banner}</Alert> : null}
-                <Typography sx={{ color: '#4A4A4A', textAlign: 'center' }}>
-                  Sign in with your RIT Google account to see the taps, the weather, and your shifts.
-                </Typography>
-                <Button
-                  variant="contained"
-                  size="large"
-                  href={GOOGLE_START}
-                  startIcon={<GoogleIcon />}
-                  fullWidth
-                  sx={{ py: 1.4, fontSize: 16 }}
-                >
-                  Sign in with Google
-                </Button>
+                {/* Mock mode has no API behind it, so Google sign-in would go nowhere. */}
+                {DEMO_ACCOUNTS.length ? null : (
+                  <>
+                    <Typography sx={{ color: '#4A4A4A', textAlign: 'center' }}>
+                      Use your RIT Google account to open the bush.
+                    </Typography>
+                    <Button
+                      variant="contained"
+                      size="large"
+                      href={GOOGLE_START}
+                      startIcon={<GoogleIcon />}
+                      fullWidth
+                      sx={{ py: 1.4, fontSize: 16 }}
+                    >
+                      Sign in with Google
+                    </Button>
+                  </>
+                )}
+                {DEMO_ACCOUNTS.length ? (
+                  <>
+                    <Typography sx={{ color: '#4A4A4A', textAlign: 'center' }}>
+                      Pick a role to explore the demo. Everything here is sample data.
+                    </Typography>
+                    <Divider>Mock data</Divider>
+                    {demoError ? <Alert severity="error">{demoError}</Alert> : null}
+                    {DEMO_ACCOUNTS.map((account) => (
+                      <Button key={account.email} variant="outlined" onClick={() => signInAsDemo(account.email)}>
+                        Continue as {account.label}
+                      </Button>
+                    ))}
+                  </>
+                ) : null}
               </>
             )}
           </Stack>

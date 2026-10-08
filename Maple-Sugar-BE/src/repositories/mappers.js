@@ -52,6 +52,10 @@ export function mapUser(row) {
     Google_Calendar_ID: row.google_calendar_id ?? null,
     Calendar_Connected: Boolean(row.calendar_connected),
     Invite_Pending: row.invite_pending ?? false,
+    // Null in the column means "my role's default": admins on, others off.
+    Email_Alerts: row.email_alerts ?? row.role_id === 1,
+    Email_Shifts: row.email_shifts ?? true,
+    Pronouns: row.pronouns ?? null,
   };
 }
 
@@ -64,11 +68,17 @@ export function mapUser(row) {
 const ONLINE_STATUSES = new Set(['online', 'active', 'up']);
 
 export function mapGateway(row) {
+  const lat = num(row.latitude);
+  const lon = num(row.longitude);
+
   return {
     GatewayID: row.id,
+    Gateway_Code: row.gateway_code ?? null,
     Gateway_Name: row.gateway_name ?? row.gateway_code,
     Last_Seen: iso(row.last_ping),
     Status: ONLINE_STATUSES.has(String(row.status ?? '').toLowerCase()) ? 'Online' : 'Offline',
+    Notes: row.notes ?? null,
+    Location: lat == null || lon == null ? null : { lat, lon },
   };
 }
 
@@ -80,7 +90,10 @@ export function mapNode(row) {
     NodeID: row.id,
     LoRa_Device_ID: row.lora_device_id ?? row.node_code,
     GatewayID: row.gateway_id,
+    Node_Code: row.node_code ?? null,
     Node_Name: row.node_name ?? row.node_code,
+    Rf_Tag: row.rf_tag ?? null,
+    Notes: row.notes ?? null,
     Status_Code: row.status_code,
     Battery_Percent: num(row.battery_level),
     Signal_Rssi: row.signal_rssi,
@@ -117,6 +130,7 @@ export function mapMetric(row) {
     Sugar_Percent: num(row.sugar_percent),
     Weather_Conditions: row.weather_conditions ?? null,
     Ice_Present: Boolean(row.ice_present),
+    Sap_Flow_Rate_Lph: num(row.sap_flow_rate_lph),
   };
 }
 
