@@ -20,9 +20,6 @@ jobs:
     name: Build and deploy mock frontend
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    defaults:
-      run:
-        working-directory: Maple-Sugar-FE
     env:
       VERCEL_ORG_ID: team_E5NYBsuh3MysoBg8vHvhSWIL
       VERCEL_PROJECT_ID: prj_NVwYVKuKAydzRk4kxD4dXf6LA6cp
