@@ -44,7 +44,7 @@ function Forbidden() {
  * manifest the sidebar reads, so the two cannot drift apart.
  */
 export function ProtectedRoute({ capability, children }) {
-  const { isAuthenticated, restoring, can } = useAuth();
+  const { isAuthenticated, restoring, can, signedOut } = useAuth();
   // One capability, or a list of which any one is enough.
   const needed = capability ? [capability].flat() : [];
   const location = useLocation();
