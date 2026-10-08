@@ -22,6 +22,7 @@ export function MainNav({ direction = 'row', onNavigate }) {
         justifyContent: stacked ? 'flex-start' : 'center',
         gap: 0.5,
         px: 1,
+        whiteSpace: 'nowrap',
       }}
     >
       {items.map((item) => {

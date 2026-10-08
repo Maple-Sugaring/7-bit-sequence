@@ -9,7 +9,9 @@ export function AppShell() {
     <Container className="layout" disableGutters maxWidth={false}>
       <TopBar />
       <main className="main-content">
-        <Outlet />
+        <div className="page-container">
+          <Outlet />
+        </div>
       </main>
       <Footer />
     </Container>

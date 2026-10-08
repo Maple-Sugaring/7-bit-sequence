@@ -82,6 +82,10 @@ export function can(role, capability) {
   return capabilitiesFor(role).includes(capability);
 }
 
+export function canAny(role, capabilities) {
+  return capabilities.some((capability) => can(role, capability));
+}
+
 export function canAll(role, capabilities) {
   return capabilities.every((capability) => can(role, capability));
 }

@@ -1,0 +1,55 @@
+# Compose >= 2.24.4 is required for !override and !reset.
+# docker compose --env-file /opt/maple/config/compose.env -f docker-compose.yml -f terraform/compose.production.yml up -d
+services:
+  db:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Production database password is required}
+  api:
+    env_file: !override
+      - path: /opt/maple/config/backend.env
+        required: true
+    environment: !override
+      DATABASE_URL: postgresql://maple:${POSTGRES_PASSWORD}@db:5432/maple_sugaring
+      REDIS_URL: redis://cache:6379
+      NODE_ENV: production
+      PORT: 3000
+      TRUST_PROXY_HOPS: 2
+  web:
+    ports: !reset []
+    expose:
+      - "80"
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:?Public hostname is required}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./terraform/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_started
+    restart: unless-stopped
+    mem_limit: 128m
+volumes:
+  postgres_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /srv/maple/postgres
+  caddy_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /srv/maple/caddy-data
+  caddy_config:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /srv/maple/caddy-config

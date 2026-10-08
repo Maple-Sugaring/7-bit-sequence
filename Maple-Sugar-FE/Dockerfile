@@ -24,6 +24,11 @@ FROM nginx:alpine AS serve
 
 COPY --from=build /app/dist /usr/share/nginx/html
 
+# dist/ carries whatever modes public/ had on the host. A checkout with owner-only
+# files (600, e.g. synced through iCloud) would otherwise 403 from the nginx
+# worker, which is how the flasher lost /firmware/manifest.json.
+RUN chmod -R a+rX /usr/share/nginx/html
+
 # Landing in templates/ (rather than conf.d/) makes the image's entrypoint run
 # envsubst over it before nginx starts, so the API host is a runtime setting.
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template

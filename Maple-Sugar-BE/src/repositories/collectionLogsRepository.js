@@ -1,4 +1,4 @@
-import { queryAll, queryOne } from '../db/pool.js';
+import { queryAll, queryOneOn } from '../db/pool.js';
 import { mapCollectionLog } from './mappers.js';
 
 const LOG_COLUMNS = `
@@ -37,8 +37,9 @@ export async function listCollectionLogs({ season, from, to } = {}) {
   return rows.map(mapCollectionLog);
 }
 
-export async function createCollectionLog(entry) {
-  const row = await queryOne(
+export async function createCollectionLog(entry, client = null) {
+  const row = await queryOneOn(
+    client,
     `insert into collection_logs (bucket_id, node_id, user_id, collected_at,
                                  volume_collected, quality_notes)
      values ($1, $2, $3, coalesce($4, CURRENT_TIMESTAMP), $5, $6)

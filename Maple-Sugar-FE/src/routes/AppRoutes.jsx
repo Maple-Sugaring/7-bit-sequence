@@ -1,12 +1,13 @@
 import { lazy, Suspense } from 'react';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
-import { Navigate, Route, Routes } from 'react-router-dom';
-import { Capability } from '../business/permissions';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
+import { apiMode } from '../data/apiClient';
 import { AuthCallbackPage } from '../pages/AuthCallbackPage';
 import { LoginPage } from '../pages/LoginPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
+import { ROUTE_CAPABILITIES } from './navigation';
 import { ProtectedRoute } from './ProtectedRoute';
 
 const DashboardPage = lazy(() =>
@@ -24,9 +25,6 @@ const AlertsPage = lazy(() =>
 const SchedulePage = lazy(() =>
   import('../pages/SchedulePage').then((module) => ({ default: module.SchedulePage })),
 );
-const ScheduleAdminPage = lazy(() =>
-  import('../pages/ScheduleAdminPage').then((module) => ({ default: module.ScheduleAdminPage })),
-);
 const AdminPage = lazy(() =>
   import('../pages/AdminPage').then((module) => ({ default: module.AdminPage })),
 );
@@ -36,27 +34,41 @@ const CollectionPage = lazy(() =>
 const ProfilePage = lazy(() =>
   import('../pages/ProfilePage').then((module) => ({ default: module.ProfilePage })),
 );
+const FleetMapPage = lazy(() =>
+  import('../pages/FleetMapPage').then((module) => ({ default: module.FleetMapPage })),
+);
 const DeployPage = lazy(() =>
   import('../pages/DeployPage').then((module) => ({ default: module.DeployPage })),
 );
+const FeedbackPage = lazy(() =>
+  import('../pages/FeedbackPage').then((module) => ({ default: module.FeedbackPage })),
+);
 
 const PROTECTED = [
-  { path: '/dashboard', element: <DashboardPage />, capability: Capability.VIEW_DASHBOARD },
-  { path: '/deploy', element: <DeployPage />, capability: Capability.DEPLOY_NODES },
-  { path: '/table', element: <SapDataPage />, capability: Capability.VIEW_DATA_TABLE },
-  { path: '/collection', element: <CollectionPage />, capability: Capability.RECORD_DATA },
-  { path: '/nodes/:nodeId', element: <NodePage />, capability: Capability.VIEW_DASHBOARD },
-  { path: '/notifications', element: <AlertsPage />, capability: Capability.VIEW_ALERTS },
-  { path: '/schedule', element: <SchedulePage />, capability: Capability.VIEW_SCHEDULE },
-  {
-    path: '/schedule-admin',
-    element: <ScheduleAdminPage />,
-    capability: Capability.MANAGE_SCHEDULE,
-  },
-  { path: '/admin', element: <AdminPage />, capability: Capability.MANAGE_USERS },
-  // Every signed-in role has a profile, so there is no capability gate.
+  { path: '/dashboard', element: <DashboardPage /> },
+  { path: '/map', element: <FleetMapPage /> },
+  { path: '/deploy', element: <DeployPage /> },
+  { path: '/table', element: <SapDataPage /> },
+  { path: '/collection', element: <CollectionPage /> },
+  { path: '/nodes/:nodeId', element: <NodePage /> },
+  { path: '/notifications', element: <AlertsPage /> },
+  { path: '/schedule', element: <SchedulePage /> },
+  { path: '/admin', element: <AdminPage /> },
   { path: '/profile', element: <ProfilePage /> },
+  ...(apiMode === 'mock' ? [{ path: '/feedback', element: <FeedbackPage /> }] : []),
 ];
+
+// Old schedule-admin links (e.g. from alerts) carry a tree and task in the query.
+function RedirectKeepingSearch({ to }) {
+  const { search } = useLocation();
+  const params = new URLSearchParams(search);
+  if (params.has('task') && !params.has('shiftTask')) {
+    params.set('shiftTask', params.get('task'));
+    params.delete('task');
+  }
+  const query = params.toString();
+  return <Navigate to={`${to}${query ? `?${query}` : ''}`} replace />;
+}
 
 function PageFallback() {
   return (
@@ -77,7 +89,8 @@ export function AppRoutes() {
       <Route path="/input" element={<Navigate to="/collection" replace />} />
       <Route path="/record" element={<Navigate to="/collection" replace />} />
       <Route path="/alerts" element={<Navigate to="/notifications" replace />} />
-      <Route path="/schedule/manage" element={<Navigate to="/schedule-admin" replace />} />
+      <Route path="/schedule/manage" element={<RedirectKeepingSearch to="/schedule" />} />
+      <Route path="/schedule-admin" element={<RedirectKeepingSearch to="/schedule" />} />
       <Route path="/guides" element={<Navigate to="/dashboard" replace />} />
       <Route path="/nodes" element={<Navigate to="/deploy" replace />} />
       <Route path="/deployed" element={<Navigate to="/deploy" replace />} />
@@ -89,12 +102,12 @@ export function AppRoutes() {
           </ProtectedRoute>
         }
       >
-        {PROTECTED.map(({ path, element, capability }) => (
+        {PROTECTED.map(({ path, element }) => (
           <Route
             key={path}
             path={path}
             element={
-              <ProtectedRoute capability={capability}>
+              <ProtectedRoute capability={ROUTE_CAPABILITIES[path] ?? undefined}>
                 <Suspense fallback={<PageFallback />}>{element}</Suspense>
               </ProtectedRoute>
             }
