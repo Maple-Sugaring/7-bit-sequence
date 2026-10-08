@@ -77,6 +77,7 @@ export function AuthProvider({ children }) {
       capabilities: capabilitiesFor(role),
       isAuthenticated: Boolean(session?.user),
       restoring,
+      signedOut,
       can: (capability) => can(role, capability),
       signIn,
       signOut,
