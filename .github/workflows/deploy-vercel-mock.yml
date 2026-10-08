@@ -36,6 +36,14 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --global vercel@59.6.0
 
+      - name: Configure feedback webhook
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          test -n "$DISCORD_WEBHOOK_URL"
+          printf '%s' "$DISCORD_WEBHOOK_URL" | vercel env add DISCORD_WEBHOOK_URL production --force --sensitive
+
       - name: Pull Vercel production settings
         run: vercel pull --yes --environment=production
         env:

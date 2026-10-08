@@ -3,6 +3,7 @@ import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
+import { apiMode } from '../data/apiClient';
 import { AuthCallbackPage } from '../pages/AuthCallbackPage';
 import { LoginPage } from '../pages/LoginPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
@@ -39,6 +40,9 @@ const FleetMapPage = lazy(() =>
 const DeployPage = lazy(() =>
   import('../pages/DeployPage').then((module) => ({ default: module.DeployPage })),
 );
+const FeedbackPage = lazy(() =>
+  import('../pages/FeedbackPage').then((module) => ({ default: module.FeedbackPage })),
+);
 
 const PROTECTED = [
   { path: '/dashboard', element: <DashboardPage /> },
@@ -51,6 +55,7 @@ const PROTECTED = [
   { path: '/schedule', element: <SchedulePage /> },
   { path: '/admin', element: <AdminPage /> },
   { path: '/profile', element: <ProfilePage /> },
+  ...(apiMode === 'mock' ? [{ path: '/feedback', element: <FeedbackPage /> }] : []),
 ];
 
 // Old schedule-admin links (e.g. from alerts) carry a tree and task in the query.

@@ -5,8 +5,10 @@ import RestoreIcon from '@mui/icons-material/Restore';
 import ParkIcon from '@mui/icons-material/Park';
 import SettingsInputAntennaIcon from '@mui/icons-material/SettingsInputAntenna';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
+import RateReviewIcon from '@mui/icons-material/RateReview';
 import { matchPath } from 'react-router-dom';
 import { canAny, Capability } from '../business/permissions';
+import { apiMode } from '../data/apiClient';
 
 export const NAV_ITEMS = [
   {
@@ -51,11 +53,12 @@ export const NAV_ITEMS = [
     icon: AdminPanelSettingsIcon,
     capability: Capability.MANAGE_USERS,
   },
+  ...(apiMode === 'mock' ? [{ to: '/feedback', label: 'Provide feedback', icon: RateReviewIcon }] : []),
 ];
 
 export function navItemsFor(role) {
   // `capability` is one capability or a list of which any one is enough.
-  return NAV_ITEMS.filter((item) => canAny(role, [item.capability].flat()));
+  return NAV_ITEMS.filter((item) => item.capability == null || canAny(role, [item.capability].flat()));
 }
 
 export function landingRouteFor(role) {
@@ -79,6 +82,7 @@ export const ROUTE_CAPABILITIES = {
   '/admin': Capability.MANAGE_USERS,
   // Every signed-in role has a profile, so there is no capability gate.
   '/profile': null,
+  ...(apiMode === 'mock' ? { '/feedback': null } : {}),
 };
 
 export function canVisit(role, pathname) {
