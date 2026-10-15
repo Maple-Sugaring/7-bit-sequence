@@ -38,6 +38,17 @@ export const accent = {
   amber: '#F6BE00',
 };
 
+// Warm RIT Sugarbush surface and nature accents for the public landing page.
+export const sugarbush = {
+  cream: '#F6F3F0',
+  warmSand: '#EDE6DE',
+  amber: '#D97706',
+  amberSoft: '#FEF3C7',
+  forest: '#2D5A27',
+  forestSoft: '#E8F3E6',
+  espresso: '#1C1613',
+};
+
 // Milo Serif and Neue Haas Grotesk are licensed and not distributable, so the
 // stack falls through to the RIT-approved substitutes.
 // https://www.rit.edu/brandportal/typography
