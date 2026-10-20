@@ -81,6 +81,7 @@ export function WeightChart({ rows, series, unit = 'day' }) {
             dataKey={item.key}
             name={item.name}
             stroke={TREE_COLORS[index % TREE_COLORS.length]}
+            strokeDasharray={item.dash}
             dot={false}
             strokeWidth={2}
             connectNulls
@@ -144,7 +145,7 @@ export function SiteForecastChart({ rows }) {
   );
 }
 
-const TREE_COLORS = ['#F76902', '#009CBD', '#84BD00', '#000000', '#7D55C7', '#DA291C', '#C75300', '#7C878E'];
+export const TREE_COLORS = ['#F76902', '#009CBD', '#84BD00', '#000000', '#7D55C7', '#DA291C', '#C75300', '#7C878E'];
 
 export function OverlayChart({ rows, flowSeries, tempSeries }) {
   return (

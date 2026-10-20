@@ -113,6 +113,49 @@ export function dailyWeightRows(readings, { nodeIds = LIVE_NODE_IDS, year = LIVE
   };
 }
 
+/**
+ * Leap year, so Feb 29 survives. Every compared year is re-stamped onto it so
+ * the same calendar day lines up on one x-axis (and `dayjs(Date)` still parses).
+ */
+export const COMPARE_REF_YEAR = 2000;
+
+/**
+ * Year-over-year overlay. One series per node per year, keyed `${nodeId}-${year}`
+ * (pounds live under `${key}-lb`, which the chart tooltip already reads).
+ * Pass readings already trimmed to the month/day window you want.
+ */
+export function yearlyWeightRows(readings, { nodeIds = LIVE_NODE_IDS, years = [LIVE_YEAR], unit = 'day' } = {}) {
+  const byDate = new Map();
+  const series = [];
+
+  for (const year of years) {
+    const result = dailyWeightRows(readings, { nodeIds, year, unit });
+    for (const item of result.series) {
+      series.push({
+        key: `${item.key}-${year}`,
+        name: `${item.name} · ${year}`,
+        nodeId: item.key,
+        year,
+      });
+    }
+    for (const row of result.rows) {
+      const date = `${COMPARE_REF_YEAR}${row.Date.slice(4)}`;
+      const target = byDate.get(date) ?? { Date: date };
+      for (const item of result.series) {
+        if (row[item.key] == null) continue;
+        target[`${item.key}-${year}`] = row[item.key];
+        target[`${item.key}-${year}-lb`] = row[`${item.key}-lb`];
+      }
+      byDate.set(date, target);
+    }
+  }
+
+  return {
+    rows: [...byDate.values()].sort((a, b) => a.Date.localeCompare(b.Date)),
+    series,
+  };
+}
+
 /** Sugar percents a person recorded. Sensor rows with a null percent are skipped. */
 export function recordedSugar(entries, year = LIVE_YEAR) {
   return (entries ?? [])
