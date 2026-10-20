@@ -17,6 +17,7 @@ import BoltIcon from '@mui/icons-material/Bolt';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import CloudDoneIcon from '@mui/icons-material/CloudDone';
 import DeviceThermostatIcon from '@mui/icons-material/DeviceThermostat';
+import ForestRoundedIcon from '@mui/icons-material/ForestRounded';
 import GoogleIcon from '@mui/icons-material/Google';
 import GroupsIcon from '@mui/icons-material/Groups';
 import LocalDrinkIcon from '@mui/icons-material/LocalDrink';
@@ -277,11 +278,9 @@ export function LandingPage() {
         }}
       >
         <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
-          <Box
-            component="img"
-            src={mapleLogo}
-            alt="RIT Maple Sugaring emblem"
-            sx={{ width: 32, height: 32, objectFit: 'contain' }}
+          <ForestRoundedIcon
+            titleAccess="Maple Sugaring trees"
+            sx={{ fontSize: 32, color: ritOrange, flexShrink: 0 }}
           />
           <Box>
             <Typography
