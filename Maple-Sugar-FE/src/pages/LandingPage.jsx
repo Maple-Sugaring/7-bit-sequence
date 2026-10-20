@@ -238,7 +238,7 @@ export function LandingPage() {
         flexDirection: 'column',
         bgcolor: sugarbush.cream,
         color: '#000',
-        pb: { xs: 9, md: 0 },
+        pb: { xs: 'calc(4.5rem + env(safe-area-inset-bottom))', md: 0 },
       }}
     >
       {/* Sticky Top Header (Web & Mobile) */}
@@ -343,7 +343,7 @@ export function LandingPage() {
             component="img"
             src={ritLogo}
             alt="Rochester Institute of Technology"
-            sx={{ height: { xs: 22, sm: 28 }, width: 'auto' }}
+            sx={{ display: { xs: 'none', sm: 'block' }, height: 28, width: 'auto' }}
           />
         </Stack>
       </Box>
@@ -529,6 +529,7 @@ export function LandingPage() {
                 id="sign-in-card"
                 sx={{
                   width: '100%',
+                  scrollMarginTop: { xs: 76, md: 88 },
                   maxWidth: { xs: '100%', sm: 460 },
                   mx: 'auto',
                   bgcolor: '#fff',
@@ -634,6 +635,7 @@ export function LandingPage() {
         component="section"
         id="telemetry-preview"
         sx={{
+          scrollMarginTop: { xs: 76, md: 88 },
           py: { xs: 6, md: 9 },
           bgcolor: sugarbush.cream,
           borderBottom: '1px solid #E2DDD7',
@@ -717,8 +719,8 @@ export function LandingPage() {
               >
                 <CardContent sx={{ p: 3 }}>
                   <Stack
-                    direction="row"
-                     sx={{ justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}
+                    direction={{ xs: 'column', sm: 'row' }}
+                    sx={{ justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}
                   >
                     <Box>
                       <Typography variant="caption" sx={{ color: '#4A4A4A', fontWeight: 700 }}>
@@ -825,19 +827,35 @@ export function LandingPage() {
                   </Grid>
 
                   <Stack spacing={1} sx={{ mt: 2.5, pt: 2, borderTop: '1px solid #EBE7E2' }}>
-                    <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
+                    <Stack
+                      direction="row"
+                      sx={{
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        columnGap: 2,
+                        rowGap: 0.25,
+                      }}
+                    >
                       <Typography variant="body2" sx={{ color: '#4A4A4A' }}>
                         Sap-to-Syrup Boil Ratio
                       </Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 700, minWidth: 0 }}>
                         {activePreview.boilRatio}
                       </Typography>
                     </Stack>
-                    <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
+                    <Stack
+                      direction="row"
+                      sx={{
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        columnGap: 2,
+                        rowGap: 0.25,
+                      }}
+                    >
                       <Typography variant="body2" sx={{ color: '#4A4A4A' }}>
                         Node Battery & Radio
                       </Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 700, minWidth: 0 }}>
                         {activePreview.battery}
                       </Typography>
                     </Stack>
@@ -903,7 +921,16 @@ export function LandingPage() {
                   </Stack>
 
                   <Stack spacing={1} sx={{ mt: 2.5 }}>
-                    <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Stack
+                      direction="row"
+                      sx={{
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        columnGap: 1,
+                        rowGap: 0.5,
+                      }}
+                    >
                       <Typography variant="body2" sx={{ color: '#4A4A4A' }}>
                         Run Forecast
                       </Typography>
@@ -917,11 +944,19 @@ export function LandingPage() {
                         }}
                       />
                     </Stack>
-                    <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
+                    <Stack
+                      direction="row"
+                      sx={{
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        columnGap: 2,
+                        rowGap: 0.25,
+                      }}
+                    >
                       <Typography variant="body2" sx={{ color: '#4A4A4A' }}>
                         LoRa Gateway Link
                       </Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 700, minWidth: 0 }}>
                         {activePreview.rssi}
                       </Typography>
                     </Stack>
@@ -938,6 +973,7 @@ export function LandingPage() {
         component="section"
         id="how-it-works"
         sx={{
+          scrollMarginTop: { xs: 76, md: 88 },
           py: { xs: 6, md: 9 },
           bgcolor: sugarbush.espresso,
           color: '#fff',
@@ -1045,6 +1081,7 @@ export function LandingPage() {
         component="section"
         id="roles-overview"
         sx={{
+          scrollMarginTop: { xs: 76, md: 88 },
           py: { xs: 6, md: 9 },
           bgcolor: '#FAF7F4',
           flex: 1,
@@ -1180,6 +1217,7 @@ export function LandingPage() {
           gap: 1.5,
           px: 2,
           py: 1.25,
+          pb: 'calc(0.75rem + env(safe-area-inset-bottom))',
           bgcolor: '#000',
           color: '#fff',
           borderTop: `3px solid ${ritOrange}`,
