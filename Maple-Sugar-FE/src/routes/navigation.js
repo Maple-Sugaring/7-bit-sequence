@@ -1,7 +1,7 @@
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import MapIcon from '@mui/icons-material/Map';
-import RestoreIcon from '@mui/icons-material/Restore';
+import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded';
 import ParkIcon from '@mui/icons-material/Park';
 import SettingsInputAntennaIcon from '@mui/icons-material/SettingsInputAntenna';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
@@ -14,42 +14,52 @@ export const NAV_ITEMS = [
   {
     to: '/dashboard',
     label: 'The Bush',
-    icon: RestoreIcon,
+    icon: DashboardRoundedIcon,
+    shortLabel: 'Home',
+    description: 'Weather, buckets & tree health',
     capability: Capability.VIEW_DASHBOARD,
   },
   {
     to: '/map',
     label: 'Map',
+    description: 'Find your trees in the field',
     icon: MapIcon,
     capability: [Capability.VIEW_DASHBOARD, Capability.VIEW_NODES],
   },
   {
     to: '/deploy',
     label: 'Deploy',
+    description: 'Set up gateways & sensor nodes',
     icon: SettingsInputAntennaIcon,
     capability: Capability.DEPLOY_NODES,
   },
   {
     to: '/schedule',
     label: 'Schedule',
+    description: 'Plan your next collection shift',
     icon: CalendarMonthIcon,
     capability: Capability.VIEW_SCHEDULE,
   },
   {
     to: '/collection',
     label: 'Collection',
+    shortLabel: 'Collect',
+    description: 'Record sap & collection rounds',
     icon: MenuBookIcon,
     capability: Capability.RECORD_DATA,
   },
   {
     to: '/table',
     label: 'Sugar Woods',
+    shortLabel: 'Data',
+    description: 'Explore readings & export data',
     icon: ParkIcon,
     capability: Capability.VIEW_DATA_TABLE,
   },
   {
     to: '/admin',
     label: 'Admin',
+    description: 'Manage your team & access',
     icon: AdminPanelSettingsIcon,
     capability: Capability.MANAGE_USERS,
   },
@@ -59,6 +69,17 @@ export const NAV_ITEMS = [
 export function navItemsFor(role) {
   // `capability` is one capability or a list of which any one is enough.
   return NAV_ITEMS.filter((item) => item.capability == null || canAny(role, [item.capability].flat()));
+}
+
+// Roles without collection or shifts get their next available field tools.
+export function mobileNavItemsFor(role) {
+  const items = navItemsFor(role);
+  const order = ['/dashboard', '/map', '/collection', '/schedule', '/table', '/deploy'];
+  return order.map((to) => items.find((item) => item.to === to)).filter(Boolean).slice(0, 4);
+}
+
+export function isNavItemActive(pathname, to) {
+  return pathname === to || pathname.startsWith(`${to}/`) || (to === '/dashboard' && pathname.startsWith('/nodes/'));
 }
 
 export function landingRouteFor(role) {

@@ -18,6 +18,24 @@ If you are developing a production application, we recommend using TypeScript wi
 
 # Development
 
+## Mobile layout preview
+
+Run the app with sample data to explore every role without a backend or Google sign-in.
+From this directory in PowerShell:
+
+```powershell
+$env:VITE_API_MODE = 'mock'
+npm run dev -- --host 127.0.0.1 --port 5175 --strictPort
+```
+
+Open http://127.0.0.1:5175 and choose a demo role. Below 1200px the app uses a
+fixed bottom navigation bar and an **All pages** sheet. Wider windows use the
+sidebar. Icons have text labels, and each role sees only its permitted pages.
+Use a narrow browser window or your browser's device toolbar to review the mobile layout.
+The demo uses sample data; it does not send collection or schedule changes to the live API.
+
+## Dependencies
+
 Utilizes Material UI and development requires the following installations:
 
     npm install @mui/material @emotion/react @emotion/styled
