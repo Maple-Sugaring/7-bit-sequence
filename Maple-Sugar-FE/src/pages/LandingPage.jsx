@@ -326,19 +326,6 @@ export function LandingPage() {
         </Stack>
 
         <Stack direction="row" spacing={{ xs: 1.5, sm: 2 }} sx={{ alignItems: 'center' }}>
-          <Button
-            variant="contained"
-            size="small"
-            onClick={() => scrollToSection('sign-in-card')}
-            sx={{
-              minHeight: 36,
-              px: { xs: 1.75, sm: 2.25 },
-              fontSize: 13,
-              fontWeight: 700,
-            }}
-          >
-            Sign In
-          </Button>
           <Box
             component="img"
             src={ritLogo}
