@@ -22,6 +22,7 @@ import GroupsIcon from '@mui/icons-material/Groups';
 import LocalDrinkIcon from '@mui/icons-material/LocalDrink';
 import ParkIcon from '@mui/icons-material/Park';
 import RouterIcon from '@mui/icons-material/Router';
+import SchoolIcon from '@mui/icons-material/School';
 import ScienceIcon from '@mui/icons-material/Science';
 import SensorsIcon from '@mui/icons-material/Sensors';
 import AgricultureIcon from '@mui/icons-material/Agriculture';
@@ -186,6 +187,23 @@ const PROGRAM_ROLES = [
       'Create, edit, and assign collection shifts linked to active tree alerts',
       'Invite @rit.edu and @g.rit.edu accounts with granular role and expiry controls',
     ],
+    actionLabel: 'Sign In as Admin',
+  },
+  {
+    role: 'WINT-010 Students',
+    badge: 'Maple Syrup & Environment',
+    accentColor: accessibleOrange,
+    softBg: '#FFF4EC',
+    icon: SchoolIcon,
+    summary:
+      'Explore how maple syrup production connects to climate, forest ecology, invasive species, and sustainability through classroom learning and hands-on work in the woods.',
+    highlights: [
+      'Identify maple trees and learn how sap production responds to biology and weather',
+      'Tap trees, harvest sap, and turn it into maple syrup while studying its history and economic significance',
+      'Practice outdoor preparedness, leave-no-trace ethics, and winter snowshoe travel',
+    ],
+    actionLabel: 'Explore WINT-010',
+    actionTarget: 'wint-010-class',
   },
 ];
 
@@ -1072,7 +1090,7 @@ export function LandingPage() {
             {PROGRAM_ROLES.map((item) => {
               const RoleIcon = item.icon;
               return (
-                <Grid key={item.role} size={{ xs: 12, md: 4 }}>
+                <Grid key={item.role} size={{ xs: 12, sm: 6, lg: 3 }}>
                   <Card
                     sx={{
                       height: '100%',
@@ -1139,10 +1157,10 @@ export function LandingPage() {
                         variant="outlined"
                         color="secondary"
                         fullWidth
-                        onClick={() => scrollToSection('sign-in-card')}
+                        onClick={() => scrollToSection(item.actionTarget ?? 'sign-in-card')}
                         sx={{ fontWeight: 700 }}
                       >
-                        Sign In as {item.role.split(' ')[0]}
+                        {item.actionLabel ?? `Sign In as ${item.role.split(' ')[0]}`}
                       </Button>
                     </Box>
                   </Card>
@@ -1150,6 +1168,50 @@ export function LandingPage() {
               );
             })}
           </Grid>
+        </Container>
+      </Box>
+
+      {/* WINT-010 course overview */}
+      <Box
+        component="section"
+        id="wint-010-class"
+        sx={{
+          scrollMarginTop: { xs: 76, md: 88 },
+          py: { xs: 6, md: 9 },
+          bgcolor: sugarbush.espresso,
+          color: '#fff',
+        }}
+      >
+        <Container maxWidth="md">
+          <Typography
+            variant="overline"
+            sx={{ color: ritOrange, fontWeight: 800, letterSpacing: '0.08em' }}
+          >
+            WINT-010
+          </Typography>
+          <Typography
+            variant="h2"
+            sx={{ fontSize: { xs: 28, sm: 36 }, fontWeight: 700, color: '#fff', mt: 0.5, mb: 2 }}
+          >
+            Maple Syrup and Our Environment
+          </Typography>
+          <Typography sx={{ color: '#F6F3F0', lineHeight: 1.75, mb: 2 }}>
+            This class will explore maple syrup production—both by way of micro production and as
+            the yield of larger scale agriculture—as the product of a delicately strung web of
+            environmental factors. As such, this hands-on and in-the-woods exploration of how maple
+            syrup is produced will involve integrally related environmental topics and issues such
+            as climate change, forest ecology, invasive species, and broader issues of
+            sustainability.
+          </Typography>
+          <Typography sx={{ color: '#F6F3F0', lineHeight: 1.75 }}>
+            Through both classroom lecture and practical exercises in the woods, students will learn
+            tree identification, the biology of sap production, the role of weather patterns,
+            nutritional benefits of maple syrup, and the history of maple syrup production and its
+            economic significance. Students will learn and actually carry out the processes of
+            identifying trees for tapping, harvesting sap, and converting the harvested sap into
+            their very own maple syrup. Students will learn outdoor preparedness, leave no trace
+            wilderness ethics, and use of snowshoes for winter foot-travel.
+          </Typography>
         </Container>
       </Box>
 
