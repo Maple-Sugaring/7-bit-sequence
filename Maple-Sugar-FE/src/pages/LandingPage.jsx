@@ -597,6 +597,50 @@ export function LandingPage() {
         </Container>
       </Box>
 
+      {/* WINT-010 course overview */}
+      <Box
+        component="section"
+        id="wint-010-class"
+        sx={{
+          scrollMarginTop: { xs: 76, md: 88 },
+          py: { xs: 6, md: 9 },
+          bgcolor: sugarbush.espresso,
+          color: '#fff',
+        }}
+      >
+        <Container maxWidth="md">
+          <Typography
+            variant="overline"
+            sx={{ color: ritOrange, fontWeight: 800, letterSpacing: '0.08em' }}
+          >
+            WINT-010
+          </Typography>
+          <Typography
+            variant="h2"
+            sx={{ fontSize: { xs: 28, sm: 36 }, fontWeight: 700, color: '#fff', mt: 0.5, mb: 2 }}
+          >
+            Maple Syrup and Our Environment
+          </Typography>
+          <Typography sx={{ color: '#F6F3F0', lineHeight: 1.75, mb: 2 }}>
+            This class will explore maple syrup production—both by way of micro production and as
+            the yield of larger scale agriculture—as the product of a delicately strung web of
+            environmental factors. As such, this hands-on and in-the-woods exploration of how maple
+            syrup is produced will involve integrally related environmental topics and issues such
+            as climate change, forest ecology, invasive species, and broader issues of
+            sustainability.
+          </Typography>
+          <Typography sx={{ color: '#F6F3F0', lineHeight: 1.75 }}>
+            Through both classroom lecture and practical exercises in the woods, students will learn
+            tree identification, the biology of sap production, the role of weather patterns,
+            nutritional benefits of maple syrup, and the history of maple syrup production and its
+            economic significance. Students will learn and actually carry out the processes of
+            identifying trees for tapping, harvesting sap, and converting the harvested sap into
+            their very own maple syrup. Students will learn outdoor preparedness, leave no trace
+            wilderness ethics, and use of snowshoes for winter foot-travel.
+          </Typography>
+        </Container>
+      </Box>
+
       {/* Section 2: Interactive Sugarbush Telemetry Preview */}
       <Box
         component="section"
@@ -1153,50 +1197,6 @@ export function LandingPage() {
               );
             })}
           </Grid>
-        </Container>
-      </Box>
-
-      {/* WINT-010 course overview */}
-      <Box
-        component="section"
-        id="wint-010-class"
-        sx={{
-          scrollMarginTop: { xs: 76, md: 88 },
-          py: { xs: 6, md: 9 },
-          bgcolor: sugarbush.espresso,
-          color: '#fff',
-        }}
-      >
-        <Container maxWidth="md">
-          <Typography
-            variant="overline"
-            sx={{ color: ritOrange, fontWeight: 800, letterSpacing: '0.08em' }}
-          >
-            WINT-010
-          </Typography>
-          <Typography
-            variant="h2"
-            sx={{ fontSize: { xs: 28, sm: 36 }, fontWeight: 700, color: '#fff', mt: 0.5, mb: 2 }}
-          >
-            Maple Syrup and Our Environment
-          </Typography>
-          <Typography sx={{ color: '#F6F3F0', lineHeight: 1.75, mb: 2 }}>
-            This class will explore maple syrup production—both by way of micro production and as
-            the yield of larger scale agriculture—as the product of a delicately strung web of
-            environmental factors. As such, this hands-on and in-the-woods exploration of how maple
-            syrup is produced will involve integrally related environmental topics and issues such
-            as climate change, forest ecology, invasive species, and broader issues of
-            sustainability.
-          </Typography>
-          <Typography sx={{ color: '#F6F3F0', lineHeight: 1.75 }}>
-            Through both classroom lecture and practical exercises in the woods, students will learn
-            tree identification, the biology of sap production, the role of weather patterns,
-            nutritional benefits of maple syrup, and the history of maple syrup production and its
-            economic significance. Students will learn and actually carry out the processes of
-            identifying trees for tapping, harvesting sap, and converting the harvested sap into
-            their very own maple syrup. Students will learn outdoor preparedness, leave no trace
-            wilderness ethics, and use of snowshoes for winter foot-travel.
-          </Typography>
         </Container>
       </Box>
 
