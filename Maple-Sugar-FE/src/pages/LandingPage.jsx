@@ -13,7 +13,6 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
-import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import BoltIcon from '@mui/icons-material/Bolt';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import CloudDoneIcon from '@mui/icons-material/CloudDone';
@@ -474,39 +473,6 @@ export function LandingPage() {
                   </Grid>
                 </Grid>
 
-                {/* Primary Hero Actions */}
-                <Stack
-                  direction={{ xs: 'column', sm: 'row' }}
-                  spacing={1.5}
-                  sx={{ pt: 0.5 }}
-                >
-                  <Button
-                    variant="contained"
-                    size="large"
-                    onClick={() => scrollToSection('sign-in-card')}
-                    sx={{ px: 3.5, py: 1.4, fontSize: 16, fontWeight: 700 }}
-                  >
-                    Open the Sugarbush
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    color="secondary"
-                    size="large"
-                    endIcon={<ArrowDownwardIcon />}
-                    onClick={() => scrollToSection('telemetry-preview')}
-                    sx={{
-                      px: 3,
-                      py: 1.4,
-                      fontSize: 15,
-                      bgcolor: '#fff',
-                      borderColor: '#000',
-                      color: '#000',
-                      '&:hover': { bgcolor: sugarbush.warmSand, borderColor: '#000' },
-                    }}
-                  >
-                    Preview Live Telemetry
-                  </Button>
-                </Stack>
               </Stack>
             </Grid>
 
