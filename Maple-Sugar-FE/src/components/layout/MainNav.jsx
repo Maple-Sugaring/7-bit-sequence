@@ -1,59 +1,19 @@
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/auth';
-import { navItemsFor } from '../../routes/navigation';
+import { isNavItemActive, navItemsFor } from '../../routes/navigation';
 
-export function MainNav({ direction = 'row', onNavigate }) {
-  const navigate = useNavigate();
-  const location = useLocation();
+export function MainNav({ onNavigate, tiles = false }) {
+  const { pathname } = useLocation();
   const { role } = useAuth();
-  const items = navItemsFor(role);
-  const stacked = direction === 'column';
 
   return (
-    <Box
-      component="nav"
-      aria-label="Primary"
-      sx={{
-        display: 'flex',
-        flexDirection: direction,
-        flexWrap: stacked ? 'nowrap' : 'wrap',
-        justifyContent: stacked ? 'flex-start' : 'center',
-        gap: 0.5,
-        px: 1,
-        whiteSpace: 'nowrap',
-      }}
-    >
-      {items.map((item) => {
-        const selected = location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
-        const Icon = item.icon;
-        return (
-          <Button
-            key={item.to}
-            onClick={() => {
-              navigate(item.to);
-              onNavigate?.();
-            }}
-            startIcon={<Icon sx={{ fontSize: 18 }} />}
-            aria-current={selected ? 'page' : undefined}
-            sx={{
-              color: selected ? '#FFFFFF' : '#F4F1EE',
-              bgcolor: selected ? '#F76902' : 'transparent',
-              borderRadius: 999,
-              minHeight: 36,
-              px: 1.5,
-              justifyContent: stacked ? 'flex-start' : 'center',
-              width: stacked ? '100%' : undefined,
-              fontWeight: 600,
-              fontSize: 14,
-              '&:hover': { bgcolor: selected ? '#C75300' : 'rgba(255,255,255,0.08)' },
-            }}
-          >
-            {item.label}
-          </Button>
-        );
-      })}
-    </Box>
+    <nav aria-label={tiles ? 'All pages' : 'Primary'} className={tiles ? 'page-tiles' : 'sidebar-links'}>
+      {navItemsFor(role).map(({ to, label, description, icon: Icon }) => (
+        <Link key={to} to={to} onClick={onNavigate} className="page-link" aria-current={isNavItemActive(pathname, to) ? 'page' : undefined}>
+          <span className="nav-icon"><Icon /></span>
+          <span><span className="nav-label">{label}</span>{tiles && description ? <span className="nav-description">{description}</span> : null}</span>
+        </Link>
+      ))}
+    </nav>
   );
 }

@@ -36,7 +36,7 @@ const theme = createTheme({
     text: { primary: neutral.black, secondary: '#4A4A4A' },
     divider: inputBorder,
   },
-  shape: { borderRadius: 8 },
+  shape: { borderRadius: 12 },
   typography: {
     fontFamily: ritSansStack,
     h1: { fontFamily: ritSansStack, fontWeight: 500, fontSize: '50px', letterSpacing: 0 },
@@ -58,20 +58,23 @@ const theme = createTheme({
     MuiButton: {
       defaultProps: { disableElevation: true },
       styleOverrides: {
-        root: { minHeight: 44, borderRadius: 8 },
+        root: { minHeight: 44, borderRadius: 12 },
       },
     },
     MuiPaper: {
       styleOverrides: {
         root: {
           backgroundImage: 'none',
-          borderRadius: 10,
-          border: '1px solid #D0D3D4',
+          borderRadius: 16,
+          border: '1px solid #E2DDD7',
         },
       },
     },
     MuiCard: {
       defaultProps: { elevation: 0 },
+    },
+    MuiIconButton: {
+      styleOverrides: { root: { minWidth: 44, minHeight: 44 } },
     },
     MuiOutlinedInput: {
       styleOverrides: {

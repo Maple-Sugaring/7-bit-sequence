@@ -1,11 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import Badge from '@mui/material/Badge';
 import Box from '@mui/material/Box';
-import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
-import useMediaQuery from '@mui/material/useMediaQuery';
-import MenuIcon from '@mui/icons-material/Menu';
+import ForestRoundedIcon from '@mui/icons-material/ForestRounded';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import Tooltip from '@mui/material/Tooltip';
@@ -20,16 +18,15 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import { Capability } from '../../business/permissions';
 import { useAuth } from '../../context/auth';
 import { useOpenAlertCount } from '../../services/hooks';
-import { MainNav } from './MainNav';
-import { useNavigate } from "react-router-dom";
+import { apiMode } from '../../data/apiClient';
+import { landingRouteFor } from '../../routes/navigation';
+import { Link, useNavigate } from 'react-router-dom';
 
 
 export function TopBar() {
   const navigate = useNavigate();
-  const { user, can, signOut } = useAuth();
+  const { user, role, can, signOut } = useAuth();
   const [profileAnchor, setProfileAnchor] = useState(null);
-  const compact = useMediaQuery('(max-width:900px)');
-  const [menuOpen, setMenuOpen] = useState(false);
   const canViewAlerts = can(Capability.VIEW_ALERTS);
   const alerts = useOpenAlertCount(canViewAlerts);
   const openCount = Number(alerts.data) || 0;
@@ -70,43 +67,21 @@ export function TopBar() {
   return (
     <Box
       component="header"
+      className="app-topbar"
       sx={{
-        display: "grid",
-        gridTemplateColumns: `${compact ? "1fr" : "auto 1fr"} ${canViewAlerts ? "auto auto" : "auto"}`,
+        display: "flex",
         alignItems: "center",
         gap: 1,
-        px: { xs: 1.5, md: 3 },
-        py: 1,
-        bgcolor: "#000",
+        px: { xs: 2, md: 3 },
         color: "#fff",
-        borderBottom: "4px solid #F76902",
       }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-      {compact ? (
-        <IconButton aria-label="Open menu" onClick={() => setMenuOpen(true)} sx={{ color: '#fff' }}>
-          <MenuIcon />
-        </IconButton>
-      ) : null}
-      <Typography
-        component="button"
-        onClick={() => navigate("/dashboard")}
-        sx={{
-          border: 0,
-          bgcolor: "transparent",
-          color: "#fff",
-          font: "inherit",
-          fontWeight: 650,
-          fontSize: 18,
-          letterSpacing: "-0.02em",
-          cursor: "pointer",
-          whiteSpace: "nowrap",
-        }}
-      >
-        Maple Sugaring
-      </Typography>
-      </Box>
-      {compact ? null : <MainNav />}
+      <Link className="app-brand" to={landingRouteFor(role)}>
+        <span className="brand-mark"><ForestRoundedIcon /></span>
+        <span>Maple Sugaring<span className="brand-caption">RIT · FIELD WORKSPACE</span></span>
+      </Link>
+      <Box sx={{ flex: 1 }} />
+      {apiMode === 'mock' ? <span className="demo-badge">Demo</span> : null}
       {canViewAlerts ? (
         <IconButton aria-label={`Notifications${openCount ? `, ${openCount} open` : ''}`} onClick={() => navigate('/notifications')} sx={{ color: '#fff' }}>
           <Badge badgeContent={openCount} color="error" invisible={openCount === 0}>
@@ -152,14 +127,6 @@ export function TopBar() {
           <ListItemText>Log out</ListItemText>
         </MenuItem>
       </Menu>
-      <Drawer
-        anchor="left"
-        open={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        slotProps={{ paper: { sx: { bgcolor: '#000', width: 280, pt: 2 } } }}
-      >
-        <MainNav direction="column" onNavigate={() => setMenuOpen(false)} />
-      </Drawer>
     </Box>
   );
 }

@@ -22,6 +22,9 @@ import { FleetMapCard } from '../components/map/FleetMapCard';
 import { NodeStatusChip } from '../components/common/NodeStatusChip';
 import { MeterBar } from '../components/common/MeterBar';
 import { PageHeader } from '../components/common/PageHeader';
+import { FieldOverview } from '../components/layout/FieldOverview';
+import { useAuth } from '../context/auth';
+import { Capability } from '../business/permissions';
 import { dateOnly, dateTime } from '../components/common/format';
 import { useBucketShelfLife, useFleetMap, useLiveWeather, useReadings } from '../services/hooks';
 
@@ -46,6 +49,7 @@ const NO_BATCHES = [];
 
 export function DashboardPage() {
   const navigate = useNavigate();
+  const { can } = useAuth();
   // One fetch feeds the cards below and the fleet map, so they cannot disagree.
   const fleet = useFleetMap();
   const bushNodes = fleet.nodes;
@@ -83,126 +87,14 @@ export function DashboardPage() {
     <>
       <PageHeader
         title="The Bush"
-        subtitle="Live weather and bucket fill for every tree on Deploy."
+        subtitle="Your field day starts here. Check the trees, then head into the woods."
       />
 
-      <Box sx={{ mb: 3 }}>
-        <Card>
-          <CardContent>
-            <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline', justifyContent: 'space-between' }}>
-              <Typography variant="h6" component="h2">
-                RIT weather
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {dateOnly(new Date())}
-              </Typography>
-            </Stack>
-            {live.error ? <Alert severity="warning">{live.error}</Alert> : null}
-            {!live.data?.Configured && live.data?.Message ? <Alert severity="info">{live.data.Message}</Alert> : null}
-            {weather ? (
-              <>
-                <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', mt: 1 }}>
-                  <Typography variant="h3">{weather.Temperature_F}°F</Typography>
-                  <Chip label={weather.Description ?? weather.Conditions} size="small" variant="outlined" />
-                </Stack>
-                <Typography color="text.secondary">
-                  L {weather.Temp_Min_F}° · H {weather.Temp_Max_F}°
-                </Typography>
-                <Typography sx={{ mt: 1, mb: 1 }}>{weather.Summary}</Typography>
-                <Typography variant="overline" color="text.secondary">
-                  Week of {weekLabel(weekStart(new Date()))}
-                </Typography>
-                <Box sx={{ height: 240 }}>
-                  <SiteForecastChart rows={weekForecastRows(weather.Forecast)} />
-                </Box>
-              </>
-            ) : null}
-          </CardContent>
-        </Card>
-      </Box>
-
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ justifyContent: 'space-between' }}>
-            <Box>
-              <Typography variant="h6" component="h2">
-                2026 weight
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Gallons of sap in each 10 gallon bucket. Sugar content is the Brix reading from collection.
-              </Typography>
-            </Box>
-            <Button variant="outlined" onClick={() => navigate('/table')}>
-              Open Sugar Woods
-            </Button>
-          </Stack>
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-              <Typography variant="overline">In the buckets now</Typography>
-              {bushNodes.map((node) => {
-                const gallons = bucketGallons(node.Weight, node.Tare_Weight ?? 0);
-                const full = isFull(node.Weight, node.Tare_Weight ?? 0);
-                return (
-                  <Stack key={node.NodeID} direction="row" sx={{ justifyContent: 'space-between', py: 0.5 }}>
-                    <Typography>{node.Node_Name}</Typography>
-                    <Typography sx={{ fontWeight: 700 }}>
-                      {gallons == null ? '—' : `${gallons.toFixed(1)} gal · ${Number(node.Weight).toFixed(1)} lb`}
-                      {full ? ' · full' : ''}
-                    </Typography>
-                  </Stack>
-                );
-              })}
-            </Grid>
-            <Grid size={{ xs: 6, sm: 3, md: 2 }}>
-              <Typography variant="overline">Weight readings</Typography>
-              <Typography variant="h4">{totals.readings}</Typography>
-              <Typography variant="body2" color="text.secondary">
-                Nodes 001 and 002 in 2026
-              </Typography>
-            </Grid>
-            <Grid size={{ xs: 6, sm: 3, md: 2 }}>
-              <Typography variant="overline">Sugar content</Typography>
-              <Typography variant="h4">{totals.sugar == null ? '—' : `${totals.sugar.toFixed(1)}%`}</Typography>
-              <Typography variant="body2" color="text.secondary">
-                {totals.sugar == null ? 'Brix is recorded at collection' : 'Average Brix from recorded readings'}
-              </Typography>
-            </Grid>
-            <Grid size={{ xs: 6, sm: 3, md: 2 }}>
-              <Typography variant="overline">Shelf life</Typography>
-              <Typography variant="h4">{shortestShelf?.label ?? '—'}</Typography>
-              <Typography variant="body2" color="text.secondary">
-                {shortestShelf
-                  ? `Bucket ${shortestShelf.barcode ?? shortestShelf.bucketId} is closest, from ${shortestShelf.source}`
-                  : holdingSap
-                    ? 'Needs a temperature to time the sap in the buckets'
-                    : 'No sap in any bucket yet'}
-              </Typography>
-            </Grid>
-            <Grid size={{ xs: 6, sm: 3, md: 2 }}>
-              <Typography variant="overline">Estimated syrup</Typography>
-              <Typography variant="h4">{totals.syrup.toFixed(2)} gal</Typography>
-              <Typography variant="body2" color="text.secondary">
-                {totals.measured
-                  ? 'Rule of 86 where a tree was tested, the bush average elsewhere'
-                  : '43 gallons of sap per gallon of syrup until a tree is tested'}
-              </Typography>
-            </Grid>
-          </Grid>
-          {bushNodes.some((node) => isFull(node.Weight, node.Tare_Weight ?? 0)) ? (
-            <Alert severity="warning" sx={{ mt: 2 }} action={<Button color="inherit" onClick={() => navigate('/notifications')}>Alerts</Button>}>
-              A bucket is full. Collect it before it spills, or open the alerts.
-            </Alert>
-          ) : null}
-          {offlineNodes.length ? (
-            <Alert severity="error" sx={{ mt: 2 }} action={<Button color="inherit" onClick={() => navigate('/notifications')}>Alerts</Button>}>
-              {offlineNodes.map((node) => node.Node_Name).join(', ')} {offlineNodes.length === 1 ? 'is' : 'are'} offline and not reporting.
-            </Alert>
-          ) : null}
-        </CardContent>
-      </Card>
+      <FieldOverview fleet={fleet} />
 
       <FleetMapCard fleet={fleet} />
 
+      <div className="section-heading"><h2>Your trees</h2><span>Tap a tree for readings & details</span></div>
       <Grid container spacing={2}>
         {bushNodes.map((node) => {
           const status = node.mapStatus;
@@ -222,7 +114,7 @@ export function DashboardPage() {
             .join(' · ');
 
           return (
-            <Grid key={node.NodeID} size={{ xs: 12, md: 4 }}>
+            <Grid key={node.NodeID} size={{ xs: 12, sm: 6, xl: 4 }}>
               <Tooltip title={tip} placement="top" arrow>
                 <Card sx={{ height: '100%' }}>
                   <CardActionArea onClick={() => navigate(`/nodes/${node.NodeID}`)} sx={{ height: '100%' }}>
@@ -284,6 +176,123 @@ export function DashboardPage() {
           );
         })}
       </Grid>
+
+      <div className="section-heading"><h2>Conditions & yield</h2><span>A closer look at the season</span></div>
+      <Box sx={{ mb: 3 }}>
+        <Card>
+          <CardContent>
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline', justifyContent: 'space-between' }}>
+              <Typography variant="h6" component="h2">
+                RIT weather
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {dateOnly(new Date())}
+              </Typography>
+            </Stack>
+            {live.error ? <Alert severity="warning">{live.error}</Alert> : null}
+            {!live.data?.Configured && live.data?.Message ? <Alert severity="info">{live.data.Message}</Alert> : null}
+            {weather ? (
+              <>
+                <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', mt: 1 }}>
+                  <Typography variant="h3">{weather.Temperature_F}°F</Typography>
+                  <Chip label={weather.Description ?? weather.Conditions} size="small" variant="outlined" />
+                </Stack>
+                <Typography color="text.secondary">
+                  L {weather.Temp_Min_F}° · H {weather.Temp_Max_F}°
+                </Typography>
+                <Typography sx={{ mt: 1, mb: 1 }}>{weather.Summary}</Typography>
+                <Typography variant="overline" color="text.secondary">
+                  Week of {weekLabel(weekStart(new Date()))}
+                </Typography>
+                <Box sx={{ height: 240 }}>
+                  <SiteForecastChart rows={weekForecastRows(weather.Forecast)} />
+                </Box>
+              </>
+            ) : null}
+          </CardContent>
+        </Card>
+      </Box>
+
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ justifyContent: 'space-between' }}>
+            <Box>
+              <Typography variant="h6" component="h2">
+                2026 weight
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Gallons of sap in each 10 gallon bucket. Sugar content is the Brix reading from collection.
+              </Typography>
+            </Box>
+            <Button variant="outlined" onClick={() => navigate('/table')}>
+              Open Sugar Woods
+            </Button>
+          </Stack>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+              <Typography variant="overline">In the buckets now</Typography>
+              {bushNodes.map((node) => {
+                const gallons = bucketGallons(node.Weight, node.Tare_Weight ?? 0);
+                const full = isFull(node.Weight, node.Tare_Weight ?? 0);
+                return (
+                  <Stack key={node.NodeID} direction="row" sx={{ justifyContent: 'space-between', gap: 1, flexWrap: 'wrap', py: 0.5 }}>
+                    <Typography>{node.Node_Name}</Typography>
+                    <Typography sx={{ fontWeight: 700 }}>
+                      {gallons == null ? '—' : `${gallons.toFixed(1)} gal · ${Number(node.Weight).toFixed(1)} lb`}
+                      {full ? ' · full' : ''}
+                    </Typography>
+                  </Stack>
+                );
+              })}
+            </Grid>
+            <Grid size={{ xs: 6, sm: 3, md: 2 }}>
+              <Typography variant="overline">Weight readings</Typography>
+              <Typography variant="h4">{totals.readings}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Nodes 001 and 002 in 2026
+              </Typography>
+            </Grid>
+            <Grid size={{ xs: 6, sm: 3, md: 2 }}>
+              <Typography variant="overline">Sugar content</Typography>
+              <Typography variant="h4">{totals.sugar == null ? '—' : `${totals.sugar.toFixed(1)}%`}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                {totals.sugar == null ? 'Brix is recorded at collection' : 'Average Brix from recorded readings'}
+              </Typography>
+            </Grid>
+            <Grid size={{ xs: 6, sm: 3, md: 2 }}>
+              <Typography variant="overline">Shelf life</Typography>
+              <Typography variant="h4">{shortestShelf?.label ?? '—'}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                {shortestShelf
+                  ? `Bucket ${shortestShelf.barcode ?? shortestShelf.bucketId} is closest, from ${shortestShelf.source}`
+                  : holdingSap
+                    ? 'Needs a temperature to time the sap in the buckets'
+                    : 'No sap in any bucket yet'}
+              </Typography>
+            </Grid>
+            <Grid size={{ xs: 6, sm: 3, md: 2 }}>
+              <Typography variant="overline">Estimated syrup</Typography>
+              <Typography variant="h4">{totals.syrup.toFixed(2)} gal</Typography>
+              <Typography variant="body2" color="text.secondary">
+                {totals.measured
+                  ? 'Rule of 86 where a tree was tested, the bush average elsewhere'
+                  : '43 gallons of sap per gallon of syrup until a tree is tested'}
+              </Typography>
+            </Grid>
+          </Grid>
+          {bushNodes.some((node) => isFull(node.Weight, node.Tare_Weight ?? 0)) ? (
+            <Alert severity="warning" sx={{ mt: 2 }} action={can(Capability.VIEW_ALERTS) ? <Button color="inherit" onClick={() => navigate('/notifications')}>Alerts</Button> : null}>
+              A bucket is full. Arrange a collection before it spills.
+            </Alert>
+          ) : null}
+          {offlineNodes.length ? (
+            <Alert severity="error" sx={{ mt: 2 }} action={can(Capability.VIEW_ALERTS) ? <Button color="inherit" onClick={() => navigate('/notifications')}>Alerts</Button> : null}>
+              {offlineNodes.map((node) => node.Node_Name).join(', ')} {offlineNodes.length === 1 ? 'is' : 'are'} offline and not reporting.
+            </Alert>
+          ) : null}
+        </CardContent>
+      </Card>
+
     </>
   );
 }
