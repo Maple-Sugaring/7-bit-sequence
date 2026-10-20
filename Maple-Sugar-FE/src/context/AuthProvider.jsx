@@ -37,8 +37,11 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
+  const [signedOut, setSignedOut] = useState(false);
+
   const signIn = useCallback(async (credentials) => {
     const next = await authService.signIn(credentials);
+    setSignedOut(false);
     setSession(next);
     if (apiMode === 'mock') {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
@@ -48,6 +51,7 @@ export function AuthProvider({ children }) {
 
   const signOut = useCallback(async () => {
     await authService.signOut().catch(() => {});
+    setSignedOut(true);
     setSession(null);
     window.localStorage.removeItem(STORAGE_KEY);
   }, []);
@@ -73,12 +77,13 @@ export function AuthProvider({ children }) {
       capabilities: capabilitiesFor(role),
       isAuthenticated: Boolean(session?.user),
       restoring,
+      signedOut,
       can: (capability) => can(role, capability),
       signIn,
       signOut,
       refreshUser,
     };
-  }, [session, restoring, signIn, signOut, refreshUser]);
+  }, [session, restoring, signIn, signOut, signedOut, refreshUser]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
