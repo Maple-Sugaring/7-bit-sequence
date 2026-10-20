@@ -188,7 +188,6 @@ const PROGRAM_ROLES = [
       'Create, edit, and assign collection shifts linked to active tree alerts',
       'Invite @rit.edu and @g.rit.edu accounts with granular role and expiry controls',
     ],
-    actionLabel: 'Sign In as Admin',
   },
   {
     role: 'WINT-010 Students',
@@ -203,8 +202,6 @@ const PROGRAM_ROLES = [
       'Tap trees, harvest sap, and turn it into maple syrup while studying its history and economic significance',
       'Practice outdoor preparedness, leave-no-trace ethics, and winter snowshoe travel',
     ],
-    actionLabel: 'Explore WINT-010',
-    actionTarget: 'wint-010-class',
   },
 ];
 
@@ -287,7 +284,7 @@ export function LandingPage() {
               sx={{
                 fontWeight: 700,
                 letterSpacing: '-0.02em',
-                fontSize: { xs: 16, sm: 18 },
+                fontSize: { xs: 18, sm: 22 },
                 lineHeight: 1.1,
               }}
             >
@@ -1151,17 +1148,6 @@ export function LandingPage() {
                       </Stack>
                     </CardContent>
 
-                    <Box sx={{ px: 3.5, pb: 3 }}>
-                      <Button
-                        variant="outlined"
-                        color="secondary"
-                        fullWidth
-                        onClick={() => scrollToSection(item.actionTarget ?? 'sign-in-card')}
-                        sx={{ fontWeight: 700 }}
-                      >
-                        {item.actionLabel ?? `Sign In as ${item.role.split(' ')[0]}`}
-                      </Button>
-                    </Box>
                   </Card>
                 </Grid>
               );
