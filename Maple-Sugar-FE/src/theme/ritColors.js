@@ -49,8 +49,7 @@ export const sugarbush = {
   espresso: '#1C1613',
 };
 
-// Milo Serif and Neue Haas Grotesk are licensed and not distributable, so the
-// stack falls through to the RIT-approved substitutes.
+// RIT's app typography guidance specifies Roboto. The app self-hosts the font
+// through Fontsource, so its appearance does not depend on locally installed fonts.
 // https://www.rit.edu/brandportal/typography
-export const ritSansStack =
-  '"Neue Haas Grotesk", "Helvetica Neue", Helvetica, Roboto, Arial, sans-serif';
+export const ritSansStack = '"Roboto Variable", "Roboto", sans-serif';

@@ -66,7 +66,7 @@ export function GatewayCard({ gateway, nodeCount, onOpen }) {
         </Stack>
         <Typography
           variant="caption"
-          sx={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: accent, fontWeight: 600 }}
+          sx={{ color: accent, fontWeight: 600 }}
         >
           {gateway.Gateway_Code}
         </Typography>

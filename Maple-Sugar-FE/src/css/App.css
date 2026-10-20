@@ -1,6 +1,6 @@
 /* Mobile is the base layout. Wide screens use a sidebar. */
 html {
-  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-family: "Roboto Variable", "Roboto", sans-serif;
   scroll-padding-top: 88px;
   scroll-padding-bottom: 100px;
 }

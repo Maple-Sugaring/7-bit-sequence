@@ -82,7 +82,7 @@ export function NodeRow({ node, status, gatewayName, canDeploy, onOpen, onEdit, 
             <NodeStatusChip status={status} />
             <Typography
               variant="caption"
-              sx={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontWeight: 600, color: 'text.secondary' }}
+              sx={{ fontWeight: 600, color: 'text.secondary' }}
             >
               {node.Node_Code}
             </Typography>
