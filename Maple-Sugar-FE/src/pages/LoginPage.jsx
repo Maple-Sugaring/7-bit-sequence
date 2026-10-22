@@ -6,10 +6,12 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Divider from '@mui/material/Divider';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import ExploreOutlinedIcon from '@mui/icons-material/ExploreOutlined';
 import GoogleIcon from '@mui/icons-material/Google';
 import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import mapleLogo from '../assets/MapleLogo.png';
 import ritLogo from '../assets/RITLogo.png';
+import { useTour } from '../components/tour/tour';
 import { useAuth } from '../context/auth';
 import { canVisit, landingRouteFor } from '../routes/navigation';
 import { demoAccounts } from '../services/authService';
@@ -20,6 +22,7 @@ const DEMO_ACCOUNTS = demoAccounts();
 
 export function LoginPage() {
   const { isAuthenticated, restoring, role, signIn } = useAuth();
+  const tour = useTour();
   const [demoError, setDemoError] = useState(null);
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -79,6 +82,7 @@ export function LoginPage() {
         }}
       >
         <Box
+          data-tour="login-card"
           sx={{
             width: '100%',
             maxWidth: 460,
@@ -104,7 +108,7 @@ export function LoginPage() {
             </Typography>
           </Box>
 
-          <Stack spacing={2.5} sx={{ px: 4, pb: 4 }}>
+          <Stack data-tour="sign-in" spacing={2.5} sx={{ px: 4, pb: 4 }}>
             {restoring ? (
               <Box sx={{ display: 'grid', placeItems: 'center', py: 2 }}>
                 <CircularProgress size={28} sx={{ color: '#000' }} />
@@ -148,6 +152,11 @@ export function LoginPage() {
             )}
           </Stack>
         </Box>
+        {tour.active ? null : (
+          <Button startIcon={<ExploreOutlinedIcon />} onClick={tour.start} sx={{ mt: 2, color: '#4A4A4A' }}>
+            Take a quick tour
+          </Button>
+        )}
       </Box>
     </Box>
   );

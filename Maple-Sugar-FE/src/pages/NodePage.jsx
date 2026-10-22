@@ -158,7 +158,7 @@ export function NodePage() {
           </Card>
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
-          <Card>
+          <Card data-tour="node-bucket">
             <CardContent>
               <Typography variant="overline">Bucket</Typography>
               <Typography variant="h4">
@@ -200,7 +200,7 @@ export function NodePage() {
         </CardContent>
       </Card>
 
-      <Box sx={{ mb: 2 }}>
+      <Box data-tour="node-chart" sx={{ mb: 2 }}>
         <ChartCard
           title="2026 weight"
           description="Gallons and pounds. The axis starts at 0 and grows past 10 gallons if the sap freezes."

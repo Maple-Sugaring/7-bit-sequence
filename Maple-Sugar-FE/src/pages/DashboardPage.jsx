@@ -96,7 +96,7 @@ export function DashboardPage() {
 
       <div className="section-heading"><h2>Your trees</h2><span>Tap a tree for readings & details</span></div>
       <Grid container spacing={2}>
-        {bushNodes.map((node) => {
+        {bushNodes.map((node, index) => {
           const status = node.mapStatus;
           const gallons = bucketGallons(node.Weight, node.Tare_Weight ?? 0);
           const fill = bucketPercent(node.Weight, node.Tare_Weight ?? 0);
@@ -117,7 +117,11 @@ export function DashboardPage() {
             <Grid key={node.NodeID} size={{ xs: 12, sm: 6, xl: 4 }}>
               <Tooltip title={tip} placement="top" arrow>
                 <Card sx={{ height: '100%' }}>
-                  <CardActionArea onClick={() => navigate(`/nodes/${node.NodeID}`)} sx={{ height: '100%' }}>
+                  <CardActionArea
+                    data-tour={index === 0 ? 'tree-card' : undefined}
+                    onClick={() => navigate(`/nodes/${node.NodeID}`)}
+                    sx={{ height: '100%' }}
+                  >
                     <CardContent>
                       <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
                         <Typography variant="h6">{node.Stand}</Typography>

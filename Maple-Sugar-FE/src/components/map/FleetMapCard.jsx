@@ -21,7 +21,7 @@ export function FleetMapCard({ fleet }) {
   const counts = useMemo(() => statusCounts(fleet.nodes), [fleet.nodes]);
   const noLocation = fleet.nodes.filter((node) => !node.hasLocation).length;
   return (
-    <Card sx={{ mb: 2 }}>
+    <Card data-tour="fleet-map" sx={{ mb: 2 }}>
       <CardContent>
         <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
           <Typography component="h2" variant="h6">

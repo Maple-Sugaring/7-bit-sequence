@@ -13,11 +13,13 @@ import ListItemText from '@mui/material/ListItemText';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import EventIcon from '@mui/icons-material/Event';
+import ExploreOutlinedIcon from '@mui/icons-material/ExploreOutlined';
 import LogoutIcon from '@mui/icons-material/Logout';
 import SettingsIcon from '@mui/icons-material/Settings';
 import { Capability } from '../../business/permissions';
 import { useAuth } from '../../context/auth';
 import { useOpenAlertCount } from '../../services/hooks';
+import { useTour } from '../tour/tour';
 import { apiMode } from '../../data/apiClient';
 import { landingRouteFor } from '../../routes/navigation';
 import { Link, useNavigate } from 'react-router-dom';
@@ -26,6 +28,7 @@ import { Link, useNavigate } from 'react-router-dom';
 export function TopBar() {
   const navigate = useNavigate();
   const { user, role, can, signOut } = useAuth();
+  const tour = useTour();
   const [profileAnchor, setProfileAnchor] = useState(null);
   const canViewAlerts = can(Capability.VIEW_ALERTS);
   const alerts = useOpenAlertCount(canViewAlerts);
@@ -82,6 +85,11 @@ export function TopBar() {
       </Link>
       <Box sx={{ flex: 1 }} />
       {apiMode === 'mock' ? <span className="demo-badge">Demo</span> : null}
+      <Tooltip title="Take the tour">
+        <IconButton aria-label="Take the tour" onClick={tour.start} disabled={tour.active} sx={{ color: '#fff' }}>
+          <ExploreOutlinedIcon />
+        </IconButton>
+      </Tooltip>
       {canViewAlerts ? (
         <IconButton aria-label={`Notifications${openCount ? `, ${openCount} open` : ''}`} onClick={() => navigate('/notifications')} sx={{ color: '#fff' }}>
           <Badge badgeContent={openCount} color="error" invisible={openCount === 0}>
