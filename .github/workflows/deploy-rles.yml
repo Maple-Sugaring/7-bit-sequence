@@ -91,7 +91,9 @@ jobs:
 
   deploy:
     name: Deploy web and API
-    runs-on: ubuntu-latest
+    runs-on:
+      group: rles-deploy
+      labels: rles
     needs:
       - backend-checks
       - frontend-checks
@@ -103,39 +105,12 @@ jobs:
             exit 1
           fi
 
-      - name: Configure pinned SSH host key and deploy key
-        env:
-          RLES_DEPLOY_KEY: ${{ secrets.RLES_DEPLOY_KEY }}
-        run: |
-          set -euo pipefail
-          if [ -z "$RLES_DEPLOY_KEY" ]; then
-            echo "Add the RLES_DEPLOY_KEY repository secret before deploying."
-            exit 1
-          fi
-
-          install -m 700 -d "$HOME/.ssh"
-          cat > "$HOME/.ssh/known_hosts" <<'HOSTKEY'
-          [maplesugaring01.webdev.gccis.rit.edu]:22010 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINc1SBwwG//ju17yzsoHDsL6vg/59paBAc+Dqij7eGxF
-          HOSTKEY
-          printf '%s\n' "$RLES_DEPLOY_KEY" > "$HOME/.ssh/rles_deploy"
-          chmod 600 "$HOME/.ssh/rles_deploy"
-          ssh-keygen -y -f "$HOME/.ssh/rles_deploy" >/dev/null
-
       - name: Pull, build, restart, and verify
         env:
           DEPLOY_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          ssh \
-            -i "$HOME/.ssh/rles_deploy" \
-            -o BatchMode=yes \
-            -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \
-            -p 22010 \
-            student@maplesugaring01.webdev.gccis.rit.edu \
-            bash -s -- "$DEPLOY_SHA" <<'REMOTE'
-          set -euo pipefail
-          deploy_sha="$1"
+          deploy_sha="$DEPLOY_SHA"
           app_dir=/home/student/maple/app
 
           cd "$app_dir"
@@ -179,7 +154,7 @@ jobs:
           cat /tmp/rles-deployment.json 2>/dev/null || true
           docker compose ps api web
           exit 1
-          REMOTE
+        shell: bash
 
       - name: Record deployed commit
         run: |
