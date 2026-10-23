@@ -53,7 +53,7 @@ Behavior (loop):
 - Hold PRG for 3 seconds to tare ("Taring..." then blink). Do this with an empty platform.
 - After transmitting it listens for 4 s for one downlink addressed to its code (`"Node_Code":"<code>"`). An `Interval_Seconds` is applied (10 to 86400 s) and persisted in NVS (`Preferences` namespace `maple`). A `Command_Id` with `Action` `TARE` or `CAL` (+ `Pounds`) queues a tare or a test-weight calibration; see [Calibration from the app](#calibration-from-the-app).
 - Up to 750 ms of random jitter is added to each packet so two nodes on the same interval do not keep colliding.
-- Faults are sent instead of weight: `load-cell` (no HX711, or ten identical samples, which means DT is stuck), `untared`, `unstable` (spread over 0.3 lb in a sample), `reversed` (more than 0.3 lb below tare). Both limits are in pounds, converted with the current counts per pound.
+- Faults are sent instead of weight: `load-cell` (no HX711, or ten identical samples, which means DT is stuck), `untared`, `unstable` (spread over 0.5 lb in a sample, after dropping the high and low), `reversed` (more than 1 lb below tare). Both limits are in pounds, converted with the current counts per pound. Except `untared`, a fault is sent only after it shows on 5 measurements in a row (about 5 s), so a gust or a bump does not raise one.
 
 Serial commands (newline terminated, on USB or UART0):
 
