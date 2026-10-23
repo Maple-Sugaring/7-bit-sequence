@@ -15,7 +15,8 @@
     "check-ingest": "node --env-file=.env scripts/check-ingest.js",
     "test": "node --test --test-concurrency=1 \"test/**/*.test.js\"",
     "lint": "eslint .",
-    "check-env": "node scripts/check-env-sync.js"
+    "check-env": "node scripts/check-env-sync.js",
+    "mint-gmail-token": "node --env-file=.env scripts/mint-gmail-token.js"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",

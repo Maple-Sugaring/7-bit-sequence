@@ -8,15 +8,15 @@ import { isMailEnabled, sendEmail } from '../services/mailService.js';
 /** Email preferences live on /profile; this is only the delivery check. */
 export const notificationsRouter = Router();
 
-/** Admin-only check that the Brevo key and sender actually deliver. */
+/** Admin-only check that the configured mail transport actually delivers. */
 notificationsRouter.post('/test', requireCapability(Capability.MANAGE_USERS), async (req, res) => {
   if (!isMailEnabled()) {
-    throw unavailable('Email is off. Set BREVO_API_KEY and MAIL_FROM on the server.', 'MAIL_DISABLED');
+    throw unavailable('Email is off. Set MAIL_FROM and GMAIL_REFRESH_TOKEN or BREVO_API_KEY on the server.', 'MAIL_DISABLED');
   }
   try {
     await sendEmail({ to: req.user, ...testEmail(), tags: ['test'] });
   } catch (error) {
-    throw new ApiError('Brevo did not accept the test email. Check the API key and sender.', {
+    throw new ApiError('The mail service did not accept the test email. Check the mail settings and sender.', {
       status: 502,
       code: 'MAIL_FAILED',
       cause: error,

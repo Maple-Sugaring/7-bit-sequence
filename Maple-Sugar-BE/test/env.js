@@ -20,6 +20,7 @@ process.env.ALLOWED_EMAIL_DOMAINS = 'g.rit.edu,rit.edu';
 process.env.CORS_ORIGINS = '';
 process.env.GATEWAY_INGEST_TOKEN = 'test-gateway-token';
 process.env.BREVO_API_KEY = '';
+process.env.GMAIL_REFRESH_TOKEN = '';
 process.env.MAIL_FROM = '';
 process.env.ALERT_EMAILS = '';
 process.env.SMTP_URL = '';

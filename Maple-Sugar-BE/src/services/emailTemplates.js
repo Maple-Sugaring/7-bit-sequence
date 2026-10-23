@@ -229,7 +229,7 @@ export function testEmail() {
     subject: 'Maple Sugaring test email',
     ...layout({
       heading: 'Email is working',
-      paragraphs: ['Brevo delivered this test message from the Maple Sugaring API.'],
+      paragraphs: ['The Maple Sugaring API delivered this test message.'],
       action: { label: 'Open the app', href: link('/dashboard') },
     }),
   };
