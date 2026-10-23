@@ -4,9 +4,9 @@
  * In-app notifications already exist. Each channel fires only when its own
  * settings are present, so a laptop checkout never mails or texts the crew:
  *
- * - Email through Brevo's free tier to opted-in users plus ALERT_EMAILS, once
- *   BREVO_API_KEY and MAIL_FROM are set.
- * - Email through SMTP_URL to ALERT_EMAILS, only while Brevo is off. This keeps
+ * - Email through mailService (Gmail API or Brevo) to opted-in users plus
+ *   ALERT_EMAILS, once MAIL_FROM and a transport are set.
+ * - Email through SMTP_URL to ALERT_EMAILS, only while that mail is off. This keeps
  *   a deployment that predates Brevo alerting after upgrading.
  * - SMS through Twilio to ALERT_SMS_TO (FR-006), independent of email.
  *

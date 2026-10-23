@@ -18,7 +18,13 @@ afterEach(() => {
   globalThis.fetch = realFetch;
   config.brevo.apiKey = null;
   config.brevo.sender = null;
+  config.gmail.refreshToken = null;
 });
+
+/** Decodes the base64url MIME message the Gmail API was handed. */
+function decodeRaw(init) {
+  return Buffer.from(JSON.parse(init.body).raw, 'base64url').toString('utf8');
+}
 
 describe('mail recipients', () => {
   test('dedupes case-insensitively and accepts user rows', () => {
@@ -84,6 +90,87 @@ describe('Brevo transport', () => {
     await assert.rejects(
       sendEmail({ to: 'a@rit.edu', subject: 's', html: 'h', text: 't' }),
       (error) => error.status === 401,
+    );
+  });
+});
+
+describe('Gmail transport', () => {
+  test('refreshes an access token and sends one message per recipient', async () => {
+    config.gmail.refreshToken = 'refresh-one';
+    config.brevo.sender = 'ritmaplesugaring@gmail.com';
+    const requests = [];
+    globalThis.fetch = async (url, init) => {
+      requests.push({ url: String(url), init });
+      if (String(url) === 'https://oauth2.googleapis.com/token') {
+        return new Response(JSON.stringify({ access_token: 'access-one', expires_in: 3599 }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ id: 'm1' }), { status: 200 });
+    };
+
+    const result = await sendEmail({
+      to: ['a@rit.edu', { email: 'b@rit.edu', name: 'Bea' }],
+      subject: 'Hello',
+      html: '<p>hi</p>',
+      text: 'hi',
+    });
+
+    assert.equal(result.sent, 2);
+    const [token, ...sends] = requests;
+    const tokenBody = new URLSearchParams(token.init.body);
+    assert.equal(tokenBody.get('grant_type'), 'refresh_token');
+    assert.equal(tokenBody.get('refresh_token'), 'refresh-one');
+    assert.equal(sends.length, 2);
+    for (const send of sends) {
+      assert.equal(send.url, 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send');
+      assert.equal(send.init.headers.authorization, 'Bearer access-one');
+    }
+    const first = decodeRaw(sends[0].init);
+    assert.match(first, /^From: RIT Maple Sugaring <ritmaplesugaring@gmail\.com>/m);
+    assert.match(first, /^To: a@rit\.edu/m);
+    assert.match(first, /^Subject: Hello/m);
+    assert.match(decodeRaw(sends[1].init), /^To: Bea <b@rit\.edu>/m);
+  });
+
+  test('reuses the access token until it expires', async () => {
+    config.gmail.refreshToken = 'refresh-two';
+    config.brevo.sender = 'ritmaplesugaring@gmail.com';
+    let tokenCalls = 0;
+    globalThis.fetch = async (url) => {
+      if (String(url) === 'https://oauth2.googleapis.com/token') {
+        tokenCalls += 1;
+        return new Response(JSON.stringify({ access_token: 'access-two', expires_in: 3599 }), { status: 200 });
+      }
+      return new Response('{}', { status: 200 });
+    };
+
+    await sendEmail({ to: 'a@rit.edu', subject: 's', html: 'h', text: 't' });
+    await sendEmail({ to: 'b@rit.edu', subject: 's', html: 'h', text: 't' });
+    assert.equal(tokenCalls, 1);
+  });
+
+  test('wins over Brevo when both are configured', async () => {
+    config.gmail.refreshToken = 'refresh-three';
+    config.brevo.apiKey = 'xkeysib-test';
+    config.brevo.sender = 'ritmaplesugaring@gmail.com';
+    const urls = [];
+    globalThis.fetch = async (url) => {
+      urls.push(String(url));
+      return new Response(JSON.stringify({ access_token: 'x', expires_in: 3599 }), { status: 200 });
+    };
+
+    await sendEmail({ to: 'a@rit.edu', subject: 's', html: 'h', text: 't' });
+    assert.ok(!urls.some((url) => url.includes('brevo')));
+  });
+
+  test('throws with the Google status when the refresh token is revoked', async () => {
+    config.gmail.refreshToken = 'refresh-revoked';
+    config.brevo.sender = 'ritmaplesugaring@gmail.com';
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify({ error: 'invalid_grant' }), { status: 400 });
+
+    await assert.rejects(
+      sendEmail({ to: 'a@rit.edu', subject: 's', html: 'h', text: 't' }),
+      (error) => error.status === 400 && /invalid_grant/.test(error.message),
     );
   });
 });

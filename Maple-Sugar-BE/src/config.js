@@ -140,6 +140,12 @@ export const config = {
     sender: optional('MAIL_FROM').toLowerCase() || null,
     senderName: optional('MAIL_FROM_NAME', 'RIT Maple Sugaring'),
   },
+  // Email through the Gmail API as the MAIL_FROM Gmail account, using the
+  // Google client above. Takes over from Brevo when set: Google signs the mail
+  // for gmail.com, which Brevo cannot do for a Gmail sender.
+  gmail: {
+    refreshToken: optional('GMAIL_REFRESH_TOKEN') || null,
+  },
   // Extra critical-alert recipients on top of users who opted in, e.g. a
   // shared club inbox that has no account.
   alertEmails: list('ALERT_EMAILS'),
