@@ -5,7 +5,15 @@ from __future__ import annotations
 import unittest
 from unittest.mock import Mock
 
-from receiver import build_ingest_body, downlink_command, forward_status, parse_reading
+from receiver import (
+    PacketStore,
+    build_ingest_body,
+    downlink_command,
+    forward_status,
+    line_packet,
+    parse_reading,
+    process_packet,
+)
 
 
 def response(accepted: list[dict]) -> Mock:
@@ -71,6 +79,56 @@ class ForwardStatusTest(unittest.TestCase):
     def test_a_real_duplicate_is_still_reported(self) -> None:
         status = forward_status(self.reply([{"Duplicate": True}]))
         self.assertEqual(status["detail"], "duplicate reading")
+
+
+class PacketStoreTest(unittest.TestCase):
+    def test_nodes_keep_counts_past_the_history_limit(self) -> None:
+        store = PacketStore(history_limit=2)
+        for text in (
+            '{"Node_Code":"NODE-001","Weight":1}',
+            '{"Node_Code":"NODE-002","Weight":2}',
+            '{"Node_Code":"NODE-001","Fault":"unstable"}',
+        ):
+            store.add(line_packet(text))
+        snap = store.snapshot()
+        self.assertEqual(len(snap["packets"]), 2)
+        nodes = {node["node_code"]: node for node in snap["nodes"]}
+        self.assertEqual(nodes["NODE-001"]["packets"], 2)
+        self.assertEqual(nodes["NODE-001"]["faults"], 1)
+        self.assertEqual(nodes["NODE-001"]["last_weight"], 1.0)
+        self.assertEqual(nodes["NODE-002"]["packets"], 1)
+
+    def test_since_returns_only_newer_packets(self) -> None:
+        store = PacketStore()
+        for weight in (1, 2, 3):
+            store.add(line_packet(f'{{"Node_Code":"NODE-001","Weight":{weight}}}'))
+        seqs = [packet["seq"] for packet in store.snapshot(since=1)["packets"]]
+        self.assertEqual(seqs, [3, 2])
+
+    def test_parse_errors_are_counted(self) -> None:
+        store = PacketStore()
+        store.add(line_packet('{"Weight":1}'))
+        self.assertEqual(store.snapshot()["parse_errors"], 1)
+
+
+class ProcessPacketTest(unittest.TestCase):
+    def test_the_downlink_is_kept_on_the_packet(self) -> None:
+        packet = line_packet('{"Node_Code":"NODE-001","Weight":1,"Interval_Seconds":900}')
+        send = Mock(return_value="INTERVAL NODE-001 10\n")
+        command = process_packet(packet, True, "token", "url", "GW", send=send)
+        self.assertEqual(command, "INTERVAL NODE-001 10\n")
+        self.assertEqual(packet["downlink"], "INTERVAL NODE-001 10")
+
+    def test_local_only_mode_says_so(self) -> None:
+        packet = line_packet('{"Node_Code":"NODE-001","Weight":1}')
+        self.assertIsNone(process_packet(packet, False, "", "url", "GW"))
+        self.assertIsNone(packet["downlink"])
+        self.assertIn("FORWARD_TO_SERVER=0", packet["forward"]["detail"])
+
+    def test_missing_token_is_reported(self) -> None:
+        packet = line_packet('{"Node_Code":"NODE-001","Weight":1}')
+        process_packet(packet, True, "", "url", "GW")
+        self.assertIn("GATEWAY_INGEST_TOKEN is empty", packet["forward"]["detail"])
 
 
 if __name__ == "__main__":

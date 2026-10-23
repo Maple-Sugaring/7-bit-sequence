@@ -2,188 +2,822 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Maple gateway link test</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#20221e" />
+    <title>Maple gateway</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23F76902'/%3E%3Cpath d='M16 5 9 15h4l-5 7h6v5h4v-5h6l-5-7h4z' fill='%2320221e'/%3E%3C/svg%3E"
+    />
     <style>
+      /* Tokens follow Maple-Sugar-FE (src/theme/ritColors.js, src/css/App.css). */
       :root {
-        --bg: #1c1410;
-        --panel: #2a1d16;
-        --ink: #f4ebe3;
-        --muted: #c4b2a4;
-        --line: #4a3428;
-        --wait: #c9a227;
-        --up: #3f8f5a;
-        --bad: #c4493a;
-        --accent: #e4572e;
+        --orange: #f76902;
+        --orange-text: #c75300;
+        --orange-dark: #a34300;
+        --bar: #20221e;
+        --bar-muted: #c3c6bc;
+        --canvas: #f6f3f0;
+        --paper: #ffffff;
+        --ink: #24241f;
+        --muted: #69675f;
+        --line: #e2ddd7;
+        --soft: #faf8f6;
+        --ok: #2e7d32;
+        --ok-bg: #e8f3e9;
+        --warn: #ed6c02;
+        --warn-bg: #fff1e5;
+        --bad: #d32f2f;
+        --bad-bg: #fdecec;
+        --info: #0288d1;
+        --info-bg: #e5f3fb;
+        --idle: #6b7280;
+        --idle-bg: #f0f0ef;
+        --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        color-scheme: light;
       }
       * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        font-family: "Avenir Next", "Segoe UI", sans-serif;
-        background: var(--bg);
-        color: var(--ink);
+      html {
+        font-family: "Neue Haas Grotesk", "Helvetica Neue", Helvetica, Roboto, Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
       }
-      header {
-        padding: 1.25rem 1.5rem 1rem;
-        border-bottom: 1px solid var(--line);
+      body { margin: 0; background: var(--canvas); color: var(--ink); min-height: 100svh; }
+      button, input, select { font: inherit; color: inherit; }
+      :focus-visible { outline: 3px solid var(--orange); outline-offset: 2px; }
+      .sr-only {
+        position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+        overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
       }
-      header p { margin: 0.35rem 0 0; color: var(--muted); }
-      main { padding: 1.25rem 1.5rem 2rem; max-width: 980px; }
-      .banner {
-        border-radius: 12px;
-        padding: 1.1rem 1.2rem;
-        margin-bottom: 1.25rem;
-        border: 1px solid var(--line);
+
+      /* Top bar */
+      .topbar {
+        position: sticky; top: 0; z-index: 10;
+        display: flex; align-items: center; gap: 12px;
+        min-height: 72px; padding: env(safe-area-inset-top) 24px 0;
+        background: var(--bar); color: #fff;
+        border-bottom: 2px solid var(--orange);
       }
-      .banner.wait { background: #3a2e12; }
-      .banner.up { background: #163222; }
-      .banner.error { background: #3a1c18; }
-      .banner h2 { margin: 0 0 0.25rem; font-size: 1.4rem; }
-      .grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-        gap: 0.75rem;
-        margin-bottom: 1.25rem;
+      .topbar :focus-visible { outline-color: #ffae71; }
+      .brand { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 700; letter-spacing: -0.4px; line-height: 1.2; }
+      .brand-mark {
+        width: 36px; height: 40px; border-radius: 12px; flex-shrink: 0;
+        display: grid; place-items: center; background: var(--orange); color: var(--bar);
       }
-      .card {
-        background: var(--panel);
-        border: 1px solid var(--line);
-        border-radius: 10px;
-        padding: 0.85rem 1rem;
+      .brand-caption { display: block; color: var(--bar-muted); font-size: 9px; letter-spacing: 1.5px; font-weight: 500; margin-top: 5px; }
+      .spacer { flex: 1; }
+      .live {
+        display: inline-flex; align-items: center; gap: 8px;
+        font-size: 13px; font-weight: 600; color: #fff;
+        border: 1px solid #4a4c45; border-radius: 999px; padding: 6px 12px;
       }
-      .card span { display: block; color: var(--muted); font-size: 0.8rem; }
-      .card strong { font-size: 1.35rem; }
-      table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
-      th, td { text-align: left; padding: 0.55rem 0.4rem; border-bottom: 1px solid var(--line); }
-      th { color: var(--muted); font-weight: 600; }
-      .pill {
-        display: inline-block;
-        padding: 0.15rem 0.5rem;
-        border-radius: 999px;
-        font-size: 0.78rem;
-        background: #3a2a22;
+      .live-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--idle); }
+      .live[data-state="live"] .live-dot { background: #84bd00; box-shadow: 0 0 0 0 rgba(132, 189, 0, 0.6); animation: pulse 2s infinite; }
+      .live[data-state="paused"] .live-dot { background: #f6be00; }
+      .live[data-state="offline"] .live-dot { background: #da291c; }
+      @keyframes pulse { 70% { box-shadow: 0 0 0 7px rgba(132, 189, 0, 0); } 100% { box-shadow: 0 0 0 0 rgba(132, 189, 0, 0); } }
+      @media (prefers-reduced-motion: reduce) { .live-dot, .row-new { animation: none !important; } }
+
+      main { width: 100%; max-width: 1200px; margin: 0 auto; padding: 24px 16px 48px; }
+      @media (min-width: 600px) { main { padding: 32px 24px 48px; } }
+
+      .page-header { display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px; }
+      .page-header h1 { font-size: clamp(28px, 3vw, 38px); line-height: 1.12; font-weight: 700; letter-spacing: -1.2px; margin: 0 0 8px; }
+      .page-header p { color: var(--muted); font-size: 14px; line-height: 1.6; margin: 0; max-width: 44rem; }
+      .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+      @media (min-width: 900px) { .page-header { flex-direction: row; justify-content: space-between; align-items: center; } }
+
+      .btn {
+        display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+        min-height: 44px; padding: 0 16px; border-radius: 12px;
+        border: 1px solid var(--line); background: var(--paper);
+        font-weight: 600; font-size: 14px; cursor: pointer;
       }
-      .pill.ok { background: #1f4a2e; }
-      .pill.bad { background: #5a221c; }
-      code { font-size: 0.8rem; color: var(--muted); }
-      .empty { color: var(--muted); padding: 1rem 0; }
+      .btn:hover { background: var(--soft); border-color: #cfc8c0; }
+      .btn.primary { background: var(--orange); border-color: var(--orange); color: #fff; }
+      .btn.primary:hover { background: var(--orange-text); border-color: var(--orange-text); }
+      .btn svg { width: 18px; height: 18px; }
+      kbd {
+        font-family: var(--mono); font-size: 11px; padding: 1px 5px; border-radius: 4px;
+        border: 1px solid var(--line); background: var(--soft); color: var(--muted);
+      }
+      .btn.primary kbd { background: rgba(255, 255, 255, 0.2); border-color: transparent; color: #fff; }
+
+      .paper { background: var(--paper); border: 1px solid var(--line); border-radius: 16px; }
+      section + section { margin-top: 24px; }
+      .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+      .section-head h2 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.4px; }
+      .section-head .hint { color: var(--muted); font-size: 13px; }
+
+      /* Link banner */
+      .banner { display: flex; gap: 16px; align-items: flex-start; padding: 18px 20px; border-left: 6px solid var(--idle); }
+      .banner h2 { margin: 0 0 4px; font-size: 20px; letter-spacing: -0.4px; }
+      .banner p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+      .banner .glyph { width: 28px; height: 28px; flex-shrink: 0; margin-top: 1px; }
+      .banner[data-kind="up"] { border-left-color: var(--ok); }
+      .banner[data-kind="wait"] { border-left-color: var(--warn); }
+      .banner[data-kind="error"] { border-left-color: var(--bad); }
+
+      /* Stat tiles */
+      .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+      @media (min-width: 760px) { .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+      @media (min-width: 1040px) { .stats { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+      .stat { padding: 14px 16px; min-width: 0; }
+      .stat .label { display: block; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: 0.2px; }
+      .stat .value { display: block; font-size: 26px; font-weight: 700; letter-spacing: -0.8px; margin-top: 4px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .stat .sub { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+      /* Node cards */
+      .nodes { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 12px; }
+      .node { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+      .node-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      .node { cursor: pointer; }
+      .node:hover { border-color: #cfc8c0; }
+      .node.selected { border-color: var(--orange); box-shadow: 0 0 0 1px var(--orange); }
+      .node-head h3 { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
+      .node-filter { border: 0; background: none; padding: 0; font: inherit; cursor: pointer; min-height: 28px; }
+      .node-weight { font-size: 34px; font-weight: 700; letter-spacing: -1px; font-variant-numeric: tabular-nums; line-height: 1; }
+      .node-weight small { font-size: 15px; font-weight: 600; color: var(--muted); letter-spacing: 0; margin-left: 4px; }
+      .node-fault { font-size: 13px; color: var(--bad); font-weight: 600; }
+      .node-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; font-size: 13px; }
+      .node-grid dt { color: var(--muted); font-size: 12px; }
+      .node-grid dd { margin: 2px 0 0; font-weight: 600; font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 6px; }
+      .meter { height: 8px; border-radius: 4px; background: rgba(0, 0, 0, 0.1); overflow: hidden; margin-top: 6px; }
+      .meter > span { display: block; height: 100%; border-radius: 4px; }
+      .bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; }
+      .bars i { width: 4px; border-radius: 1px; background: #d6d1ca; }
+      .bars i:nth-child(1) { height: 4px; } .bars i:nth-child(2) { height: 7px; }
+      .bars i:nth-child(3) { height: 10px; } .bars i:nth-child(4) { height: 14px; }
+      .bars i.on { background: var(--ink); }
+      .spark { width: 100%; height: 36px; display: block; }
+      .node-foot { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; }
+      .node-foot code { font-family: var(--mono); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+      /* Chips */
+      .chip {
+        display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+        height: 24px; padding: 0 9px; border-radius: 999px;
+        font-size: 12px; font-weight: 600; background: var(--idle-bg); color: #3f444c;
+      }
+      .chip svg { width: 13px; height: 13px; }
+      .chip.ok { background: var(--ok-bg); color: #1e5e22; }
+      .chip.warn { background: var(--warn-bg); color: #9a4600; }
+      .chip.bad { background: var(--bad-bg); color: #a32020; }
+      .chip.info { background: var(--info-bg); color: #01588a; }
+      .chip.tx { background: #fff1e5; color: var(--orange-dark); }
+
+      /* Packet log */
+      .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px; border-bottom: 1px solid var(--line); }
+      .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+      .seg button { min-height: 40px; padding: 0 12px; border: 0; background: var(--paper); font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+      .seg button + button { border-left: 1px solid var(--line); }
+      .seg button[aria-pressed="true"] { background: var(--bar); color: #fff; }
+      .seg .count { font-size: 11px; font-weight: 600; opacity: 0.7; font-variant-numeric: tabular-nums; }
+      .field { min-height: 40px; border: 1px solid var(--line); border-radius: 12px; padding: 0 12px; background: var(--paper); font-size: 14px; }
+      .search { flex: 1 1 200px; min-width: 0; position: relative; }
+      .search input { width: 100%; padding-right: 36px; }
+      .search kbd { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; }
+      .table-wrap { overflow-x: auto; }
+      table { width: 100%; border-collapse: collapse; font-size: 14px; }
+      th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; white-space: nowrap; }
+      th { color: var(--muted); font-weight: 600; font-size: 12px; background: var(--soft); position: sticky; top: 0; }
+      td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+      tbody tr.pkt { cursor: pointer; }
+      tbody tr.pkt:hover td { background: var(--soft); }
+      tbody tr.pkt[aria-expanded="true"] td { background: #fdf6f0; }
+      .when { display: block; font-variant-numeric: tabular-nums; }
+      .ago { display: block; font-size: 12px; color: var(--muted); }
+      .seq { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; }
+      .dir { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+      .tx-line { display: block; margin-top: 4px; font-family: var(--mono); font-size: 12px; color: var(--orange-dark); }
+      .detail td { background: #fdf6f0; white-space: normal; padding: 0 12px 14px; }
+      .detail-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); }
+      .detail h4 { margin: 0 0 6px; font-size: 12px; color: var(--muted); font-weight: 600; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+      pre {
+        margin: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--paper);
+        font-family: var(--mono); font-size: 12px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto;
+      }
+      .copy { border: 0; background: none; color: var(--orange-text); font-weight: 600; font-size: 12px; cursor: pointer; padding: 4px; min-height: 28px; }
+      .empty { color: var(--muted); padding: 28px 16px; text-align: center; font-size: 14px; }
+      .row-new td { animation: flash 2.4s ease-out; }
+      @keyframes flash { from { background: #ffe3cc; } to { background: transparent; } }
+      .new-pill {
+        display: none; margin: 10px auto 0; border: 0; border-radius: 999px; padding: 8px 14px;
+        background: var(--orange); color: #fff; font-weight: 600; font-size: 13px; cursor: pointer;
+      }
+      .new-pill.show { display: block; }
+      .log-foot { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 14px; color: var(--muted); font-size: 12px; }
+      @media (max-width: 700px) { .hide-sm { display: none; } }
+
+      /* Config */
+      details.config { padding: 0; }
+      details.config summary { cursor: pointer; padding: 14px 16px; font-weight: 600; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+      details.config summary::-webkit-details-marker { display: none; }
+      details.config summary::after { content: "Show"; color: var(--orange-text); font-size: 13px; }
+      details.config[open] summary::after { content: "Hide"; }
+      .config-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px 24px; padding: 0 16px 16px; margin: 0; font-size: 14px; }
+      .config-grid dt { color: var(--muted); font-size: 12px; }
+      .config-grid dd { margin: 2px 0 0; font-weight: 600; overflow-wrap: anywhere; }
+      .config-grid code { font-family: var(--mono); font-size: 13px; font-weight: 500; }
+
+      .toast {
+        position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px); opacity: 0;
+        background: var(--bar); color: #fff; padding: 10px 16px; border-radius: 12px; font-size: 14px; font-weight: 600;
+        transition: opacity 0.2s, transform 0.2s; pointer-events: none; z-index: 20;
+      }
+      .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+      @media (max-width: 520px) {
+        .topbar { padding-left: 16px; padding-right: 16px; }
+        .brand-mark { display: none; }
+        .live .live-text { display: none; }
+        kbd { display: none; }
+      }
     </style>
   </head>
   <body>
-    <header>
-      <h1>Maple gateway link test</h1>
-      <p>Two Heltec nodes → gateway Heltec → this Pi over USB. This page is local and does not need the maple server.</p>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 2 6 11h3l-4 6h5v5h4v-5h5l-4-6h3z" /></svg>
+        </span>
+        <span>Maple Sugaring<span class="brand-caption">RIT · LORA GATEWAY</span></span>
+      </div>
+      <div class="spacer"></div>
+      <span class="live" id="live" data-state="live" role="status" aria-live="polite">
+        <span class="live-dot" aria-hidden="true"></span><span class="live-text" id="live-text">Connecting</span>
+      </span>
     </header>
+
     <main>
-      <section id="banner" class="banner wait">
-        <h2 id="banner-title">Waiting for packets</h2>
-        <p id="banner-detail">Opening the gateway USB port…</p>
-      </section>
-      <section class="grid">
-        <div class="card"><span>Packets received</span><strong id="rx-count">0</strong></div>
-        <div class="card"><span>Seconds since last RX</span><strong id="age">—</strong></div>
-        <div class="card"><span>Last RSSI</span><strong id="rssi">—</strong></div>
-        <div class="card"><span>Ingest POST</span><strong id="forward">skipped</strong></div>
-      </section>
-      <section class="card" style="margin-bottom: 1.25rem">
-        <span>Last sap reading</span>
-        <p id="last-reading" class="empty">Nothing yet. Watch a node OLED for “Sent OK” and the gateway for “RX”.</p>
-      </section>
+      <div class="page-header">
+        <div>
+          <h1>Gateway packets</h1>
+          <p>Readings the gateway Heltec hears over LoRa, what this Pi forwards to the maple server, and the commands it radios back to each node.</p>
+        </div>
+        <div class="actions">
+          <button class="btn primary" id="pause" type="button" aria-pressed="false">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" id="pause-icon"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
+            <span id="pause-label">Pause</span> <kbd>P</kbd>
+          </button>
+          <button class="btn" id="export-csv" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14" /></svg>
+            CSV
+          </button>
+          <button class="btn" id="export-json" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14" /></svg>
+            JSON
+          </button>
+        </div>
+      </div>
+
       <section>
-        <h2>Recent packets</h2>
-        <div id="table-wrap"><p class="empty">History fills in as packets arrive.</p></div>
+        <div class="paper banner" id="banner" data-kind="wait">
+          <svg class="glyph" id="banner-glyph" viewBox="0 0 28 28" aria-hidden="true"></svg>
+          <div>
+            <h2 id="banner-title">Waiting for packets</h2>
+            <p id="banner-detail">Opening the gateway USB port…</p>
+          </div>
+        </div>
+        <div class="stats">
+          <div class="paper stat"><span class="label">Packets received</span><span class="value" id="s-rx">0</span><span class="sub" id="s-rate">—</span></div>
+          <div class="paper stat"><span class="label">Last packet</span><span class="value" id="s-age">—</span><span class="sub" id="s-age-sub">nothing yet</span></div>
+          <div class="paper stat"><span class="label">Forwarded to server</span><span class="value" id="s-fwd">—</span><span class="sub" id="s-fwd-sub">—</span></div>
+          <div class="paper stat"><span class="label">Commands sent</span><span class="value" id="s-tx">0</span><span class="sub" id="s-tx-sub">downlinks to nodes</span></div>
+          <div class="paper stat"><span class="label">Parse errors</span><span class="value" id="s-err">0</span><span class="sub" id="s-err-sub">bad JSON lines</span></div>
+          <div class="paper stat"><span class="label">Receiver uptime</span><span class="value" id="s-up">—</span><span class="sub" id="s-up-sub">—</span></div>
+        </div>
+      </section>
+
+      <section aria-labelledby="nodes-title">
+        <div class="section-head">
+          <h2 id="nodes-title">Nodes</h2>
+          <span class="hint">Click a node to filter the log. Stale after 3 missed intervals.</span>
+        </div>
+        <div class="nodes" id="nodes"><div class="paper empty">No nodes heard yet. Watch a node OLED for “Sent OK” and the gateway for “RX”.</div></div>
+      </section>
+
+      <section aria-labelledby="log-title">
+        <div class="section-head">
+          <h2 id="log-title">Packet log</h2>
+          <span class="hint">Times in your local timezone. Click a row for the raw line and server reply.</span>
+        </div>
+        <div class="paper">
+          <div class="toolbar">
+            <div class="seg" role="group" aria-label="Show">
+              <button type="button" data-view="all" aria-pressed="true">All <span class="count" id="c-all">0</span></button>
+              <button type="button" data-view="tx" aria-pressed="false">Commands <span class="count" id="c-tx">0</span></button>
+              <button type="button" data-view="issues" aria-pressed="false">Issues <span class="count" id="c-issues">0</span></button>
+            </div>
+            <label class="sr-only" for="node-filter">Node</label>
+            <select class="field" id="node-filter"><option value="">All nodes</option></select>
+            <div class="search">
+              <label class="sr-only" for="search">Search packets</label>
+              <input class="field" id="search" type="search" placeholder="Search raw lines, faults, status…" autocomplete="off" />
+              <kbd>/</kbd>
+            </div>
+          </div>
+          <button class="new-pill" id="new-pill" type="button"></button>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">#</th>
+                  <th scope="col">Received</th>
+                  <th scope="col">Node</th>
+                  <th scope="col" class="num">Weight</th>
+                  <th scope="col" class="num hide-sm">Battery</th>
+                  <th scope="col" class="num hide-sm">RSSI</th>
+                  <th scope="col">Reading</th>
+                  <th scope="col">Server</th>
+                </tr>
+              </thead>
+              <tbody id="rows"></tbody>
+            </table>
+          </div>
+          <div class="empty" id="log-empty">History fills in as packets arrive.</div>
+          <div class="log-foot"><span id="log-count"></span><span id="log-limit"></span></div>
+        </div>
+      </section>
+
+      <section>
+        <details class="paper config" id="config">
+          <summary>Receiver settings</summary>
+          <dl class="config-grid" id="config-grid"></dl>
+        </details>
       </section>
     </main>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
     <script>
-      const banner = document.getElementById("banner");
-      const bannerTitle = document.getElementById("banner-title");
-      const bannerDetail = document.getElementById("banner-detail");
+      const POLL_MS = 2000;
+      const $ = (id) => document.getElementById(id);
+      const state = {
+        packets: [],          // newest first, merged across polls
+        snap: null,
+        startedAt: null,
+        lastSeq: 0,
+        paused: false,
+        held: 0,              // packets that arrived while paused
+        offline: false,
+        expanded: new Set(),
+        freshSeqs: new Set(),
+        view: "all",
+        node: "",
+        query: "",
+      };
 
-      function ageSeconds(iso) {
-        if (!iso) return null;
-        return Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000));
+      // Remember filters per browser; the page still works without storage.
+      try {
+        const saved = JSON.parse(localStorage.getItem("gateway-filters") || "{}");
+        if (["all", "tx", "issues"].includes(saved.view)) state.view = saved.view;
+        if (typeof saved.node === "string") state.node = saved.node;
+      } catch {}
+      function saveFilters() {
+        try { localStorage.setItem("gateway-filters", JSON.stringify({ view: state.view, node: state.node })); } catch {}
       }
 
-      function render(data) {
-        const last = data.last;
-        const age = ageSeconds(data.last_received_at);
-        let kind = "wait";
-        let title = "Waiting for packets";
-        if (data.radio_status === "error") {
-          kind = "error";
-          title = "Serial error";
-        } else if (data.rx_count > 0 && age !== null && age < 180) {
-          kind = "up";
-          title = "Link up";
+      function h(tag, attrs = {}, ...children) {
+        const el = document.createElement(tag);
+        for (const [key, value] of Object.entries(attrs)) {
+          if (value == null || value === false) continue;
+          if (key === "class") el.className = value;
+          else if (key === "text") el.textContent = value;
+          else if (key.startsWith("on")) el.addEventListener(key.slice(2), value);
+          else el.setAttribute(key, value === true ? "" : value);
         }
-        banner.className = "banner " + kind;
-        bannerTitle.textContent = title;
-        bannerDetail.textContent = data.radio_detail || "";
-        document.getElementById("rx-count").textContent = data.rx_count;
-        document.getElementById("age").textContent = age === null ? "—" : age + "s";
-        document.getElementById("rssi").textContent =
-          last && last.rssi_dbm != null ? last.rssi_dbm + " dBm" : "—";
-        document.getElementById("forward").textContent = last
-          ? last.forward.status
-          : "skipped";
-
-        const reading = document.getElementById("last-reading");
-        if (!last) {
-          reading.className = "empty";
-          reading.textContent = "Nothing yet. Watch a node OLED for “Sent OK” and the gateway for “RX”.";
-        } else if (last.parse_error) {
-          reading.className = "";
-          reading.textContent = "Parse issue: " + last.parse_error + "  raw: " + last.raw_text;
-        } else {
-          const p = last.payload;
-          reading.className = "";
-          reading.textContent =
-            p.Node_Code +
-            "   " + p.Weight + " lb   battery " +
-            (p.Battery_Percent ?? "—") + "%   RSSI " +
-            (p.Signal_Rssi ?? "—") + " dBm";
+        for (const child of children.flat()) {
+          if (child == null || child === false) continue;
+          el.append(child instanceof Node ? child : document.createTextNode(String(child)));
         }
+        return el;
+      }
 
-        if (!data.packets.length) return;
-        const rows = data.packets.map((pkt) => {
+      // Shapes match the main app's status chips so state reads without colour.
+      const SHAPES = {
+        dot: '<circle cx="14" cy="14" r="9" fill="currentColor"/>',
+        ring: '<circle cx="14" cy="14" r="9" stroke="currentColor" stroke-width="3" fill="none"/>',
+        triangle: '<path d="M14 4 L25 23 H3 Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round" fill="none"/><path d="M14 11 V16 M14 19.5 V20" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>',
+        square: '<rect x="5" y="5" width="18" height="18" rx="3" fill="currentColor"/>',
+        slash: '<circle cx="14" cy="14" r="9" stroke="currentColor" stroke-width="3" fill="none"/><path d="M8 20 L20 8" stroke="currentColor" stroke-width="3"/>',
+        up: '<path d="M14 23 V6 M7 12 L14 5 L21 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+      };
+      function glyph(shape) {
+        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("viewBox", "0 0 28 28");
+        svg.setAttribute("aria-hidden", "true");
+        svg.innerHTML = SHAPES[shape] || SHAPES.dot; // constant markup only
+        return svg;
+      }
+      function chip(kind, shape, label, title) {
+        return h("span", { class: "chip " + kind, title }, glyph(shape), label);
+      }
+
+      // ---- time helpers (server sends UTC; display is local) ----
+      const timeFmt = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" });
+      const dateTimeFmt = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "medium" });
+      let clockSkew = 0; // server_time - local time, so "ago" is right even if the Pi clock drifts
+      const now = () => Date.now() + clockSkew;
+      function secondsSince(iso) {
+        return iso ? Math.max(0, Math.round((now() - Date.parse(iso)) / 1000)) : null;
+      }
+      function ago(iso) {
+        const s = secondsSince(iso);
+        if (s == null) return "—";
+        if (s < 5) return "just now";
+        if (s < 60) return s + "s ago";
+        if (s < 3600) return Math.floor(s / 60) + "m " + (s % 60) + "s ago";
+        if (s < 86400) return Math.floor(s / 3600) + "h " + Math.floor((s % 3600) / 60) + "m ago";
+        return Math.floor(s / 86400) + "d ago";
+      }
+      function duration(s) {
+        if (s == null) return "—";
+        if (s < 60) return s + "s";
+        if (s < 3600) return Math.floor(s / 60) + "m";
+        if (s < 86400) return Math.floor(s / 3600) + "h " + Math.floor((s % 3600) / 60) + "m";
+        return Math.floor(s / 86400) + "d " + Math.floor((s % 86400) / 3600) + "h";
+      }
+      function timeCell(iso) {
+        return [
+          h("span", { class: "when", title: dateTimeFmt.format(new Date(iso)), text: timeFmt.format(new Date(iso)) }),
+          h("span", { class: "ago", "data-ago": iso, text: ago(iso) }),
+        ];
+      }
+
+      // ---- classification ----
+      function forwardChip(fwd) {
+        const status = fwd?.status || "skipped";
+        if (status === "201") return chip("ok", "dot", "Saved", fwd.detail);
+        if (status === "200") {
+          if (fwd.detail === "duplicate reading") return chip("info", "ring", "Duplicate", fwd.detail);
+          if (fwd.detail === "fault recorded") return chip("warn", "triangle", "Fault saved", fwd.detail);
+          return chip("ok", "dot", "Accepted", fwd.detail);
+        }
+        if (status === "skipped") return chip("", "slash", "Not sent", fwd?.detail);
+        if (status === "error") return chip("bad", "square", "No connection", fwd.detail);
+        return chip("bad", "square", "HTTP " + status, fwd?.detail);
+      }
+      function forwardOk(fwd) { return fwd && (fwd.status === "201" || fwd.status === "200"); }
+      function forwardFailed(fwd) { return fwd && !forwardOk(fwd) && fwd.status !== "skipped"; }
+      function readingChip(pkt) {
+        if (pkt.parse_error) return chip("bad", "square", "Parse error", pkt.parse_error);
+        if (pkt.payload?.Fault) return chip("warn", "triangle", pkt.payload.Fault, "Node reported a fault");
+        return chip("ok", "dot", "OK");
+      }
+      function isIssue(pkt) { return Boolean(pkt.parse_error || pkt.payload?.Fault || forwardFailed(pkt.forward)); }
+      function nodeOf(pkt) { return pkt.payload?.Node_Code || null; }
+
+      function nodeStatus(node) {
+        const age = secondsSince(node.last_seen);
+        const interval = node.interval_seconds || 10;
+        if (age != null && age > Math.max(interval * 10, 600)) return { kind: "", shape: "slash", label: "Offline" };
+        if (age != null && age > interval * 3 + 5) return { kind: "warn", shape: "ring", label: "Stale" };
+        if (node.last_fault) return { kind: "warn", shape: "triangle", label: "Fault" };
+        return { kind: "ok", shape: "dot", label: "Online" };
+      }
+      function batteryColor(pct) { return pct == null ? "var(--idle)" : pct <= 20 ? "var(--bad)" : pct <= 40 ? "var(--warn)" : "var(--ok)"; }
+      function rssiBars(rssi) {
+        const on = rssi == null ? 0 : rssi >= -70 ? 4 : rssi >= -85 ? 3 : rssi >= -100 ? 2 : 1;
+        return h("span", { class: "bars", "aria-hidden": "true" }, [1, 2, 3, 4].map((n) => h("i", { class: n <= on ? "on" : "" })));
+      }
+      function fmtWeight(w) { return w == null ? "—" : Number(w).toFixed(2); }
+
+      // ---- rendering ----
+      function renderStatus() {
+        const snap = state.snap;
+        const live = $("live");
+        if (state.offline) { live.dataset.state = "offline"; $("live-text").textContent = "Page offline"; }
+        else if (state.paused) { live.dataset.state = "paused"; $("live-text").textContent = state.held ? `Paused · ${state.held} new` : "Paused"; }
+        else { live.dataset.state = "live"; $("live-text").textContent = "Live"; }
+        if (!snap) return;
+
+        const age = secondsSince(snap.last_received_at);
+        let kind = "wait", shape = "ring", title = "Waiting for packets";
+        if (state.offline) { kind = "error"; shape = "square"; title = "Can't reach the Pi"; }
+        else if (snap.radio_status === "error") { kind = "error"; shape = "square"; title = "Gateway USB problem"; }
+        else if (snap.rx_count > 0 && age != null && age < 180) { kind = "up"; shape = "dot"; title = "Link up"; }
+        else if (snap.rx_count > 0) { title = "Link quiet"; }
+        const banner = $("banner");
+        banner.dataset.kind = kind;
+        $("banner-glyph").innerHTML = SHAPES[shape];
+        $("banner-glyph").style.color = { up: "var(--ok)", wait: "var(--warn)", error: "var(--bad)" }[kind];
+        $("banner-title").textContent = title;
+        let detail = state.offline ? "The dashboard stopped answering. Retrying every few seconds." : snap.radio_detail || "";
+        if (!state.offline && kind === "wait" && snap.rx_count > 0) detail = `No packets for ${duration(age)}. Check the nodes are powered and in range.`;
+        $("banner-detail").textContent = detail;
+
+        document.title = (kind === "up" ? "● " : kind === "error" ? "✕ " : "○ ") + `Maple gateway · ${snap.rx_count}`;
+
+        $("s-rx").textContent = snap.rx_count.toLocaleString();
+        const minuteAgo = now() - 60000;
+        const perMin = state.packets.filter((p) => Date.parse(p.received_at) >= minuteAgo).length;
+        $("s-rate").textContent = `${perMin} in the last minute`;
+        $("s-age").textContent = age == null ? "—" : age < 5 ? "now" : duration(age);
+        $("s-age-sub").textContent = snap.last_received_at ? timeFmt.format(new Date(snap.last_received_at)) : "nothing yet";
+
+        const cfg = snap.config || {};
+        const sent = state.packets.filter((p) => p.forward && p.forward.status !== "skipped");
+        const ok = sent.filter((p) => forwardOk(p.forward)).length;
+        if (cfg.forward === false) { $("s-fwd").textContent = "Off"; $("s-fwd-sub").textContent = "FORWARD_TO_SERVER=0"; }
+        else if (cfg.forward && !cfg.token_set) { $("s-fwd").textContent = "No token"; $("s-fwd-sub").textContent = "set GATEWAY_INGEST_TOKEN"; }
+        else if (!sent.length) { $("s-fwd").textContent = "—"; $("s-fwd-sub").textContent = "nothing sent yet"; }
+        else { $("s-fwd").textContent = Math.round((ok / sent.length) * 100) + "%"; $("s-fwd-sub").textContent = `${ok} of ${sent.length} recent accepted`; }
+
+        $("s-tx").textContent = (snap.downlinks ?? 0).toLocaleString();
+        const lastTx = state.packets.find((p) => p.downlink);
+        $("s-tx-sub").textContent = lastTx ? `last ${ago(lastTx.received_at)}` : "downlinks to nodes";
+        $("s-err").textContent = (snap.parse_errors ?? 0).toLocaleString();
+        $("s-up").textContent = duration(secondsSince(snap.started_at));
+        $("s-up-sub").textContent = "since " + dateTimeFmt.format(new Date(snap.started_at));
+      }
+
+      function sparkline(node) {
+        const points = state.packets
+          .filter((p) => nodeOf(p) === node.node_code && p.payload?.Weight != null)
+          .slice(0, 40)
+          .reverse()
+          .map((p) => p.payload.Weight);
+        if (points.length < 2) return null;
+        const min = Math.min(...points), max = Math.max(...points);
+        const span = max - min || 1;
+        const w = 240, hgt = 36, pad = 3;
+        const d = points.map((v, i) => {
+          const x = (i / (points.length - 1)) * w;
+          const y = hgt - pad - ((v - min) / span) * (hgt - pad * 2);
+          return (i ? "L" : "M") + x.toFixed(1) + " " + y.toFixed(1);
+        }).join(" ");
+        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("class", "spark");
+        svg.setAttribute("viewBox", `0 0 ${w} ${hgt}`);
+        svg.setAttribute("preserveAspectRatio", "none");
+        svg.setAttribute("role", "img");
+        svg.setAttribute("aria-label", `Weight trend, ${min.toFixed(2)} to ${max.toFixed(2)} lb over the last ${points.length} readings`);
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", d);
+        path.setAttribute("fill", "none");
+        path.setAttribute("stroke", "#f76902");
+        path.setAttribute("stroke-width", "2");
+        path.setAttribute("vector-effect", "non-scaling-stroke");
+        path.setAttribute("stroke-linejoin", "round");
+        svg.append(path);
+        return svg;
+      }
+
+      function renderNodes() {
+        const nodes = state.snap?.nodes || [];
+        const wrap = $("nodes");
+        if (!nodes.length) return;
+        wrap.replaceChildren(...nodes.map((node) => {
+          const status = nodeStatus(node);
+          const selected = state.node === node.node_code;
+          const card = h("article", {
+            class: "paper node" + (selected ? " selected" : ""),
+            onclick: (e) => { if (!e.target.closest("button")) setNode(selected ? "" : node.node_code); },
+          },
+            h("div", { class: "node-head" },
+              h("h3", {}, h("button", {
+                type: "button",
+                class: "node-filter",
+                "aria-pressed": selected ? "true" : "false",
+                title: selected ? "Show all nodes in the log" : `Show only ${node.node_code} in the log`,
+                onclick: () => setNode(selected ? "" : node.node_code),
+              }, node.node_code)),
+              chip(status.kind, status.shape, status.label)),
+            h("div", {},
+              h("div", { class: "node-weight" }, fmtWeight(node.last_weight), h("small", { text: "lb" })),
+              node.last_fault ? h("div", { class: "node-fault", text: "Fault: " + node.last_fault }) : null,
+            ),
+            sparkline(node),
+            h("dl", { class: "node-grid" },
+              h("div", {}, h("dt", { text: "Battery" }),
+                h("dd", { text: node.battery_percent == null ? "—" : node.battery_percent + "%" }),
+                h("div", { class: "meter" }, h("span", { style: `width:${Math.max(0, Math.min(100, node.battery_percent || 0))}%;background:${batteryColor(node.battery_percent)}` }))),
+              h("div", {}, h("dt", { text: "Signal" }), h("dd", {}, rssiBars(node.rssi_dbm), node.rssi_dbm == null ? "—" : node.rssi_dbm + " dBm")),
+              h("div", {}, h("dt", { text: "Interval" }), h("dd", { text: node.interval_seconds ? duration(node.interval_seconds) : "—" })),
+              h("div", {}, h("dt", { text: "Packets" }), h("dd", { text: `${node.packets.toLocaleString()}${node.faults ? ` · ${node.faults} faults` : ""}` })),
+            ),
+            h("div", { class: "node-foot" },
+              h("span", { "data-ago": node.last_seen, text: ago(node.last_seen) }),
+              node.last_downlink ? h("code", { title: "Last command sent", text: "↑ " + node.last_downlink }) : h("span", { text: node.counts_per_lb ? `${Math.round(node.counts_per_lb)} counts/lb` : "" }),
+            ),
+          );
+          return card;
+        }));
+
+        const select = $("node-filter");
+        const known = new Set([...select.options].map((o) => o.value));
+        for (const node of nodes) {
+          if (!known.has(node.node_code)) select.append(h("option", { value: node.node_code, text: node.node_code }));
+        }
+        if (state.node && !known.has(state.node) && !nodes.some((n) => n.node_code === state.node)) {
+          select.append(h("option", { value: state.node, text: state.node }));
+        }
+        select.value = state.node;
+      }
+
+      function matches(pkt) {
+        if (state.node && nodeOf(pkt) !== state.node) return false;
+        if (state.view === "tx" && !pkt.downlink) return false;
+        if (state.view === "issues" && !isIssue(pkt)) return false;
+        if (state.query) {
+          const hay = [pkt.raw_text, pkt.parse_error, pkt.downlink, pkt.forward?.status, pkt.forward?.detail, nodeOf(pkt), pkt.payload?.Fault]
+            .filter(Boolean).join(" ").toLowerCase();
+          if (!hay.includes(state.query)) return false;
+        }
+        return true;
+      }
+
+      function detailRow(pkt) {
+        const blocks = [
+          ["Raw line from gateway", pkt.raw_text],
+          pkt.ingest ? ["Posted to server", JSON.stringify(pkt.ingest, null, 2)] : null,
+          ["Server reply", `${pkt.forward?.status ?? "—"}  ${pkt.forward?.detail ?? ""}`],
+          pkt.downlink ? ["Command radioed back", pkt.downlink] : null,
+        ].filter(Boolean);
+        return h("tr", { class: "detail" }, h("td", { colspan: "8" },
+          h("div", { class: "detail-grid" }, blocks.map(([label, text]) =>
+            h("div", {},
+              h("h4", {}, label, h("button", { class: "copy", type: "button", onclick: (e) => { e.stopPropagation(); copy(text, label); } }, "Copy")),
+              h("pre", { text }),
+            ),
+          )),
+        ));
+      }
+
+      function renderLog() {
+        const all = state.packets;
+        $("c-all").textContent = all.filter((p) => !state.node || nodeOf(p) === state.node).length;
+        $("c-tx").textContent = all.filter((p) => p.downlink && (!state.node || nodeOf(p) === state.node)).length;
+        $("c-issues").textContent = all.filter((p) => isIssue(p) && (!state.node || nodeOf(p) === state.node)).length;
+        for (const btn of document.querySelectorAll(".seg button")) btn.setAttribute("aria-pressed", String(btn.dataset.view === state.view));
+
+        const shown = all.filter(matches);
+        const rows = [];
+        for (const pkt of shown) {
           const p = pkt.payload || {};
-          const pillClass = pkt.parse_error ? "bad" : "ok";
-          const pill = pkt.parse_error ? pkt.parse_error : "ok";
-          return `<tr>
-            <td>${pkt.seq}</td>
-            <td>${pkt.received_at.replace("T", " ").replace("Z", " UTC")}</td>
-            <td>${p.Node_Code ?? "—"}</td>
-            <td>${p.Weight ?? "—"}</td>
-            <td>${p.Battery_Percent ?? "—"}</td>
-            <td>${pkt.rssi_dbm ?? "—"}</td>
-            <td><span class="pill ${pillClass}">${pill}</span></td>
-            <td><span class="pill">${pkt.forward.status}</span></td>
-          </tr>`;
-        }).join("");
-        document.getElementById("table-wrap").innerHTML = `
-          <table>
-            <thead>
-              <tr>
-                <th>#</th><th>Received</th><th>Node</th><th>lb</th>
-                <th>Battery</th><th>RSSI</th><th>Parse</th><th>POST</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>`;
+          const open = state.expanded.has(pkt.seq);
+          rows.push(h("tr", {
+            class: "pkt" + (state.freshSeqs.has(pkt.seq) ? " row-new" : ""),
+            tabindex: "0",
+            "aria-expanded": open ? "true" : "false",
+            onclick: () => toggle(pkt.seq),
+            onkeydown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(pkt.seq); } },
+          },
+            h("td", { class: "seq", text: pkt.seq }),
+            h("td", {}, timeCell(pkt.received_at)),
+            h("td", {}, h("strong", { text: p.Node_Code ?? "—" })),
+            h("td", { class: "num", text: p.Weight != null ? fmtWeight(p.Weight) + " lb" : "—" }),
+            h("td", { class: "num hide-sm", text: p.Battery_Percent != null ? p.Battery_Percent + "%" : "—" }),
+            h("td", { class: "num hide-sm", text: pkt.rssi_dbm != null ? pkt.rssi_dbm + " dBm" : "—" }),
+            h("td", {}, h("span", { class: "dir" }, readingChip(pkt), pkt.downlink ? chip("tx", "up", pkt.downlink.split(" ").filter((_, i) => i !== 1).join(" "), "Command radioed back: " + pkt.downlink) : null)),
+            h("td", {}, forwardChip(pkt.forward)),
+          ));
+          if (open) rows.push(detailRow(pkt));
+        }
+        $("rows").replaceChildren(...rows);
+        state.freshSeqs.clear();
+
+        const empty = $("log-empty");
+        empty.hidden = shown.length > 0;
+        empty.textContent = all.length ? "No packets match these filters." : "History fills in as packets arrive.";
+        $("log-count").textContent = all.length ? `Showing ${shown.length} of ${all.length} packets` : "";
+        $("log-limit").textContent = state.snap ? `Pi keeps the last ${state.snap.history_limit} packets` : "";
       }
 
+      function renderConfig() {
+        const cfg = state.snap?.config;
+        if (!cfg || !Object.keys(cfg).length) return;
+        const rows = [
+          ["Serial port", h("code", { text: `${cfg.serial} @ ${cfg.baud}` })],
+          ["Gateway code", h("code", { text: cfg.gateway_code })],
+          ["Forward to server", cfg.forward ? "On" : "Off (local only)"],
+          ["Ingest token", cfg.token_set ? "Set" : "Not set"],
+          ["Ingest URL", h("code", { text: cfg.api_url })],
+        ];
+        $("config-grid").replaceChildren(...rows.flatMap(([k, v]) => [h("div", {}, h("dt", { text: k }), h("dd", {}, v))]));
+      }
+
+      function renderAll(logChanged) { renderStatus(); renderNodes(); if (logChanged) renderLog(); renderConfig(); }
+
+      // ---- interactions ----
+      function toggle(seq) {
+        if (state.expanded.has(seq)) state.expanded.delete(seq); else state.expanded.add(seq);
+        renderLog();
+      }
+      function setNode(code) { state.node = code; saveFilters(); renderNodes(); renderLog(); }
+      function setPaused(paused) {
+        state.paused = paused;
+        $("pause").setAttribute("aria-pressed", String(paused));
+        $("pause-label").textContent = paused ? "Resume" : "Pause";
+        $("pause-icon").innerHTML = paused ? '<path d="M8 5v14l11-7z"/>' : '<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>';
+        if (!paused) { state.held = 0; updateNewPill(); tick(); }
+        renderStatus();
+      }
+      function updateNewPill() {
+        const pill = $("new-pill");
+        pill.classList.toggle("show", state.paused && state.held > 0);
+        pill.textContent = `${state.held} new packet${state.held === 1 ? "" : "s"} · Resume`;
+      }
+      let toastTimer;
+      function toast(msg) {
+        const el = $("toast");
+        el.textContent = msg;
+        el.classList.add("show");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => el.classList.remove("show"), 1800);
+      }
+      async function copy(text, label) {
+        try { await navigator.clipboard.writeText(text); toast(label + " copied"); }
+        catch { toast("Copy blocked by the browser"); }
+      }
+      function download(name, type, body) {
+        const url = URL.createObjectURL(new Blob([body], { type }));
+        const a = h("a", { href: url, download: name });
+        document.body.append(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+      function exportRows() { return state.packets.filter(matches); }
+      function stamp() { return new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19); }
+      $("export-json").addEventListener("click", () => {
+        const rows = exportRows();
+        download(`gateway-packets-${stamp()}.json`, "application/json", JSON.stringify(rows, null, 2));
+        toast(`Exported ${rows.length} packets`);
+      });
+      $("export-csv").addEventListener("click", () => {
+        const cols = ["seq", "received_at", "node", "weight_lb", "battery_percent", "rssi_dbm", "interval_s", "fault", "parse_error", "server_status", "server_detail", "downlink", "raw"];
+        const cell = (v) => {
+          let s = v == null ? "" : String(v);
+          if (typeof v === "string" && /^[\t\r\n ]*[=+\-@]/.test(s)) s = "'" + s;
+          return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+        };
+        const rows = exportRows().map((p) => [
+          p.seq, p.received_at, p.payload?.Node_Code, p.payload?.Weight, p.payload?.Battery_Percent, p.rssi_dbm,
+          p.payload?.Interval_Seconds, p.payload?.Fault, p.parse_error, p.forward?.status, p.forward?.detail, p.downlink, p.raw_text,
+        ].map(cell).join(","));
+        download(`gateway-packets-${stamp()}.csv`, "text/csv", [cols.join(","), ...rows].join("\n"));
+        toast(`Exported ${rows.length} packets`);
+      });
+      $("pause").addEventListener("click", () => setPaused(!state.paused));
+      $("new-pill").addEventListener("click", () => setPaused(false));
+      for (const btn of document.querySelectorAll(".seg button")) {
+        btn.addEventListener("click", () => { state.view = btn.dataset.view; saveFilters(); renderLog(); });
+      }
+      $("node-filter").addEventListener("change", (e) => setNode(e.target.value));
+      $("search").addEventListener("input", (e) => { state.query = e.target.value.trim().toLowerCase(); renderLog(); });
+      document.addEventListener("keydown", (e) => {
+        const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName);
+        if (e.key === "/" && !typing) { e.preventDefault(); $("search").focus(); }
+        else if ((e.key === "p" || e.key === "P") && !typing && !e.metaKey && !e.ctrlKey) setPaused(!state.paused);
+        else if (e.key === "Escape" && document.activeElement === $("search")) { $("search").value = ""; state.query = ""; renderLog(); $("search").blur(); }
+      });
+
+      // ---- polling ----
       async function tick() {
+        if (state.paused) {
+          // Keep the status fresh and count what's waiting, without touching the log.
+          try {
+            const res = await fetch(`/api/packets?since=${state.lastSeq + 1e9}`, { cache: "no-store" });
+            const snap = await res.json();
+            state.held = Math.max(0, snap.rx_count - state.lastSeq);
+            state.offline = false;
+            state.snap = snap;
+            updateNewPill();
+          } catch { state.offline = true; }
+          renderStatus();
+          return;
+        }
         try {
-          const res = await fetch("/api/packets");
-          render(await res.json());
+          const res = await fetch(`/api/packets?since=${state.lastSeq}`, { cache: "no-store" });
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          const snap = await res.json();
+          state.offline = false;
+          clockSkew = Date.parse(snap.server_time) - Date.now();
+          // A restarted receiver starts counting from 1 again; start over.
+          if (state.startedAt && snap.started_at !== state.startedAt) {
+            state.packets = []; state.lastSeq = 0; state.expanded.clear(); state.startedAt = snap.started_at;
+            return tick();
+          }
+          const first = !state.snap;
+          state.startedAt = snap.started_at;
+          if (snap.packets.length) {
+            if (state.lastSeq) for (const p of snap.packets) state.freshSeqs.add(p.seq);
+            state.packets = snap.packets.concat(state.packets).slice(0, snap.history_limit);
+            state.lastSeq = snap.packets[0].seq;
+          }
+          state.snap = snap;
+          renderAll(first || snap.packets.length > 0);
         } catch (err) {
-          banner.className = "banner error";
-          bannerTitle.textContent = "Dashboard unreachable";
-          bannerDetail.textContent = String(err);
+          state.offline = true;
+          renderStatus();
         }
       }
+
+      // Tick the relative times every second without rebuilding the page.
+      setInterval(() => {
+        for (const el of document.querySelectorAll("[data-ago]")) el.textContent = ago(el.dataset.ago);
+        if (state.snap) renderStatus();
+      }, 1000);
+
       tick();
-      setInterval(tick, 2000);
+      setInterval(tick, POLL_MS);
     </script>
   </body>
 </html>
