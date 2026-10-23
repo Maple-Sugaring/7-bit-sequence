@@ -126,8 +126,20 @@ export function updateNodeDetails(nodeId, body) {
   return nodesRepository.updateNodeDetails(nodeId, body);
 }
 
-export function setReportInterval(nodeId, minutes) {
-  return nodesRepository.setReportInterval(nodeId, minutes);
+export function setReportInterval(nodeId, seconds) {
+  return nodesRepository.setReportInterval(nodeId, seconds);
+}
+
+export function getCalibration(nodeId) {
+  return nodesRepository.getCalibration(nodeId);
+}
+
+export function tareNode(nodeId) {
+  return nodesRepository.requestCalibration(nodeId, { Action: 'tare' });
+}
+
+export function calibrateNode(nodeId, pounds) {
+  return nodesRepository.requestCalibration(nodeId, { Action: 'calibrate', Pounds: Number(pounds) });
 }
 
 export function setMaintenanceMode(nodeId, enabled) {

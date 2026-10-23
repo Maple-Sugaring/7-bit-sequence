@@ -4,7 +4,7 @@ This is not LoRaWAN. Raw LoRa point to point with RadioLib.
 
 ```
 Heltec NODE --LoRa JSON--> Heltec GATEWAY --USB serial--> Raspberry Pi :8080 --HTTPS--> /api/ingest
-                                       <-- INTERVAL <code> <s> -- (Pi writes back over USB)
+                                       <-- INTERVAL <code> <s> | CMD <code> <id> TARE|CAL <lb> -- (Pi writes back over USB)
 ```
 
 ## Radio settings (must match on every board)
@@ -40,17 +40,20 @@ Environments:
 | `node_001` | `NODE-001` | `TX_OFFSET_MS=0` |
 | `node_002` | `NODE-002` | `TX_OFFSET_MS=10000` so the two nodes do not collide |
 | `field` | `MAPLENODE00000000` placeholder | The image the website flashes. Node code is stamped into flash at `0x670000` by the web flasher. `TX_INTERVAL_MS=20000`. |
+| `field_four_cell` | same as `field` | `field` plus `-DLOAD_CELL_FOUR_HALF_BRIDGE` for the four-cell platform. Flash from a laptop (`pio run -e field_four_cell -t upload`); the website only serves `field`. Keeps the stamped node code. Run `CAL <pounds>` once after flashing. |
 
-Hardware: HX711 on GPIO 6 (DT) and 7 (SCK); load cell Guang Ce YZC-1B, 50 kg, 2.0 mV/V, channel A gain 128 (counts per pound derived from the datasheet, `CELL_CAL_REV 2`); OLED SSD1306 on GPIO 17/18/21; battery ADC GPIO 1 (enable 37); PRG button GPIO 0. The USB-C jack is a CP2102 on UART0 (GPIO 43/44), which is what the web flasher and a laptop open.
+Hardware: HX711 on GPIO 6 (DT) and 7 (SCK); load cell Guang Ce YZC-1B, 50 kg, 2.0 mV/V (`CELL_CAL_REV 2`), or with `LOAD_CELL_FOUR_HALF_BRIDGE` four 50 kg half-bridge cells as one bridge, 200 kg, about 2.1 mV/V measured on NODE-001 (`CELL_CAL_REV 3`); channel A gain 128, counts per pound from those figures until `CAL` stores a measured value. Switching sensor type discards the stored zero and calibration and tares again on the next reading; OLED SSD1306 on GPIO 17/18/21; battery ADC GPIO 1 (enable 37); PRG button GPIO 0. The USB-C jack is a CP2102 on UART0 (GPIO 43/44), which is what the web flasher and a laptop open.
 
 Identity: at boot the node reads `MAPLEID1` + code at flash `0x670000` (written by the web flasher). Otherwise it uses a compiled `NODE_CODE` that is not the placeholder. If neither, the OLED says "No node code / Flash again from Deploy" and the node idles.
 
 Behavior (loop):
 
 - Reads the HX711 averaged, tares on first good reading, then every `txIntervalMs` transmits a reading.
+- Reads the HX711 with a 10 µs clock half-period. At 1 µs the four-cell cable had not settled when DT was read, so bits 12 and 16 flipped and the weight jumped about 6.8 lb. A reading needs 6 good samples of 10, so one slow conversion is not a `load-cell` fault. The node stays awake (no deep sleep), so the OLED is always live.
 - Hold PRG for 3 seconds to tare ("Taring..." then blink). Do this with an empty platform.
-- After transmitting it listens briefly (1.5 s) for an `Interval_Seconds` downlink addressed to its code, applies it (60 to 86400 s), and persists it in NVS (`Preferences` namespace `maple`).
-- Faults are sent instead of weight: `load-cell` (no HX711), `untared`, `unstable` (spread over 12000 counts in a sample), `reversed` (more than 0.3 lb below tare).
+- After transmitting it listens for 4 s for one downlink addressed to its code (`"Node_Code":"<code>"`). An `Interval_Seconds` is applied (10 to 86400 s) and persisted in NVS (`Preferences` namespace `maple`). A `Command_Id` with `Action` `TARE` or `CAL` (+ `Pounds`) queues a tare or a test-weight calibration; see [Calibration from the app](#calibration-from-the-app).
+- Up to 750 ms of random jitter is added to each packet so two nodes on the same interval do not keep colliding.
+- Faults are sent instead of weight: `load-cell` (no HX711, or ten identical samples, which means DT is stuck), `untared`, `unstable` (spread over 0.3 lb in a sample), `reversed` (more than 0.3 lb below tare). Both limits are in pounds, converted with the current counts per pound.
 
 Serial commands (newline terminated, on USB or UART0):
 
@@ -70,6 +73,27 @@ LoRa uplink payload (node to gateway):
 
 `Interval_Seconds` is the node's current packet interval (verified in `sendScaleReading` and `sendFault`). Weight is gross pounds including the bucket, floored at 0.
 
+For three packets after it applies an app command, the node also sends `"Command_Id":N,"Command_Ok":1|0,"Counts_Per_Lb":10246`.
+
+### Calibration from the app
+
+The tree page (Admin and MSS) has a *Calibrate the scale* card: tare with the platform empty, put a known test weight on and enter its pounds, then check the reading.
+
+```
+App --POST /nodes/:id/calibration--> API (calibration_commands: pending)
+Node packet --> Pi --> API: reply Accepted[0].Command {Command_Id, Action, Pounds} (status sent)
+Pi --CMD NODE-001 31 CAL 7.875--> gateway --LoRa {"Node_Code","Command_Id","Action","Pounds"}--> node
+Node applies it, sends a packet 1.5 s later with Command_Id/Command_Ok/Counts_Per_Lb
+API settles the command (done or failed); the page polls GET /nodes/:id/calibration
+```
+
+- The Pi sends one downlink per packet; a waiting command goes before an interval change.
+- The API resends an open command on every packet until the node echoes its id, so a missed downlink costs one interval. The node keeps the last applied id in NVS (`cmd_id`) and does not apply the same id twice, even after a reboot; it repeats the echo instead.
+- A new request replaces one that is still waiting (`cancelled`).
+- `CAL` fails (`Command_Ok` 0) when the reading moved less than 1000 counts from the tare, which means no weight was on the platform.
+- Each step takes about one packet interval. Set the tree to 10 s on Deploy for a demo, then back to 900 s.
+- Serial `TARE` and `CAL <pounds>` still work over USB and do not touch the command id.
+
 ### Gateway firmware (`heltec-v3-gateway/src/main.cpp`)
 
 Receives packets, extracts `Node_Code`, `Weight` or `Fault`, `Battery_Percent`, optional `Interval_Seconds`, adds `Signal_Rssi`, and prints one JSON line on USB:
@@ -78,7 +102,7 @@ Receives packets, extracts `Node_Code`, `Weight` or `Fault`, `Battery_Percent`, 
 {"Node_Code":"NODE-001","Weight":35.90,"Battery_Percent":88,"Signal_Rssi":-74}
 ```
 
-It also prints plain-text `[rx]`/status lines that the Pi ignores. Lines from the Pi starting `INTERVAL <node_code> <seconds>` (60 to 86400) are transmitted to that node as `{"Node_Code":"...","Interval_Seconds":N}`.
+It also prints plain-text `[rx]`/status lines that the Pi ignores. Lines from the Pi starting `INTERVAL <node_code> <seconds>` (10 to 86400) are transmitted to that node as `{"Node_Code":"...","Interval_Seconds":N}`. Lines `CMD <node_code> <id> TARE` and `CMD <node_code> <id> CAL <pounds>` are transmitted as `{"Node_Code":"...","Command_Id":N,"Action":"TARE"}` or with `"Action":"CAL","Pounds":7.875`. Command echo fields from a node (`Command_Id`, `Command_Ok`, `Counts_Per_Lb`) are passed through on the JSON line.
 
 ### Flashing from a laptop (alternative to the Deploy page)
 
@@ -129,7 +153,8 @@ How it behaves (`receiver.py`):
 - A background thread reads lines; only lines starting with `{` are parsed. Requires `Node_Code` and either `Weight` or `Fault`; optional `Battery_Percent`, `Signal_Rssi`, `Interval_Seconds`.
 - `Recorded_At` is the Pi's UTC clock when the line arrived.
 - With forwarding on, each reading is POSTed as `{"Gateway_Code": ..., "Readings": [one]}` with header `X-Gateway-Token`, up to 3 attempts, 12 s timeout, same body each retry (so the API deduplicates).
-- If the response carries `Accepted[0].Desired_Interval_Seconds` and it differs from the node's reported interval, the Pi writes `INTERVAL <code> <seconds>` back to the gateway.
+- If the response carries `Accepted[0].Command`, the Pi writes `CMD <code> <id> TARE` or `CMD <code> <id> CAL <pounds>` back to the gateway. Otherwise, if `Accepted[0].Desired_Interval_Seconds` differs from the node's reported interval, it writes `INTERVAL <code> <seconds>`. Command echo fields are forwarded to the API.
+- Tests: `python3 -m unittest test_receiver` (with `requirements.txt` installed).
 - HTTP statuses: 201 saved, 200 duplicate or accepted, 401 bad token, 422 rejected, 503 server has no token set. The last 20 packets are kept in memory.
 - Local routes: `GET /` (page) and `GET /api/packets` (JSON snapshot: radio status, rx count, last packets and their forward result).
 

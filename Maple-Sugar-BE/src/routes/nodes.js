@@ -8,8 +8,9 @@ import * as nodesRepository from '../repositories/nodesRepository.js';
 import * as alertsRepository from '../repositories/alertsRepository.js';
 import * as metricsRepository from '../repositories/metricsRepository.js';
 import * as journalRepository from '../repositories/journalRepository.js';
+import * as calibrationRepository from '../repositories/calibrationRepository.js';
 import { query } from '../db/pool.js';
-import { createNodeBody, flagNodeBody, idParam, nodeActionBody, nodeDetailsBody, nodeIntervalBody, updateNodeBody } from './schemas.js';
+import { calibrationBody, createNodeBody, flagNodeBody, idParam, nodeActionBody, nodeDetailsBody, nodeIntervalBody, updateNodeBody } from './schemas.js';
 
 export const nodesRouter = Router();
 
@@ -133,11 +134,45 @@ nodesRouter.patch('/:id/details', requireCapability(Capability.DEPLOY_NODES), as
 
 nodesRouter.patch('/:id/interval', requireCapability(Capability.DEPLOY_NODES), async (req, res) => {
   const id = idParam.parse(req.params.id);
-  const { Report_Interval_Minutes: minutes } = nodeIntervalBody.parse(req.body);
-  const node = await nodesRepository.updateNode(id, { Report_Interval_Seconds: minutes * 60 });
+  const { seconds } = nodeIntervalBody.parse(req.body);
+  const node = await nodesRepository.updateNode(id, { Report_Interval_Seconds: seconds });
   if (!node) throw notFound('Node');
   await invalidateNamespaces([cacheNamespaces.NODES]);
   res.json(node);
+});
+
+/**
+ * Tare and test-weight calibration over LoRa. The command rides back to the
+ * node on its next packet, so the page polls GET until it settles.
+ */
+nodesRouter.get('/:id/calibration', requireCapability(Capability.DEPLOY_NODES), async (req, res) => {
+  const id = idParam.parse(req.params.id);
+  const node = await nodesRepository.findNodeById(id);
+  if (!node) throw notFound('Node');
+  const [command, lastCalibration] = await Promise.all([
+    calibrationRepository.findLatestCommand(id),
+    calibrationRepository.findLastCalibration(id),
+  ]);
+  res.json({
+    NodeID: id,
+    Report_Interval_Seconds: node.Report_Interval_Seconds,
+    Command: command,
+    Last_Calibration: lastCalibration,
+  });
+});
+
+nodesRouter.post('/:id/calibration', requireCapability(Capability.DEPLOY_NODES), async (req, res) => {
+  const id = idParam.parse(req.params.id);
+  const body = calibrationBody.parse(req.body ?? {});
+  const node = await nodesRepository.findNodeById(id);
+  if (!node) throw notFound('Node');
+  const command = await calibrationRepository.queueCommand({
+    nodeId: id,
+    action: body.Action,
+    pounds: body.Action === 'calibrate' ? body.Pounds : null,
+    userId: req.user.UserID,
+  });
+  res.status(202).json(command);
 });
 
 nodesRouter.patch('/:id', requireCapability(Capability.MANAGE_USERS), async (req, res) => {

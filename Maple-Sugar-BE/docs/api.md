@@ -78,6 +78,11 @@ Redirect URIs must match `PUBLIC_API_URL`:
 | PATCH | `/nodes/:id` | Admin | Name, stand, status, battery, location. |
 | POST | `/nodes/:id/flag` | Flag node | `{ type, description }` creates an alert. |
 | POST | `/nodes/:id/actions` | Session, then a finer check | `{ Action, Notes }`. |
+| PATCH | `/nodes/:id/interval` | Deploy nodes | `{ Report_Interval_Seconds }` from 10 to 86400 (or the older `{ Report_Interval_Minutes }`, 1 to 1440). The node picks it up on its next packet. |
+| GET | `/nodes/:id/calibration` | Deploy nodes | `{ NodeID, Report_Interval_Seconds, Command, Last_Calibration }`. `Command` is the newest calibration request; `Last_Calibration` the newest successful test-weight one. |
+| POST | `/nodes/:id/calibration` | Deploy nodes | `{ Action: "tare" }` or `{ Action: "calibrate", Pounds }` (0.5 to 400). 202 with the queued command. Replaces a request still waiting. |
+
+A calibration command has `CommandID`, `Action`, `Pounds`, `Status` (`pending` → `sent` → `done` or `failed`, or `cancelled` when replaced), `Counts_Per_Lb` (what the node reported), and the times. It reaches the node through the ingest reply below. See `docs/hardware.md#calibration-from-the-app`.
 
 `Action`:
 
@@ -109,6 +114,8 @@ Name the gateway with `Gateway_Code` (`GW-ALUMNI`, `GW-CHABAD`, `GW-BARN`). Name
 Air temperature is not accepted here. It comes from OpenWeather. A `Temperature` field on the body is ignored, and the stored row leaves temperature null.
 
 One reading may be the body itself, or several may sit in `Readings` (at most 32). A body that fails shape checks (no node, no weight, no time) is 422 and stores nothing. A reading that names an unknown node, a node on another Pi, or a weight the bucket rules reject is listed in `Rejected` and does not drop the rest of the batch. HTTP 201 when at least one new row was stored, 200 when every success was a duplicate, 422 when nothing was stored. Success bodies include `Accepted` and `Rejected`. The bucket on that tree is attached server-side.
+
+Each `Accepted` item carries `Desired_Interval_Seconds` (the node's configured interval) and, while a calibration is waiting, `Command: { Command_Id, Action: "TARE" | "CAL", Pounds }` for the Pi to radio to the node. A reading (weight or fault) may carry `Command_Id`, `Command_Ok` (0/1 or boolean), and `Counts_Per_Lb`; a matching id settles that command, and it is not sent again.
 
 A stored reading updates the node's `last_seen`, battery, and RSSI, and marks the node online unless it is in maintenance. The gateway's `last_ping` is set and its status becomes Online. The same alert rules as `POST /metrics` run for a new row.
 
@@ -219,7 +226,7 @@ Harsh alerts: Extreme Cold (low at or below 0°F), Hard Freeze (day stays at or 
 | PATCH | `/users/:id` | Admin | Role, names, email, `Is_Active`, `Account_Expiry` (ISO time, or null for no end). An admin cannot demote or deactivate themselves. |
 | DELETE | `/users/:id` | Admin | Cannot delete yourself. |
 | GET | `/settings` | Dashboard | `{ Report_Interval_Seconds, Report_Interval_Minutes }`. |
-| PATCH | `/settings` | Admin | `{ Report_Interval_Minutes }` from 1 to 1440. Copied onto every node. |
+| PATCH | `/settings` | Admin | `{ Report_Interval_Seconds }` from 10 to 86400, or `{ Report_Interval_Minutes }` from 1 to 1440. Copied onto every node. |
 
 `accountExpiry` / `Account_Expiry` is a timestamp, not a date. Existing date-only values were stored as 11:59pm Eastern on that day.
 

@@ -83,6 +83,15 @@ def parse_reading(text: str) -> dict[str, Any]:
             raise ValueError("Interval_Seconds is not a number")
         reading["Interval_Seconds"] = int(interval)
 
+    # The node echoes the last calibration command it applied.
+    for key, kind in (("Command_Id", int), ("Command_Ok", int), ("Counts_Per_Lb", float)):
+        value = parsed.get(key)
+        if value is None:
+            continue
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"{key} is not a number")
+        reading[key] = kind(value)
+
     return reading
 
 
@@ -103,6 +112,9 @@ def build_ingest_body(
         item["Battery_Percent"] = reading["Battery_Percent"]
     if "Signal_Rssi" in reading:
         item["Signal_Rssi"] = reading["Signal_Rssi"]
+    for key in ("Command_Id", "Command_Ok", "Counts_Per_Lb"):
+        if key in reading:
+            item[key] = reading[key]
     return {"Gateway_Code": gateway_code, "Readings": [item]}
 
 
@@ -133,7 +145,14 @@ def forward_status(response: requests.Response) -> dict[str, str]:
     if response.status_code == 201:
         return {"status": "201", "detail": "saved on maple server"}
     if response.status_code == 200:
-        detail = "duplicate reading" if "Duplicate" in (response.text or "") else "accepted"
+        # Every success body has a Duplicate key; only true means the API already had it.
+        try:
+            accepted = response.json().get("Accepted") or []
+        except ValueError:
+            accepted = []
+        duplicate = any(item.get("Duplicate") for item in accepted if isinstance(item, dict))
+        fault = any(item.get("Fault") for item in accepted if isinstance(item, dict))
+        detail = "duplicate reading" if duplicate else "fault recorded" if fault else "accepted"
         return {"status": "200", "detail": detail}
     if response.status_code == 401:
         return {"status": "401", "detail": "gateway token rejected"}
@@ -147,8 +166,27 @@ def forward_status(response: requests.Response) -> dict[str, str]:
     return {"status": str(response.status_code), "detail": snippet or response.reason}
 
 
-def interval_command(response: requests.Response, reading: dict[str, Any]) -> str | None:
-    """Ask the gateway to radio a new packet interval when the site disagrees."""
+def calibration_line(node: str, command: Any) -> str | None:
+    if not isinstance(command, dict):
+        return None
+    command_id = command.get("Command_Id")
+    if isinstance(command_id, bool) or not isinstance(command_id, int) or command_id <= 0:
+        return None
+    action = command.get("Action")
+    if action == "TARE":
+        return f"CMD {node} {command_id} TARE\n"
+    pounds = command.get("Pounds")
+    if action == "CAL" and not isinstance(pounds, bool) and isinstance(pounds, (int, float)) and pounds > 0:
+        return f"CMD {node} {command_id} CAL {pounds:.3f}\n"
+    return None
+
+
+def downlink_command(response: requests.Response, reading: dict[str, Any]) -> str | None:
+    """Pick the one line the gateway radios back to this node.
+
+    The node hears a single packet after it transmits, so a waiting calibration
+    goes first; the interval catches up on the next packet.
+    """
     try:
         payload = response.json()
     except ValueError:
@@ -156,15 +194,21 @@ def interval_command(response: requests.Response, reading: dict[str, Any]) -> st
     accepted = payload.get("Accepted") or []
     if not accepted:
         return None
+    node = reading.get("Node_Code")
+    if not isinstance(node, str) or not node.strip():
+        return None
+    node = node.strip()
+
+    calibration = calibration_line(node, accepted[0].get("Command"))
+    if calibration:
+        return calibration
+
     desired = accepted[0].get("Desired_Interval_Seconds")
     if isinstance(desired, bool) or not isinstance(desired, int):
         return None
     if reading.get("Interval_Seconds") == desired:
         return None
-    node = reading.get("Node_Code")
-    if not isinstance(node, str) or not node.strip():
-        return None
-    return f"INTERVAL {node.strip()} {desired}\n"
+    return f"INTERVAL {node} {desired}\n"
 
 
 def forward_reading(
@@ -181,7 +225,7 @@ def forward_reading(
     try:
         response = post_ingest(body, api_url, token)
         packet["forward"] = forward_status(response)
-        return interval_command(response, reading)
+        return downlink_command(response, reading)
     except requests.RequestException as exc:
         packet["forward"] = {"status": "error", "detail": str(exc)}
         return None

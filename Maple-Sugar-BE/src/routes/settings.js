@@ -17,11 +17,11 @@ settingsRouter.get('/', requireCapability(Capability.VIEW_DASHBOARD), async (req
 });
 
 settingsRouter.patch('/', requireCapability(Capability.MANAGE_USERS), async (req, res) => {
-  const { Report_Interval_Minutes: minutes } = updateSettingsBody.parse(req.body);
-  const seconds = await settingsRepository.setReportIntervalMinutes(minutes);
+  const { seconds } = updateSettingsBody.parse(req.body);
+  await settingsRepository.setReportIntervalSeconds(seconds);
   await invalidateNamespaces([cacheNamespaces.NODES]);
   res.json({
     Report_Interval_Seconds: seconds,
-    Report_Interval_Minutes: minutes,
+    Report_Interval_Minutes: Math.round(seconds / 60),
   });
 });

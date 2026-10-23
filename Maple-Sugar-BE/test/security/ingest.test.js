@@ -20,6 +20,7 @@ const state = {
   heartbeats: [],
   touches: [],
   bucketId: 11,
+  command: null,
 };
 
 function nodeRow(overrides) {
@@ -59,10 +60,26 @@ function reset() {
   state.heartbeats = [];
   state.touches = [];
   state.bucketId = 11;
+  state.command = null;
 }
 
 mock.method(pool, 'query', async (text, params = []) => {
   const sql = String(text);
+
+  if (sql.includes('from calibration_commands')) {
+    const open = state.command && ['pending', 'sent'].includes(state.command.status);
+    return open ? { rows: [state.command], rowCount: 1 } : { rows: [], rowCount: 0 };
+  }
+
+  if (sql.includes('update calibration_commands')) {
+    if (!state.command) return { rows: [], rowCount: 0 };
+    if (sql.includes("status = 'sent'")) state.command.status = 'sent';
+    else {
+      state.command.status = params[1];
+      state.command.counts_per_lb = params[2];
+    }
+    return { rows: [state.command], rowCount: 1 };
+  }
 
   if (sql.includes('from gateway')) {
     if (!state.gateway) return { rows: [], rowCount: 0 };
@@ -337,6 +354,39 @@ describe('POST /ingest', () => {
     assert.equal(state.created.length, 0);
     assert.equal(state.heartbeats.length, 0);
     assert.equal(state.touches.length, 1);
+  });
+
+  test('hands a waiting calibration to the Pi and marks it sent', async () => {
+    reset();
+    state.command = { id: 31, node_id: 1, action: 'calibrate', pounds: '10.000', status: 'pending' };
+    const response = await send(sample);
+    assert.equal(response.status, 201);
+    assert.deepEqual(response.json.Accepted[0].Command, { Command_Id: 31, Action: 'CAL', Pounds: 10 });
+    assert.equal(response.json.Accepted[0].Desired_Interval_Seconds, 900);
+    assert.equal(state.command.status, 'sent');
+  });
+
+  test('settles the command when the node echoes its id, and stops sending it', async () => {
+    reset();
+    state.command = { id: 31, node_id: 1, action: 'calibrate', pounds: '10.000', status: 'sent' };
+    const response = await send({ ...sample, Command_Id: 31, Command_Ok: 1, Counts_Per_Lb: 10246 });
+    assert.equal(response.status, 201);
+    assert.equal(response.json.Accepted[0].Command, undefined);
+    assert.equal(state.command.status, 'done');
+    assert.equal(state.command.counts_per_lb, 10246);
+  });
+
+  test('still delivers a tare to a node that is reporting a fault', async () => {
+    reset();
+    state.command = { id: 32, node_id: 1, action: 'tare', pounds: null, status: 'pending' };
+    const response = await send({
+      Gateway_Code: 'GW-ALUMNI',
+      Node_Code: 'NODE-001',
+      Recorded_At: '2026-03-02T14:10:00.000Z',
+      Fault: 'reversed',
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.json.Accepted[0].Command, { Command_Id: 32, Action: 'TARE' });
   });
 
   test('rejects a body that names no node', async () => {

@@ -52,7 +52,7 @@ const emptyDraft = () => ({
   Latitude: '',
   Longitude: '',
   Tare_Weight: '2.5',
-  Minutes: '1',
+  Seconds: '60',
   Rf_Tag: '',
   Notes: '',
 });
@@ -84,7 +84,7 @@ function draftFromNode(node) {
     Latitude: node.Location?.lat ?? '',
     Longitude: node.Location?.lon ?? '',
     Tare_Weight: '2.5',
-    Minutes: String(Math.max(1, Math.round((node.Report_Interval_Seconds ?? 60) / 60))),
+    Seconds: String(node.Report_Interval_Seconds ?? 60),
     Rf_Tag: node.Rf_Tag ?? '',
     Notes: node.Notes ?? '',
   };
@@ -242,9 +242,9 @@ export function DeployPage() {
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       throw new Error('Place the tree on the map, or use your location.');
     }
-    const minutes = Number(draft.Minutes);
-    if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440) {
-      throw new Error('Use a packet interval from 1 minute to 1 day.');
+    const seconds = Number(draft.Seconds);
+    if (!Number.isInteger(seconds) || seconds < 10 || seconds > 86400) {
+      throw new Error('Use a packet interval from 10 seconds to 1 day (86400).');
     }
 
     if (target) {
@@ -257,7 +257,7 @@ export function DeployPage() {
         Notes: draft.Notes.trim(),
         ...(draft.GatewayID ? { GatewayID: Number(draft.GatewayID) } : {}),
       });
-      await setReportInterval(target.NodeID, minutes);
+      await setReportInterval(target.NodeID, seconds);
       return target;
     }
 
@@ -272,7 +272,7 @@ export function DeployPage() {
       Rf_Tag: draft.Rf_Tag.trim() || undefined,
       Notes: draft.Notes.trim() || undefined,
     });
-    await setReportInterval(createdNode.NodeID, minutes);
+    await setReportInterval(createdNode.NodeID, seconds);
     return createdNode;
   });
 
@@ -669,13 +669,13 @@ export function DeployPage() {
             </TextField>
             <LocationPicker value={nodePoint} onChange={setNodePoint} />
             <TextField
-              label="Minutes between packets"
+              label="Seconds between packets"
               type="number"
-              value={draft.Minutes}
-              onChange={setField('Minutes')}
-              helperText="The board picks this up the next time it checks in."
+              value={draft.Seconds}
+              onChange={setField('Seconds')}
+              helperText="10 for a live demo, 900 (15 min) in the field. The board picks this up the next time it checks in."
               fullWidth
-              slotProps={{ htmlInput: { min: 1, max: 1440, step: 1 } }}
+              slotProps={{ htmlInput: { min: 10, max: 86400, step: 1 } }}
             />
             {editing ? null : (
               <TextField

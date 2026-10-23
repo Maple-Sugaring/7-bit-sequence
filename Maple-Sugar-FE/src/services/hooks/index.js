@@ -13,14 +13,14 @@ import * as profileService from '../profileService';
 import * as scheduleService from '../scheduleService';
 import * as settingsService from '../settingsService';
 import * as weatherService from '../weatherService';
-import { useAction, useAsync } from './useAsync';
+import { useAction, useAsync, useAutoRefresh } from './useAsync';
 
 /**
  * The only surface pages are allowed to import from the service layer.
  * Keeping the hooks here means a page never reaches past its own layer.
  */
 
-export { useAction, useAsync };
+export { useAction, useAsync, useAutoRefresh };
 
 export function useDashboard(season) {
   return useAsync(useCallback(() => dashboardService.getDashboard({ season }), [season]));
@@ -123,6 +123,13 @@ export function useGateways() {
 
 export function useNodes() {
   return useAsync(useCallback(() => nodeService.listNodes(), []), { initialData: [] });
+}
+
+export function useCalibration(nodeId, enabled = true) {
+  return useAsync(useCallback(() => nodeService.getCalibration(nodeId), [nodeId]), {
+    enabled: enabled && nodeId != null,
+    initialData: null,
+  });
 }
 
 export function useBush() {

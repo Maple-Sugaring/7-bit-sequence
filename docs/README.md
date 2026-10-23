@@ -15,6 +15,7 @@ Everything here was written from the code at the commit recorded in [HANDOFF.md]
 | Look up an environment variable | [configuration.md](configuration.md) |
 | Fix something that is broken | [troubleshooting.md](troubleshooting.md) |
 | Take over the project | [HANDOFF.md](HANDOFF.md) |
+| Run the 15-minute gate review demo | [gate-review-demo.md](gate-review-demo.md) |
 
 ## Components
 

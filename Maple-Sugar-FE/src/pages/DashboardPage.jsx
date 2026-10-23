@@ -26,7 +26,7 @@ import { FieldOverview } from '../components/layout/FieldOverview';
 import { useAuth } from '../context/auth';
 import { Capability } from '../business/permissions';
 import { dateOnly, dateTime } from '../components/common/format';
-import { useBucketShelfLife, useFleetMap, useLiveWeather, useReadings } from '../services/hooks';
+import { useAutoRefresh, useBucketShelfLife, useFleetMap, useLiveWeather, useReadings } from '../services/hooks';
 
 function Meter({ label, value, percent, detail, color }) {
   return (
@@ -53,6 +53,10 @@ export function DashboardPage() {
   // One fetch feeds the cards below and the fleet map, so they cannot disagree.
   const fleet = useFleetMap();
   const bushNodes = fleet.nodes;
+  // The fleet refreshes every minute; a node on a faster interval (a demo at
+  // 10 s) refetches at its packet rate, down to 5 s.
+  const fastestSeconds = Math.min(60, ...bushNodes.map((node) => node.Report_Interval_Seconds ?? 60));
+  useAutoRefresh(fleet.refresh, fastestSeconds < 60 ? Math.max(5, fastestSeconds) * 1000 : 0);
   const live = useLiveWeather();
   const readings = useReadings({ from: LIVE_FROM, to: LIVE_TO });
   const weather = live.data?.Sites?.[0] ?? (live.data?.Configured ? live.data : null);
