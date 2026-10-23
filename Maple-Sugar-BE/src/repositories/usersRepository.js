@@ -155,11 +155,17 @@ const BOOTSTRAP_NAMES = {
  */
 export async function promoteEmailsToAdmin(emails) {
   if (!emails?.length) return 0;
-  const people = emails.map(canonicalEmail).map((email) => ({
-    email,
-    first_name: BOOTSTRAP_NAMES[email]?.[0] ?? '',
-    last_name: BOOTSTRAP_NAMES[email]?.[1] ?? '',
-  }));
+  const peopleByEmail = new Map();
+  for (const email of emails.map(canonicalEmail)) {
+    if (!peopleByEmail.has(email)) {
+      peopleByEmail.set(email, {
+        email,
+        first_name: BOOTSTRAP_NAMES[email]?.[0] ?? '',
+        last_name: BOOTSTRAP_NAMES[email]?.[1] ?? '',
+      });
+    }
+  }
+  const people = [...peopleByEmail.values()];
   const result = await query(
     `insert into users (role_id, first_name, last_name, email, is_active, account_expiry, invite_pending)
      select 1, first_name, last_name, email, true, null, true
