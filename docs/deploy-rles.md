@@ -78,3 +78,16 @@ selected workflow commit is still the latest `main`, then updates the app,
 rebuilds the web and API containers, restarts those two services, and checks
 that the site serves the selected SHA. Database and cache services are left
 alone.
+
+The deploy commands use the RLES Compose overlay and host configuration files:
+
+```sh
+docker compose \
+  --env-file /home/student/maple/config/compose.env \
+  -f docker-compose.yml \
+  -f deploy/rit/compose.rit.yml
+```
+
+Use these options for each Compose command. The base `docker-compose.yml` alone
+is the local development configuration and does not load the RLES backend
+environment file.
