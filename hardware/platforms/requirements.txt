@@ -1,0 +1,3 @@
+manifold3d
+numpy
+reportlab
