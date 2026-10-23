@@ -90,7 +90,7 @@ async function gmailAccessToken() {
 }
 
 /** One API call per recipient: Gmail has no equivalent of messageVersions. */
-async function sendWithGmail(recipients, { subject, html, text }) {
+async function sendWithGmail(recipients, { subject, html, text, onRecipientSent }) {
   const accessToken = await gmailAccessToken();
   for (const recipient of recipients) {
     const { message } = await mimeBuilder.sendMail({
@@ -107,11 +107,12 @@ async function sendWithGmail(recipients, { subject, html, text }) {
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     if (!response.ok) throw await failure('Gmail', response);
+    await onRecipientSent?.(recipient.email);
   }
 }
 
 /** Brevo's messageVersions keeps it to one call without a shared To line. */
-async function sendWithBrevo(recipients, { subject, html, text, tags }) {
+async function sendWithBrevo(recipients, { subject, html, text, tags, onRecipientSent }) {
   const response = await fetch(BREVO_SEND_URL, {
     method: 'POST',
     headers: {
@@ -130,6 +131,7 @@ async function sendWithBrevo(recipients, { subject, html, text, tags }) {
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   if (!response.ok) throw await failure('Brevo', response);
+  for (const recipient of recipients) await onRecipientSent?.(recipient.email);
 }
 
 /**
@@ -138,7 +140,7 @@ async function sendWithBrevo(recipients, { subject, html, text, tags }) {
  * Resolves to { sent } and throws on a transport error. Callers on a request
  * path should go through sendQuietly instead.
  */
-export async function sendEmail({ to, subject, html, text, tags = [] }) {
+export async function sendEmail({ to, subject, html, text, tags = [], onRecipientSent }) {
   const recipients = uniqueRecipients(Array.isArray(to) ? to : [to]);
   if (!recipients.length) return { sent: 0 };
 
@@ -147,7 +149,7 @@ export async function sendEmail({ to, subject, html, text, tags = [] }) {
     return { sent: 0, disabled: true };
   }
 
-  const message = { subject, html, text, tags };
+  const message = { subject, html, text, tags, onRecipientSent };
   if (useGmail()) await sendWithGmail(recipients, message);
   else await sendWithBrevo(recipients, message);
 

@@ -20,7 +20,7 @@ import * as alertsRepository from '../repositories/alertsRepository.js';
 import * as nodesRepository from '../repositories/nodesRepository.js';
 import * as usersRepository from '../repositories/usersRepository.js';
 import { criticalAlertEmail } from './emailTemplates.js';
-import { isMailEnabled, sendEmail } from './mailService.js';
+import { isMailEnabled, sendEmail, uniqueRecipients } from './mailService.js';
 
 /** Full buckets are warnings in the UI, but they are the spillage alarm. */
 const ALWAYS_NOTIFY = new Set(['Full Bucket', 'Node Offline', 'Spoilage', 'Tipped']);
@@ -47,11 +47,12 @@ function messageFor(alert, { escalatedAfterMinutes = null } = {}) {
   return `${prefix}Maple Sugaring ${alert.Alert_Type} at ${where}. ${alert.Description ?? ''}`.trim();
 }
 
-async function sendBrevoEmail(alert, recipients, options) {
+async function sendBrevoEmail(alert, recipients, options, onRecipientSent) {
   await sendEmail({
-    to: [...recipients, ...config.alertEmails],
+    to: recipients,
     ...criticalAlertEmail(alert, options),
     tags: ['alert', alert.Alert_Type, ...(options.escalatedAfterMinutes == null ? [] : ['escalated'])],
+    onRecipientSent,
   });
 }
 
@@ -109,9 +110,14 @@ async function sendSms(alert, options) {
  * Runs every configured channel and reports whether all of them succeeded.
  * Channels are independent: a Twilio outage must not stop the email.
  */
-async function deliver(alert, recipients, options = {}) {
+async function deliver(alert, recipients, options = {}, { deliveredEmails, onEmailRecipientSent } = {}) {
+  const emailRecipients = uniqueRecipients([...recipients, ...config.alertEmails]).filter(
+    ({ email }) => !deliveredEmails?.has(email.toLowerCase()),
+  );
   const results = await Promise.allSettled([
-    isMailEnabled() ? sendBrevoEmail(alert, recipients, options) : sendSmtpEmail(alert, options),
+    isMailEnabled()
+      ? sendBrevoEmail(alert, emailRecipients, options, onEmailRecipientSent)
+      : sendSmtpEmail(alert, options),
     sendSms(alert, options),
   ]);
 
@@ -158,7 +164,17 @@ export async function escalateStaleAlerts() {
           ]
         : [];
       const alert = await withNodeName(claimed);
-      if (await deliver(alert, recipients, { escalatedAfterMinutes: minutes })) {
+      const deliveredEmails = new Set(await alertsRepository.listEscalationEmailDeliveries(claimed.AlertID));
+      const onEmailRecipientSent = (email) =>
+        alertsRepository.markEscalationEmailDelivered(claimed.AlertID, email);
+      if (
+        await deliver(
+          alert,
+          recipients,
+          { escalatedAfterMinutes: minutes },
+          { deliveredEmails, onEmailRecipientSent },
+        )
+      ) {
         escalated += 1;
       } else {
         await alertsRepository.releaseEscalation(claimed.AlertID);

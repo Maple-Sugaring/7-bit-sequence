@@ -118,3 +118,22 @@ export async function claimAlertsForEscalation(minutes, alwaysNotifyTypes) {
 export async function releaseEscalation(id) {
   await query('update alerts set escalated_at = null where id = $1', [id]);
 }
+
+/** Recipients already emailed for an escalation that may be retried. */
+export async function listEscalationEmailDeliveries(id) {
+  const rows = await queryAll(
+    'select lower(recipient_email) as recipient_email from alert_escalation_email_deliveries where alert_id = $1',
+    [id],
+  );
+  return rows.map(({ recipient_email }) => recipient_email);
+}
+
+/** Record each accepted Gmail message before the next recipient is attempted. */
+export async function markEscalationEmailDelivered(id, email) {
+  await query(
+    `insert into alert_escalation_email_deliveries (alert_id, recipient_email)
+     values ($1, lower($2))
+     on conflict (alert_id, recipient_email) do nothing`,
+    [id, email],
+  );
+}
