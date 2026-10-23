@@ -6,23 +6,34 @@
 
 .fbox {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 16px;
-  padding: 20px 16px;
+  justify-content: center;
+  gap: 12px;
+  padding: 28px 24px 22px;
+  box-sizing: border-box;
+  text-align: center;
 }
 
 .fbox p {
   color: #69675f;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
   margin: 0;
+  text-wrap: balance;
 }
 
 .footer-logo {
-  height: 20px;
+  height: 32px;
   object-fit: contain;
   filter: brightness(0);
   opacity: 0.55;
+}
+
+@media (max-width: 600px) {
+  .fbox {
+    padding: 24px 16px 18px;
+  }
 }
 
 @media (min-width: 1200px) {
@@ -30,6 +41,6 @@
     padding-bottom: 0;
   }
   .fbox {
-    padding: 20px 36px;
+    padding: 24px 36px 20px;
   }
 }

@@ -3,7 +3,6 @@ import Badge from '@mui/material/Badge';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
-import ForestRoundedIcon from '@mui/icons-material/ForestRounded';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import Tooltip from '@mui/material/Tooltip';
@@ -15,6 +14,7 @@ import MenuItem from '@mui/material/MenuItem';
 import EventIcon from '@mui/icons-material/Event';
 import LogoutIcon from '@mui/icons-material/Logout';
 import SettingsIcon from '@mui/icons-material/Settings';
+import ritTigerLogo from '../../assets/RITTigerTransparent.png';
 import { Capability } from '../../business/permissions';
 import { useAuth } from '../../context/auth';
 import { useOpenAlertCount } from '../../services/hooks';
@@ -77,7 +77,7 @@ export function TopBar() {
       }}
     >
       <Link className="app-brand" to={landingRouteFor(role)}>
-        <span className="brand-mark"><ForestRoundedIcon /></span>
+        <img src={ritTigerLogo} alt="RIT tiger mascot" style={{ width: 48, height: 48, objectFit: 'contain', flexShrink: 0 }} />
         <span>Maple Sugaring<span className="brand-caption">RIT · FIELD WORKSPACE</span></span>
       </Link>
       <Box sx={{ flex: 1 }} />

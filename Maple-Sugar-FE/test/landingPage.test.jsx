@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -46,7 +46,7 @@ describe('LandingPage', () => {
     expect(screen.getByText('Program Administrators')).toBeTruthy();
   });
 
-  it('switches live telemetry preview data when selecting a different tree tab', () => {
+  it('shows the all-taps telemetry summary without a node selector', () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <Routes>
@@ -55,19 +55,10 @@ describe('LandingPage', () => {
       </MemoryRouter>,
     );
 
-    // Default is Tree 01 (NODE_001, 3.6 gal)
-    expect(screen.getByText(/NODE_001/)).toBeTruthy();
-    expect(screen.getByText('2.4%')).toBeTruthy();
-
-    // Switch to Tree 02
-    fireEvent.click(screen.getByRole('button', { name: /Tree 02 · Red Maple/i }));
-    expect(screen.getByText(/NODE_002/)).toBeTruthy();
-    expect(screen.getByText('2.1%')).toBeTruthy();
-
-    // Switch to All Taps Summary
-    fireEvent.click(screen.getByRole('button', { name: /All Taps Summary/i }));
     expect(screen.getByText(/BUSH_TOTAL/)).toBeTruthy();
     expect(screen.getByText('2.25% avg')).toBeTruthy();
+    expect(screen.getByText('2 Active LoRa Nodes')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Tree 0[12] ·/i })).toBeNull();
   });
 
   it('displays an OAuth error banner inside the sign-in section when ?error= is present', () => {
