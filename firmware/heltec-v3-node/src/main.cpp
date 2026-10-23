@@ -71,11 +71,16 @@ static const uint32_t HX_CLOCK_HALF_US = 10;
 // One conversion can be slow (the HX711 restarting after a supply dip) without
 // the load cell being gone, so a reading needs this many good samples of ten.
 static const uint8_t HX_MIN_GOOD_SAMPLES = 6;
-// 0.3 lb of disagreement inside one 1-second sample, or the same amount
-// below the tare. Either one is electrical, not sap. Kept in pounds so the
-// limits follow the sensor and its calibration.
-static const float UNSTABLE_SPREAD_LB = 0.3f;
-static const float REVERSED_DELTA_LB = 0.3f;
+// Disagreement inside one 1-second sample (high and low already dropped), or
+// weight below the tare. A still bucket reads steady to a few hundredths, and
+// creep or temperature can pull the zero down a few tenths, so these leave
+// room for that. Kept in pounds so the limits follow the sensor and its
+// calibration.
+static const float UNSTABLE_SPREAD_LB = 0.5f;
+static const float REVERSED_DELTA_LB = 1.0f;
+// One bad second (a gust, a bump, a slow conversion) is not a fault. The same
+// fault has to show on this many measurements in a row before it is sent.
+static const uint8_t FAULT_CONFIRM_READINGS = 5;
 
 float datasheetCountsPerLb() {
   const float fraction = (CELL_MV_PER_V / 1000.0f) / (0.5f / HX711_GAIN);
@@ -508,7 +513,9 @@ bool readAveraged(long *rawOut, long *spreadOut) {
   long total = 0;
   for (int i = 1; i < good - 1; i++) total += samples[i];
   *rawOut = total / (good - 2);
-  if (spreadOut) *spreadOut = samples[good - 1] - samples[0];
+  // Same trimmed set as the average, so the one outlier it ignores does not
+  // count as instability either.
+  if (spreadOut) *spreadOut = samples[good - 2] - samples[1];
   return true;
 }
 
@@ -806,10 +813,21 @@ void loop() {
     finishCommand(false);
   }
 
-  if (!rawOk) fault = "load-cell";
-  else if (!scaleTared) fault = "untared";
-  else if (spread > countsForPounds(UNSTABLE_SPREAD_LB)) fault = "unstable";
-  else if (raw - scaleZero < -countsForPounds(REVERSED_DELTA_LB)) fault = "reversed";
+  const char *seen = nullptr;
+  if (!rawOk) seen = "load-cell";
+  else if (!scaleTared) seen = "untared";
+  else if (spread > countsForPounds(UNSTABLE_SPREAD_LB)) seen = "unstable";
+  else if (raw - scaleZero < -countsForPounds(REVERSED_DELTA_LB)) seen = "reversed";
+
+  static const char *pendingFault = nullptr;
+  static uint8_t pendingCount = 0;
+  if (seen != pendingFault) {
+    pendingFault = seen;
+    pendingCount = 0;
+  }
+  if (seen && pendingCount < FAULT_CONFIRM_READINGS) pendingCount++;
+  // Untared is a state, not a glitch, so it needs no confirming.
+  if (seen && (!scaleTared || pendingCount >= FAULT_CONFIRM_READINGS)) fault = seen;
 
   const bool holding = digitalRead(PIN_PRG) == LOW;
   if (holding && !prgDown) {
