@@ -3,6 +3,7 @@ import { ApiError } from '../ApiError';
 import { Capability, ROLE_LABELS, can, roleFromId } from '../../business/permissions';
 import { sapGallonsFor } from '../../business/collectionRound';
 import { validateCollectionEntry } from '../../business/validation';
+import { testWeightError } from '../../business/calibration';
 import * as seed from '../fixtures/seed';
 
 /**
@@ -37,7 +38,12 @@ let nextId = {
   slot: maxId(db.scheduleSlots, 'SlotID') + 1,
   log: maxId(db.collectionLogs, 'LogID') + 1,
   journal: maxId(db.journal, 'EntryID') + 1,
+  command: 1,
 };
+
+// Calibration commands. A real node answers on its next packets; here each
+// GET moves a command one step (pending, sent, done) so the page shows them all.
+const calibrationCommands = [];
 
 let session = null;
 
@@ -433,8 +439,80 @@ const routes = [
     handler: ([id], { body }) => {
       const node = db.nodes.find((candidate) => candidate.NodeID === Number(id));
       if (!node) notFound('Node');
-      node.Report_Interval_Seconds = Number(body?.Report_Interval_Minutes) * 60;
+      node.Report_Interval_Seconds =
+        body?.Report_Interval_Seconds != null
+          ? Number(body.Report_Interval_Seconds)
+          : Number(body?.Report_Interval_Minutes) * 60;
       return node;
+    },
+  },
+  {
+    method: 'POST',
+    match: /^\/nodes\/(\d+)\/calibration$/,
+    handler: ([id], { body }) => {
+      const node = db.nodes.find((candidate) => candidate.NodeID === Number(id));
+      if (!node) notFound('Node');
+      if (!['tare', 'calibrate'].includes(body?.Action)) invalid('Choose tare or calibrate.');
+      if (body.Action === 'calibrate') {
+        const message = testWeightError(body.Pounds);
+        if (message) invalid(message, { Pounds: message });
+      }
+      for (const open of calibrationCommands) {
+        if (open.NodeID === node.NodeID && ['pending', 'sent'].includes(open.Status)) open.Status = 'cancelled';
+      }
+      const command = {
+        CommandID: nextId.command++,
+        NodeID: node.NodeID,
+        Action: body.Action,
+        Pounds: body.Action === 'calibrate' ? Number(body.Pounds) : null,
+        Status: 'pending',
+        Counts_Per_Lb: null,
+        Created_At: dayjs().toISOString(),
+        Sent_At: null,
+        Completed_At: null,
+      };
+      calibrationCommands.push(command);
+      return command;
+    },
+  },
+  {
+    method: 'GET',
+    match: /^\/nodes\/(\d+)\/calibration$/,
+    handler: ([id]) => {
+      const node = db.nodes.find((candidate) => candidate.NodeID === Number(id));
+      if (!node) notFound('Node');
+      const mine = calibrationCommands.filter((command) => command.NodeID === node.NodeID);
+      const latest = mine.at(-1) ?? null;
+      if (latest?.Status === 'pending') {
+        latest.Status = 'sent';
+        latest.Sent_At = dayjs().toISOString();
+      } else if (latest?.Status === 'sent') {
+        latest.Status = 'done';
+        latest.Completed_At = dayjs().toISOString();
+        latest.Counts_Per_Lb = 10246;
+        // The node's next packet reads what is on the platform now.
+        db.metrics.push({
+          MetricID: nextId.metric++,
+          NodeID: node.NodeID,
+          BucketID: db.buckets.find((candidate) => candidate.NodeID === node.NodeID)?.BucketID ?? null,
+          Recorded_By_UserID: null,
+          Recorded_At: latest.Completed_At,
+          Weight: latest.Action === 'calibrate' ? latest.Pounds : 0,
+          Temperature: null,
+          Sugar_Percent: null,
+          Weather_Conditions: null,
+          Ice_Present: false,
+          Sap_Flow_Rate_Lph: null,
+        });
+        node.Last_Seen = latest.Completed_At;
+      }
+      const calibrations = mine.filter((command) => command.Action === 'calibrate' && command.Status === 'done');
+      return {
+        NodeID: node.NodeID,
+        Report_Interval_Seconds: node.Report_Interval_Seconds ?? null,
+        Command: latest ? { ...latest } : null,
+        Last_Calibration: calibrations.length ? { ...calibrations.at(-1) } : null,
+      };
     },
   },
   {
@@ -947,10 +1025,13 @@ const routes = [
   {
     method: 'PATCH',
     match: /^\/settings$/,
-    handler: (unused, { body }) => ({
-      Report_Interval_Minutes: Number(body.Report_Interval_Minutes),
-      Report_Interval_Seconds: Number(body.Report_Interval_Minutes) * 60,
-    }),
+    handler: (unused, { body }) => {
+      const seconds =
+        body?.Report_Interval_Seconds != null
+          ? Number(body.Report_Interval_Seconds)
+          : Number(body?.Report_Interval_Minutes) * 60;
+      return { Report_Interval_Seconds: seconds, Report_Interval_Minutes: Math.round(seconds / 60) };
+    },
   },
 ];
 

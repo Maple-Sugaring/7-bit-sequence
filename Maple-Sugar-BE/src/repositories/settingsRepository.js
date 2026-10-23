@@ -8,8 +8,7 @@ export async function getReportIntervalSeconds() {
   return Number.isFinite(parsed) ? parsed : 900;
 }
 
-export async function setReportIntervalMinutes(minutes) {
-  const seconds = minutes * 60;
+export async function setReportIntervalSeconds(seconds) {
   await query(
     `insert into app_settings (key, value, updated_at)
      values ('report_interval_seconds', $1, CURRENT_TIMESTAMP)

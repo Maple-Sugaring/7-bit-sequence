@@ -38,23 +38,44 @@ static const int PIN_HX_SCK = 7;
 static const uint8_t PIN_BATTERY_ADC = 1;
 static const uint8_t PIN_BATTERY_EN = 37;
 
-// Guang Ce YZC-1B: 50 kg capacity, 2.0 mV/V. The HX711 reads channel A at
-// gain 128, and the cell is excited from the HX711 analog supply, so the
-// supply voltage cancels. Full-scale counts are 2^23 - 1.
-//   counts/kg = (0.002 / (0.5/128)) * 8388607 / 50
+// The HX711 reads channel A at gain 128, and the bridge is excited from the
+// HX711 analog supply, so the supply voltage cancels. Full-scale counts are
+// 2^23 - 1.
+//   counts/kg = (mV/V / 1000 / (0.5/128)) * 8388607 / capacity_kg
 //   counts/lb = counts/kg * 0.45359237
+#if defined(LOAD_CELL_FOUR_HALF_BRIDGE)
+// Four DIYmalls 50 kg half-bridge cells wired as one full bridge (200 kg).
+// No datasheet. NODE-001 calibrated to 10246 counts/lb with a 7.875 lb
+// weight, which works out to about 2.1 mV/V. Still run CAL on each node.
+static const float CELL_CAPACITY_KG = 200.0f;
+static const float CELL_MV_PER_V = 2.1f;
+static const uint8_t CELL_CAL_REV = 3;
+static const char *CELL_SETUP = "4x half-bridge";
+#else
+// Guang Ce YZC-1B single-point cell: 50 kg, 2.0 mV/V.
 static const float CELL_CAPACITY_KG = 50.0f;
 static const float CELL_MV_PER_V = 2.0f;
+static const uint8_t CELL_CAL_REV = 2;
+static const char *CELL_SETUP = "YZC-1B";
+#endif
 static const float HX711_GAIN = 128.0f;
 static const float HX711_FULL_SCALE_COUNTS = 8388607.0f;
 static const float KG_PER_LB = 0.45359237f;
-static const uint8_t CELL_CAL_REV = 2;
 static const uint32_t TARE_HOLD_MS = 3000;
 static const uint32_t HX_READY_TIMEOUT_MS = 800;
-// About 0.3 lb of disagreement inside one 1-second sample, or the same
-// amount below the tare. Either one is electrical, not sap.
-static const long UNSTABLE_SPREAD_COUNTS = 12000;
-static const long REVERSED_DELTA_COUNTS = -12000;
+// Half of each HX711 clock pulse. At 1 us the four-cell cable had not settled
+// when DT was read, so bits 12 and 16 flipped and the weight jumped by about
+// 6.8 lb. 10 us read steady to a few hundredths of a pound. The HX711 allows
+// up to 50 us high.
+static const uint32_t HX_CLOCK_HALF_US = 10;
+// One conversion can be slow (the HX711 restarting after a supply dip) without
+// the load cell being gone, so a reading needs this many good samples of ten.
+static const uint8_t HX_MIN_GOOD_SAMPLES = 6;
+// 0.3 lb of disagreement inside one 1-second sample, or the same amount
+// below the tare. Either one is electrical, not sap. Kept in pounds so the
+// limits follow the sensor and its calibration.
+static const float UNSTABLE_SPREAD_LB = 0.3f;
+static const float REVERSED_DELTA_LB = 0.3f;
 
 float datasheetCountsPerLb() {
   const float fraction = (CELL_MV_PER_V / 1000.0f) / (0.5f / HX711_GAIN);
@@ -79,6 +100,17 @@ static const uint16_t LORA_PREAMBLE = 8;
 #define TX_INTERVAL_MS 20000
 #endif
 uint32_t txIntervalMs = TX_INTERVAL_MS;
+// Same limits as the API and gateway. 10 s is for demos; the field runs minutes.
+static const uint32_t MIN_INTERVAL_S = 10;
+static const uint32_t MAX_INTERVAL_S = 86400;
+// The gateway answers after the Pi has heard back from the API over HTTPS, so
+// the node keeps listening long enough for that round trip.
+static const uint32_t DOWNLINK_LISTEN_MS = 4000;
+// Up to this much random delay per packet keeps two nodes on the same
+// interval from colliding every time.
+static const uint32_t TX_JITTER_MS = 750;
+// An applied command is echoed on this many packets, in case one is lost.
+static const uint8_t ACK_PACKETS = 3;
 
 SX1262 radio = new Module(PIN_LORA_NSS, PIN_LORA_DIO1, PIN_LORA_RST, PIN_LORA_BUSY);
 U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, PIN_OLED_SCL, PIN_OLED_SDA, PIN_OLED_RST);
@@ -93,6 +125,13 @@ String serialLine;
 bool tareRequested = false;
 bool calRequested = false;
 float calPounds = 0;
+// Calibration from the app (business/calibration.js in the API). The id is
+// kept in flash so a command resent after a reboot is not applied twice.
+uint32_t pendingCommandId = 0;
+uint32_t lastCommandId = 0;
+// The result is also in flash (cmd_ok) so a power cycle can still answer a resend.
+bool lastCommandOk = false;
+uint8_t ackPacketsLeft = 0;
 
 bool jsonString(const String &line, const char *key, char *out, size_t outLen) {
   const String needle = String("\"") + key + "\":\"";
@@ -116,8 +155,10 @@ void rememberProvision() {
 bool loadProvision() {
   provisionStore.begin("maple", true);
   const uint32_t seconds = provisionStore.getUInt("interval_s", 0);
+  lastCommandId = provisionStore.getUInt("cmd_id", 0);
+  lastCommandOk = provisionStore.getBool("cmd_ok", false);
   provisionStore.end();
-  if (seconds >= 60 && seconds <= 86400) {
+  if (seconds >= MIN_INTERVAL_S && seconds <= MAX_INTERVAL_S) {
     txIntervalMs = seconds * 1000UL;
   }
 
@@ -352,7 +393,7 @@ void waitWithCountdown(uint32_t durationMs) {
 }
 
 void applyIntervalSeconds(uint32_t seconds) {
-  if (seconds < 60 || seconds > 86400) return;
+  if (seconds < MIN_INTERVAL_S || seconds > MAX_INTERVAL_S) return;
   txIntervalMs = seconds * 1000UL;
   provisionStore.begin("maple", false);
   provisionStore.putUInt("interval_s", seconds);
@@ -362,14 +403,43 @@ void applyIntervalSeconds(uint32_t seconds) {
   announce("Interval updated", nodeCode, extra);
 }
 
-void hearInterval() {
+void hearCommand(const String &payload) {
+  const int idKey = payload.indexOf("\"Command_Id\":");
+  if (idKey < 0) return;
+  const uint32_t id = static_cast<uint32_t>(payload.substring(idKey + 13).toInt());
+  if (id == 0) return;
+  if (id == lastCommandId) {
+    // Already applied; the ack was lost, so say so again.
+    ackPacketsLeft = ACK_PACKETS;
+    return;
+  }
+  if (id == pendingCommandId) return;
+  if (payload.indexOf("\"Action\":\"TARE\"") >= 0) {
+    pendingCommandId = id;
+    tareRequested = true;
+    announce("Tare from app", nodeCode, "Empty platform");
+  } else if (payload.indexOf("\"Action\":\"CAL\"") >= 0) {
+    const int poundsKey = payload.indexOf("\"Pounds\":");
+    const float pounds = poundsKey < 0 ? 0 : payload.substring(poundsKey + 9).toFloat();
+    if (pounds <= 0.05f) return;
+    pendingCommandId = id;
+    calPounds = pounds;
+    calRequested = true;
+    char detail[28];
+    snprintf(detail, sizeof(detail), "Test weight %.2f lb", pounds);
+    announce("Calibrate from app", detail, nodeCode);
+  }
+}
+
+void hearDownlink() {
   String payload;
-  const int16_t state = radio.receive(payload, 0, 1500);
+  const int16_t state = radio.receive(payload, 0, DOWNLINK_LISTEN_MS);
   if (state != RADIOLIB_ERR_NONE) return;
-  if (payload.indexOf(nodeCode) < 0) return;
+  const String addressed = String("\"Node_Code\":\"") + nodeCode + "\"";
+  if (payload.indexOf(addressed) < 0) return;
   const int key = payload.indexOf("\"Interval_Seconds\":");
-  if (key < 0) return;
-  applyIntervalSeconds(static_cast<uint32_t>(payload.substring(key + 19).toInt()));
+  if (key >= 0) applyIntervalSeconds(static_cast<uint32_t>(payload.substring(key + 19).toInt()));
+  hearCommand(payload);
 }
 
 long scaleZero = 0;
@@ -395,13 +465,13 @@ long readHx711() {
   uint32_t value = 0;
   for (uint8_t bit = 0; bit < 24; bit++) {
     digitalWrite(PIN_HX_SCK, HIGH);
-    delayMicroseconds(1);
+    delayMicroseconds(HX_CLOCK_HALF_US);
     value = (value << 1) | (digitalRead(PIN_HX_DT) == HIGH ? 1U : 0U);
     digitalWrite(PIN_HX_SCK, LOW);
-    delayMicroseconds(1);
+    delayMicroseconds(HX_CLOCK_HALF_US);
   }
   digitalWrite(PIN_HX_SCK, HIGH);
-  delayMicroseconds(1);
+  delayMicroseconds(HX_CLOCK_HALF_US);
   digitalWrite(PIN_HX_SCK, LOW);
   interrupts();
 
@@ -412,13 +482,19 @@ long readHx711() {
 bool readAveraged(long *rawOut, long *spreadOut) {
   // 10 Hz samples. Drop the high and low so one noisy conversion cannot move the pounds.
   long samples[10];
+  int good = 0;
+  int missed = 0;
   for (int i = 0; i < 10; i++) {
     const long raw = readHx711();
-    if (raw == LONG_MIN) return false;
-    samples[i] = raw;
+    if (raw != LONG_MIN) {
+      samples[good++] = raw;
+    } else if (++missed > 10 - HX_MIN_GOOD_SAMPLES) {
+      return false;  // Not enough left to reach the minimum; do not stall the loop.
+    }
   }
-  for (int i = 0; i < 10; i++) {
-    for (int j = i + 1; j < 10; j++) {
+  if (good < HX_MIN_GOOD_SAMPLES) return false;
+  for (int i = 0; i < good; i++) {
+    for (int j = i + 1; j < good; j++) {
       if (samples[j] < samples[i]) {
         const long swap = samples[i];
         samples[i] = samples[j];
@@ -426,10 +502,13 @@ bool readAveraged(long *rawOut, long *spreadOut) {
       }
     }
   }
+  // A live bridge at gain 128 always has a few counts of noise. Identical
+  // samples (usually all 0) mean DT is stuck, not that the platform is empty.
+  if (samples[0] == samples[good - 1]) return false;
   long total = 0;
-  for (int i = 1; i < 9; i++) total += samples[i];
-  *rawOut = total / 8;
-  if (spreadOut) *spreadOut = samples[9] - samples[0];
+  for (int i = 1; i < good - 1; i++) total += samples[i];
+  *rawOut = total / (good - 2);
+  if (spreadOut) *spreadOut = samples[good - 1] - samples[0];
   return true;
 }
 
@@ -448,17 +527,33 @@ void loadScale() {
   scaleZero = provisionStore.getLong("hx_zero", 0);
   const uint8_t rev = provisionStore.getUChar("hx_rev", 0);
   countsPerLb = provisionStore.getFloat("hx_cpl", 0);
+  if (rev != CELL_CAL_REV) {
+    // A different sensor: its zero means nothing here, so tare again on the next reading.
+    scaleTared = false;
+    scaleZero = 0;
+    provisionStore.putBool("hx_tared", false);
+    provisionStore.putLong("hx_zero", 0);
+  }
   if (rev != CELL_CAL_REV || !(countsPerLb > 100.0f)) {
     countsPerLb = datasheetCountsPerLb();
     provisionStore.putFloat("hx_cpl", countsPerLb);
     provisionStore.putUChar("hx_rev", CELL_CAL_REV);
   }
   provisionStore.end();
+  char line[96];
+  snprintf(line, sizeof(line), "[scale] cell setup %s, counts/lb=%.0f", CELL_SETUP, countsPerLb);
+  USBSerial.println(line);
+  HostUart.println(line);
 }
 
 float poundsFromRaw(long raw) {
   if (!(countsPerLb > 100.0f)) return 0;
   return static_cast<float>(raw - scaleZero) / countsPerLb;
+}
+
+long countsForPounds(float pounds) {
+  const float perLb = countsPerLb > 100.0f ? countsPerLb : datasheetCountsPerLb();
+  return static_cast<long>(pounds * perLb);
 }
 
 void applyTare(long raw) {
@@ -477,6 +572,35 @@ void applyTare(long raw) {
   snprintf(line, sizeof(line), "[scale] tared zero=%ld counts/lb=%.0f", scaleZero, countsPerLb);
   USBSerial.println(line);
   HostUart.println(line);
+}
+
+/** Settles a command from the app and sends the result soon, not a full interval later. */
+void finishCommand(bool ok) {
+  if (pendingCommandId == 0) return;
+  lastCommandId = pendingCommandId;
+  lastCommandOk = ok;
+  pendingCommandId = 0;
+  ackPacketsLeft = ACK_PACKETS;
+  provisionStore.begin("maple", false);
+  provisionStore.putUInt("cmd_id", lastCommandId);
+  provisionStore.putBool("cmd_ok", ok);
+  provisionStore.end();
+  lastTxMs = millis() - txIntervalMs + 1500;
+}
+
+/** Closes an uplink, adding the command echo while there is one to send. */
+void finishJson(char *json, size_t size) {
+  size_t used = strlen(json);
+  if (ackPacketsLeft > 0 && lastCommandId != 0) {
+    used += snprintf(
+        json + used,
+        size - used,
+        ",\"Command_Id\":%lu,\"Command_Ok\":%d,\"Counts_Per_Lb\":%.0f",
+        static_cast<unsigned long>(lastCommandId),
+        lastCommandOk ? 1 : 0,
+        countsPerLb);
+  }
+  snprintf(json + used, size - used, "}");
 }
 
 int batteryPercent() {
@@ -513,16 +637,18 @@ void sendFault(const char *fault) {
   snprintf(
       json,
       sizeof(json),
-      "{\"Node_Code\":\"%s\",\"Fault\":\"%s\",\"Battery_Percent\":%d,\"Interval_Seconds\":%lu}",
+      "{\"Node_Code\":\"%s\",\"Fault\":\"%s\",\"Battery_Percent\":%d,\"Interval_Seconds\":%lu",
       nodeCode,
       fault,
       battery,
       static_cast<unsigned long>(txIntervalMs / 1000UL));
+  finishJson(json, sizeof(json));
 
   announce("Fault", fault, nodeCode);
   int16_t state = RADIOLIB_ERR_UNKNOWN;
   if (transmitJson(json, &state)) {
-    hearInterval();
+    if (ackPacketsLeft > 0) ackPacketsLeft--;
+    hearDownlink();
     announce("Fault sent", fault, nodeCode);
     USBSerial.printf("[tx] %s\n", json);
     HostUart.printf("[tx] %s\n", json);
@@ -542,11 +668,12 @@ void sendScaleReading() {
   snprintf(
       json,
       sizeof(json),
-      "{\"Node_Code\":\"%s\",\"Weight\":%.2f,\"Battery_Percent\":%d,\"Interval_Seconds\":%lu}",
+      "{\"Node_Code\":\"%s\",\"Weight\":%.2f,\"Battery_Percent\":%d,\"Interval_Seconds\":%lu",
       nodeCode,
       pounds,
       battery,
       static_cast<unsigned long>(txIntervalMs / 1000UL));
+  finishJson(json, sizeof(json));
 
   char action[28];
   char detail[28];
@@ -556,7 +683,8 @@ void sendScaleReading() {
 
   int16_t state = RADIOLIB_ERR_UNKNOWN;
   if (transmitJson(json, &state)) {
-    hearInterval();
+    if (ackPacketsLeft > 0) ackPacketsLeft--;
+    hearDownlink();
     snprintf(action, sizeof(action), "Sent %.2f lb", pounds);
     snprintf(detail, sizeof(detail), "%s  sap #%lu", nodeCode, static_cast<unsigned long>(txCount));
     char extra[28];
@@ -589,17 +717,17 @@ void setup() {
   powerOled(true);
   u8g2.begin();
   u8g2.setContrast(180);
-  announce("Booting...", nodeCode, "Starting USB + radio");
+  announce("Booting...", "Maple sap node", "Starting USB + radio");
 
   USBSerial.begin(115200);
   USBSerial.setTxTimeoutMs(0);
   USBSerial.println();
   HostUart.println();
+  loadScale();
+  const bool identified = loadProvision();
   USBSerial.printf("Maple sap LoRa node  %s  Heltec WiFi LoRa 32 V3\n", nodeCode);
   HostUart.printf("Maple sap LoRa node  %s  Heltec WiFi LoRa 32 V3\n", nodeCode);
-
-  loadScale();
-  if (!loadProvision()) {
+  if (!identified) {
     announce("No node code", "Flash again from Deploy", "Identity is in the image");
   }
 
@@ -640,8 +768,10 @@ void loop() {
   if (rawOk) {
     lastRaw = raw;
     if (!scaleTared || tareRequested) {
+      const bool asked = tareRequested;
       tareRequested = false;
       applyTare(raw);
+      if (asked && !calRequested) finishCommand(true);
     } else if (calRequested) {
       const float delta = static_cast<float>(raw - scaleZero);
       if (fabsf(delta) > 1000.0f) {
@@ -656,19 +786,30 @@ void loop() {
         announce("Calibrated", detail, nodeCode);
         USBSerial.println("CAL ok");
         HostUart.println("CAL ok");
+        finishCommand(true);
       } else {
+        announce("Calibrate failed", "No weight on cell?", nodeCode);
         USBSerial.println("CAL failed");
         HostUart.println("CAL failed");
+        finishCommand(false);
       }
       calRequested = false;
     }
     lastPounds = poundsFromRaw(raw);
   }
 
+  if (!rawOk && (tareRequested || calRequested)) {
+    // No HX711: the request cannot run, so drop it (and tell the app) instead
+    // of staying awake for it.
+    tareRequested = false;
+    calRequested = false;
+    finishCommand(false);
+  }
+
   if (!rawOk) fault = "load-cell";
   else if (!scaleTared) fault = "untared";
-  else if (spread > UNSTABLE_SPREAD_COUNTS) fault = "unstable";
-  else if (raw - scaleZero < REVERSED_DELTA_COUNTS) fault = "reversed";
+  else if (spread > countsForPounds(UNSTABLE_SPREAD_LB)) fault = "unstable";
+  else if (raw - scaleZero < -countsForPounds(REVERSED_DELTA_LB)) fault = "reversed";
 
   const bool holding = digitalRead(PIN_PRG) == LOW;
   if (holding && !prgDown) {
@@ -711,22 +852,31 @@ void loop() {
       }
     }
   } else {
-    const uint32_t left = (TARE_HOLD_MS - (millis() - prgSince) + 999) / 1000;
+    // Held past 3 s but the tare has not fired: the HX711 is not answering, and
+    // the tare runs on the first good reading while PRG is still held.
+    const uint32_t held = millis() - prgSince;
     char detail[28];
-    snprintf(detail, sizeof(detail), "%lus more", static_cast<unsigned long>(left));
+    if (held >= TARE_HOLD_MS) {
+      strncpy(detail, "No load cell", sizeof(detail) - 1);
+      detail[sizeof(detail) - 1] = '\0';
+    } else {
+      snprintf(detail, sizeof(detail), "%lus more", static_cast<unsigned long>((TARE_HOLD_MS - held + 999) / 1000));
+    }
     strncpy(lineAction, "Taring...", sizeof(lineAction) - 1);
     strncpy(lineDetail, detail, sizeof(lineDetail) - 1);
-    strncpy(lineExtra, "Release after blink", sizeof(lineExtra) - 1);
+    strncpy(lineExtra, held >= TARE_HOLD_MS ? "Check GPIO 6 and 7" : "Release after blink", sizeof(lineExtra) - 1);
     lineAction[sizeof(lineAction) - 1] = '\0';
     lineDetail[sizeof(lineDetail) - 1] = '\0';
     lineExtra[sizeof(lineExtra) - 1] = '\0';
     drawScreen();
   }
 
-  if (millis() - lastTxMs >= txIntervalMs) {
+  static uint32_t jitterMs = 0;
+  if (millis() - lastTxMs >= txIntervalMs + jitterMs) {
+    lastTxMs = millis();
     if (fault) sendFault(fault);
     else if (scaleOk && scaleTared) sendScaleReading();
-    lastTxMs = millis();
+    jitterMs = random(TX_JITTER_MS);
   }
   delay(40);
 }

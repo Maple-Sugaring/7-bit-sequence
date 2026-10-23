@@ -209,7 +209,7 @@ void sendInterval(const String &line) {
   if (first < 0 || second < 0) return;
   const String code = line.substring(first + 1, second);
   const int seconds = line.substring(second + 1).toInt();
-  if (code.length() == 0 || seconds < 60 || seconds > 86400) return;
+  if (code.length() == 0 || seconds < 10 || seconds > 86400) return;
 
   char packet[96];
   snprintf(
@@ -225,6 +225,37 @@ void sendInterval(const String &line) {
   announce("Interval sent", detail, "Back to listening");
 }
 
+// CMD <node_code> <id> TARE  or  CMD <node_code> <id> CAL <pounds>, from the Pi.
+void sendCommand(const String &line) {
+  char code[24];
+  char action[8];
+  unsigned long id = 0;
+  float pounds = 0;
+  const int fields = sscanf(line.c_str(), "CMD %23s %lu %7s %f", code, &id, action, &pounds);
+  if (fields < 3 || id == 0) return;
+  const bool tare = strcmp(action, "TARE") == 0;
+  const bool cal = strcmp(action, "CAL") == 0 && fields == 4 && pounds > 0;
+  if (!tare && !cal) return;
+
+  char packet[128];
+  if (cal) {
+    snprintf(
+        packet,
+        sizeof(packet),
+        "{\"Node_Code\":\"%s\",\"Command_Id\":%lu,\"Action\":\"CAL\",\"Pounds\":%.3f}",
+        code,
+        id,
+        pounds);
+  } else {
+    snprintf(packet, sizeof(packet), "{\"Node_Code\":\"%s\",\"Command_Id\":%lu,\"Action\":\"TARE\"}", code, id);
+  }
+  radio.transmit(reinterpret_cast<uint8_t *>(packet), strlen(packet));
+
+  char detail[28];
+  snprintf(detail, sizeof(detail), "%s #%lu", code, id);
+  announce(cal ? "Calibrate sent" : "Tare sent", detail, "Back to listening");
+}
+
 String downlinkLine;
 
 void pollDownlink() {
@@ -233,6 +264,7 @@ void pollDownlink() {
     if (c == '\n') {
       downlinkLine.trim();
       if (downlinkLine.startsWith("INTERVAL ")) sendInterval(downlinkLine);
+      else if (downlinkLine.startsWith("CMD ")) sendCommand(downlinkLine);
       downlinkLine = "";
     } else if (c != '\r' && downlinkLine.length() < 80) {
       downlinkLine += c;
@@ -257,62 +289,46 @@ void publishReading(const char *payload, int rssi) {
   float interval = 0.0f;
   const bool hasInterval = extractNumber(payload, "Interval_Seconds", &interval);
 
-  if (extractString(payload, "Fault", fault, sizeof(fault))) {
-    char line[220];
-    if (hasInterval) {
-      snprintf(
-          line,
-          sizeof(line),
-          "{\"Node_Code\":\"%s\",\"Fault\":\"%s\",\"Battery_Percent\":%d,\"Signal_Rssi\":%d,\"Interval_Seconds\":%d}",
-          nodeCode,
-          fault,
-          batteryPercent,
-          rssi,
-          static_cast<int>(lroundf(interval)));
-    } else {
-      snprintf(
-          line,
-          sizeof(line),
-          "{\"Node_Code\":\"%s\",\"Fault\":\"%s\",\"Battery_Percent\":%d,\"Signal_Rssi\":%d}",
-          nodeCode,
-          fault,
-          batteryPercent,
-          rssi);
-    }
-    logLine(line);
-    rxCount++;
-    announce("RX fault", fault, nodeCode);
-    return;
-  }
-
+  const bool hasFault = extractString(payload, "Fault", fault, sizeof(fault));
   float weight = 0.0f;
-  if (!extractNumber(payload, "Weight", &weight)) {
+  if (!hasFault && !extractNumber(payload, "Weight", &weight)) {
     char bad[160];
     snprintf(bad, sizeof(bad), "[rx] bad payload: %s", payload);
     logLine(bad);
     announce("RX parse FAIL", "need node/wt/batt", "Pi ignores this line");
     return;
   }
-  char line[220];
+
+  char line[300];
+  int used = hasFault
+      ? snprintf(line, sizeof(line), "{\"Node_Code\":\"%s\",\"Fault\":\"%s\"", nodeCode, fault)
+      : snprintf(line, sizeof(line), "{\"Node_Code\":\"%s\",\"Weight\":%.2f", nodeCode, weight);
+  used += snprintf(line + used, sizeof(line) - used, ",\"Battery_Percent\":%d,\"Signal_Rssi\":%d", batteryPercent, rssi);
   if (hasInterval) {
-    snprintf(
-        line,
-        sizeof(line),
-        "{\"Node_Code\":\"%s\",\"Weight\":%.2f,\"Battery_Percent\":%d,\"Signal_Rssi\":%d,\"Interval_Seconds\":%d}",
-        nodeCode,
-        weight,
-        batteryPercent,
-        rssi,
-        static_cast<int>(lroundf(interval)));
-  } else {
-    snprintf(
-        line,
-        sizeof(line),
-        "{\"Node_Code\":\"%s\",\"Weight\":%.2f,\"Battery_Percent\":%d,\"Signal_Rssi\":%d}",
-        nodeCode,
-        weight,
-        batteryPercent,
-        rssi);
+    used += snprintf(line + used, sizeof(line) - used, ",\"Interval_Seconds\":%d", static_cast<int>(lroundf(interval)));
+  }
+  // The node's echo of a calibration command, passed through for the API.
+  float commandId = 0.0f;
+  float commandOk = 0.0f;
+  float countsPerLb = 0.0f;
+  if (extractNumber(payload, "Command_Id", &commandId) && extractNumber(payload, "Command_Ok", &commandOk)) {
+    used += snprintf(
+        line + used,
+        sizeof(line) - used,
+        ",\"Command_Id\":%lu,\"Command_Ok\":%d",
+        static_cast<unsigned long>(lroundf(commandId)),
+        commandOk > 0.5f ? 1 : 0);
+    if (extractNumber(payload, "Counts_Per_Lb", &countsPerLb)) {
+      used += snprintf(line + used, sizeof(line) - used, ",\"Counts_Per_Lb\":%.0f", countsPerLb);
+    }
+  }
+  snprintf(line + used, sizeof(line) - used, "}");
+
+  if (hasFault) {
+    logLine(line);
+    rxCount++;
+    announce("RX fault", fault, nodeCode);
+    return;
   }
 
   logLine(line);

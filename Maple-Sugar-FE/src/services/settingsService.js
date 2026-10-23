@@ -4,6 +4,6 @@ export function getSettings() {
   return settingsRepository.getSettings();
 }
 
-export function saveReportInterval(minutes) {
-  return settingsRepository.updateReportInterval(minutes);
+export function saveReportInterval(seconds) {
+  return settingsRepository.updateReportInterval(seconds);
 }

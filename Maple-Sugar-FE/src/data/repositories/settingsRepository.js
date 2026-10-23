@@ -4,6 +4,6 @@ export function getSettings() {
   return apiClient.get('/settings');
 }
 
-export function updateReportInterval(minutes) {
-  return apiClient.patch('/settings', { Report_Interval_Minutes: minutes });
+export function updateReportInterval(seconds) {
+  return apiClient.patch('/settings', { Report_Interval_Seconds: seconds });
 }

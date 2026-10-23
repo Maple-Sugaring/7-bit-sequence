@@ -8,6 +8,7 @@
  */
 
 import { z } from 'zod';
+import { CALIBRATION_ACTIONS, MAX_TEST_POUNDS, MIN_TEST_POUNDS } from '../business/calibration.js';
 
 /** Path ids arrive as strings and must be positive integers. */
 export const idParam = z.coerce.number().int().positive();
@@ -218,13 +219,46 @@ export const nodeDetailsBody = z.object({
   GatewayID: z.coerce.number().int().positive().optional(),
 });
 
-export const nodeIntervalBody = z.object({
-  Report_Interval_Minutes: z.coerce
-    .number()
-    .int()
-    .min(1, 'Use at least 1 minute.')
-    .max(1440, 'Use a day or less.'),
-});
+/**
+ * A packet interval in seconds (10 s to a day). Minutes are still accepted from
+ * clients that predate seconds, and both arrive as `seconds`.
+ */
+const packetInterval = z
+  .object({
+    Report_Interval_Seconds: z.coerce
+      .number()
+      .int()
+      .min(10, 'Use at least 10 seconds.')
+      .max(86400, 'Use a day or less.')
+      .optional(),
+    Report_Interval_Minutes: z.coerce
+      .number()
+      .int()
+      .min(1, 'Use at least 1 minute.')
+      .max(1440, 'Use a day or less.')
+      .optional(),
+  })
+  .refine((body) => body.Report_Interval_Seconds != null || body.Report_Interval_Minutes != null, {
+    message: 'Choose a packet interval.',
+    path: ['Report_Interval_Seconds'],
+  })
+  .transform((body) => ({ seconds: body.Report_Interval_Seconds ?? body.Report_Interval_Minutes * 60 }));
+
+export const nodeIntervalBody = packetInterval;
+
+export const calibrationBody = z
+  .object({
+    Action: z.enum(CALIBRATION_ACTIONS),
+    Pounds: z.coerce
+      .number()
+      .min(MIN_TEST_POUNDS, `Use a test weight of at least ${MIN_TEST_POUNDS} lb.`)
+      .max(MAX_TEST_POUNDS, `Use a test weight of ${MAX_TEST_POUNDS} lb or less.`)
+      .optional(),
+  })
+  .refine((body) => body.Action !== 'calibrate' || body.Pounds != null, {
+    message: 'Enter the test weight in pounds.',
+    path: ['Pounds'],
+  });
 
 export const nodeActionBody = z.object({
   Action: z.enum(['collect', 'maintenance', 'online']),
@@ -294,6 +328,13 @@ const ingestReadingObject = z.object({
   Ice_Present: z.boolean().optional().default(false),
   Battery_Percent: z.union([z.coerce.number().min(0).max(100), z.null()]).optional(),
   Signal_Rssi: z.union([z.coerce.number().int(), z.null()]).optional(),
+  // A node echoes the last calibration command it applied (business/calibration.js).
+  Command_Id: z.coerce.number().int().positive().optional(),
+  Command_Ok: z
+    .union([z.boolean(), z.coerce.number().int().min(0).max(1)])
+    .transform((value) => value === true || value === 1)
+    .optional(),
+  Counts_Per_Lb: z.coerce.number().positive().optional(),
 });
 
 function withNodeIdentity(schema) {
@@ -320,13 +361,7 @@ export const ingestBody = z.union([
   ),
 ]);
 
-export const updateSettingsBody = z.object({
-  Report_Interval_Minutes: z.coerce
-    .number()
-    .int()
-    .min(1, 'Use at least 1 minute.')
-    .max(1440, 'Use a day or less.'),
-});
+export const updateSettingsBody = packetInterval;
 
 /** Blank pronouns clear the field rather than storing an empty string. */
 export const updateProfileBody = z

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toUserMessage } from '../../data/ApiError';
 
 /**
@@ -82,4 +82,23 @@ export function useAction(action) {
   const clearError = useCallback(() => setError(null), []);
 
   return { execute, pending, error, clearError };
+}
+
+/**
+ * Calls `refresh` every `intervalMs` while `enabled`, skipping ticks while the
+ * tab is hidden. Pages use it so a new packet shows up without a reload.
+ */
+export function useAutoRefresh(refresh, intervalMs, { enabled = true } = {}) {
+  const latest = useRef(refresh);
+  useEffect(() => {
+    latest.current = refresh;
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!enabled || !intervalMs) return undefined;
+    const timer = setInterval(() => {
+      if (typeof document === 'undefined' || document.visibilityState !== 'hidden') latest.current();
+    }, intervalMs);
+    return () => clearInterval(timer);
+  }, [enabled, intervalMs]);
 }

@@ -23,8 +23,10 @@ import { WeightChart } from '../components/charts/SeriesChart';
 import { PageHeader } from '../components/common/PageHeader';
 import { dateTime } from '../components/common/format';
 import { LocationWidget } from '../components/map/LocationWidget';
+import { CalibrationCard } from '../components/deploy/CalibrationCard';
+import { packetIntervalLabel } from '../business/calibration';
 import { useAuth } from '../context/auth';
-import { useBush, useNodeStatuses, useReadings } from '../services/hooks';
+import { useAutoRefresh, useBush, useNodeStatuses, useReadings } from '../services/hooks';
 import { useAction, useAsync } from '../services/hooks/useAsync';
 import { getUsers } from '../services/adminService';
 import { flagNode } from '../services/alertService';
@@ -102,9 +104,9 @@ export function NodePage() {
     bush: bushAverageSugar(bush.data),
   });
   const weights = dailyWeightRows(history.data ?? [], { nodeIds: [Number(nodeId)], unit });
-  const intervalMinutes = node?.Report_Interval_Seconds == null
-    ? 15
-    : Math.round(node.Report_Interval_Seconds / 60);
+  // Refetch about once per packet so a new reading shows without a reload.
+  const refreshMs = Math.min(60, Math.max(5, node?.Report_Interval_Seconds ?? 60)) * 1000;
+  useAutoRefresh(bush.refresh, refreshMs);
 
   if (!bush.loading && !node) {
     return (
@@ -189,9 +191,7 @@ export function NodePage() {
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
             How often this node radios its weight.
           </Typography>
-          <Typography>
-            Every {intervalMinutes} minute{intervalMinutes === 1 ? '' : 's'}.
-          </Typography>
+          <Typography>{packetIntervalLabel(node?.Report_Interval_Seconds)}.</Typography>
           {canDeploy ? (
             <Button sx={{ mt: 1.5 }} onClick={() => navigate(`/deploy?edit=${nodeId}`)}>
               Change on Deploy
@@ -199,6 +199,8 @@ export function NodePage() {
           ) : null}
         </CardContent>
       </Card>
+
+      {canDeploy && node ? <CalibrationCard node={node} onSettled={bush.refresh} /> : null}
 
       <Box sx={{ mb: 2 }}>
         <ChartCard

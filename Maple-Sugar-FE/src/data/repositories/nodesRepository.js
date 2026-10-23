@@ -75,9 +75,9 @@ export async function updateNodeDetails(nodeId, body) {
   return updated;
 }
 
-export async function setReportInterval(nodeId, minutes) {
+export async function setReportInterval(nodeId, seconds) {
   const updated = await apiClient.patch(`/nodes/${nodeId}/interval`, {
-    Report_Interval_Minutes: minutes,
+    Report_Interval_Seconds: seconds,
   });
   invalidatePrefix(cacheNamespaces.NODES);
   return updated;
@@ -88,4 +88,15 @@ export async function flagNode(nodeId, { type, description }) {
   invalidatePrefix(cacheNamespaces.ALERTS);
   invalidatePrefix(cacheNamespaces.NODES);
   return alert;
+}
+
+/** Not cached: the page polls this while a command is on its way to the node. */
+export function getCalibration(nodeId) {
+  return apiClient.get(`/nodes/${nodeId}/calibration`);
+}
+
+export async function requestCalibration(nodeId, body) {
+  const command = await apiClient.post(`/nodes/${nodeId}/calibration`, body);
+  invalidatePrefix(cacheNamespaces.NODES);
+  return command;
 }

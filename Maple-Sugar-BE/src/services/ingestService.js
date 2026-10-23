@@ -9,11 +9,13 @@
 import { ApiError, forbidden, invalid, notFound } from '../lib/ApiError.js';
 import { validateReading } from '../business/validation.js';
 import { alertForFault, clearedAlertTypes } from '../business/alerting.js';
+import { ackOutcome, downlinkFor } from '../business/calibration.js';
 import { cacheNamespaces } from '../cache/cacheKeys.js';
 import { invalidateNamespaces } from '../cache/redisCache.js';
 import * as nodesRepository from '../repositories/nodesRepository.js';
 import * as metricsRepository from '../repositories/metricsRepository.js';
 import * as alertsRepository from '../repositories/alertsRepository.js';
+import * as calibrationRepository from '../repositories/calibrationRepository.js';
 import * as metricsService from './metricsService.js';
 import { logger } from '../lib/logger.js';
 
@@ -37,6 +39,27 @@ async function raiseOnce(nodeId, alert) {
   }
 }
 
+/**
+ * What the Pi should radio back to this node: the interval the site wants, and
+ * any calibration command still waiting. A reading that echoes the open
+ * command's id settles it first, so a finished command is not sent again.
+ */
+async function replyFor(node, reading) {
+  let command = await calibrationRepository.findOpenCommand(node.NodeID);
+  const outcome = ackOutcome(command, reading);
+  if (outcome) {
+    await calibrationRepository.settleCommand(command.CommandID, outcome);
+    logger.info({ nodeId: node.NodeID, commandId: command.CommandID, ...outcome }, 'Node settled a calibration command');
+    command = null;
+  }
+  const downlink = downlinkFor(command);
+  if (downlink && command.Status === 'pending') await calibrationRepository.markSent(command.CommandID);
+  return {
+    Desired_Interval_Seconds: node.Report_Interval_Seconds ?? null,
+    ...(downlink ? { Command: downlink } : {}),
+  };
+}
+
 async function acceptReading(gateway, reading) {
   const node = await nodesRepository.findNodeForIngest(reading);
   if (!node) throw notFound('Node');
@@ -50,11 +73,7 @@ async function acceptReading(gateway, reading) {
       signalRssi: reading.Signal_Rssi ?? null,
     });
     await raiseOnce(node.NodeID, alertForFault(reading.Fault, node.Node_Name));
-    return {
-      Fault: reading.Fault,
-      Duplicate: false,
-      Desired_Interval_Seconds: node.Report_Interval_Seconds ?? null,
-    };
+    return { Fault: reading.Fault, Duplicate: false, ...(await replyFor(node, reading)) };
   }
 
   // Air temperature comes from OpenWeather. A sap probe is a separate field, so
@@ -87,8 +106,8 @@ async function acceptReading(gateway, reading) {
     signalRssi: reading.Signal_Rssi ?? null,
   });
 
-  const desired = node.Report_Interval_Seconds ?? null;
-  if (existing) return { Reading: existing, Duplicate: true, Desired_Interval_Seconds: desired };
+  const reply = await replyFor(node, reading);
+  if (existing) return { Reading: existing, Duplicate: true, ...reply };
 
   const stored = await metricsService.createMetric(input, null);
   const cleared = await alertsRepository.resolveOpenByTypes(node.NodeID, clearedAlertTypes(reading));
@@ -96,7 +115,7 @@ async function acceptReading(gateway, reading) {
     await invalidateNamespaces([cacheNamespaces.ALERTS]);
     logger.info({ nodeId: node.NodeID, cleared }, 'Cleared node alerts after a good reading');
   }
-  return { Reading: stored, Duplicate: false, Desired_Interval_Seconds: desired };
+  return { Reading: stored, Duplicate: false, ...reply };
 }
 
 /**
