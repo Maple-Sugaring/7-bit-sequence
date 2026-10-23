@@ -743,7 +743,11 @@
       });
       $("export-csv").addEventListener("click", () => {
         const cols = ["seq", "received_at", "node", "weight_lb", "battery_percent", "rssi_dbm", "interval_s", "fault", "parse_error", "server_status", "server_detail", "downlink", "raw"];
-        const cell = (v) => { const s = v == null ? "" : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+        const cell = (v) => {
+          let s = v == null ? "" : String(v);
+          if (typeof v === "string" && /^[\t\r\n ]*[=+\-@]/.test(s)) s = "'" + s;
+          return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+        };
         const rows = exportRows().map((p) => [
           p.seq, p.received_at, p.payload?.Node_Code, p.payload?.Weight, p.payload?.Battery_Percent, p.rssi_dbm,
           p.payload?.Interval_Seconds, p.payload?.Fault, p.parse_error, p.forward?.status, p.forward?.detail, p.downlink, p.raw_text,

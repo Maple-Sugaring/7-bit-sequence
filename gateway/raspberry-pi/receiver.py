@@ -15,6 +15,7 @@ import serial
 
 
 HISTORY_LIMIT = 200
+MAX_TRACKED_NODES = 200
 POST_ATTEMPTS = 3
 RECONNECT_SECONDS = 3
 
@@ -274,15 +275,21 @@ class PacketStore:
 
     def _count_node(self, reading: dict[str, Any], packet: dict[str, Any]) -> None:
         code = reading["Node_Code"]
-        node = self.nodes.setdefault(code, {
-            "node_code": code,
-            "packets": 0,
-            "faults": 0,
-            "downlinks": 0,
-            "first_seen": packet["received_at"],
-            "last_weight": None,
-            "last_weight_at": None,
-        })
+        node = self.nodes.get(code)
+        if node is None:
+            if len(self.nodes) >= MAX_TRACKED_NODES:
+                oldest = min(self.nodes, key=lambda tracked: self.nodes[tracked]["last_seen"])
+                del self.nodes[oldest]
+            node = {
+                "node_code": code,
+                "packets": 0,
+                "faults": 0,
+                "downlinks": 0,
+                "first_seen": packet["received_at"],
+                "last_weight": None,
+                "last_weight_at": None,
+            }
+            self.nodes[code] = node
         node["packets"] += 1
         node["last_seen"] = packet["received_at"]
         node["last_seq"] = packet["seq"]
