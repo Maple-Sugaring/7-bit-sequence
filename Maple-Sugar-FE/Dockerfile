@@ -17,7 +17,8 @@ ARG VITE_API_MODE=http
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 ENV VITE_API_MODE=$VITE_API_MODE
 
-RUN npm run build
+ARG RLES_DEPLOY_SHA=unknown
+RUN npm run build && printf '{"commit":"%s"}\n' "$RLES_DEPLOY_SHA" > /app/dist/deployment.json
 
 # Serve stage. nginx:alpine runs fine on the Raspberry Pi 5 under Debian.
 FROM nginx:alpine AS serve
