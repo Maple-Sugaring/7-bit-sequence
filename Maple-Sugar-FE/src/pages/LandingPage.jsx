@@ -17,7 +17,6 @@ import BoltIcon from '@mui/icons-material/Bolt';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import CloudDoneIcon from '@mui/icons-material/CloudDone';
 import DeviceThermostatIcon from '@mui/icons-material/DeviceThermostat';
-import ForestRoundedIcon from '@mui/icons-material/ForestRounded';
 import GoogleIcon from '@mui/icons-material/Google';
 import GroupsIcon from '@mui/icons-material/Groups';
 import LocalDrinkIcon from '@mui/icons-material/LocalDrink';
@@ -29,7 +28,7 @@ import SensorsIcon from '@mui/icons-material/Sensors';
 import AgricultureIcon from '@mui/icons-material/Agriculture';
 import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import mapleLogo from '../assets/MapleLogo.png';
-import ritLogo from '../assets/RITLogo.png';
+import ritTigerLogo from '../assets/RITTigerTransparent.png';
 import { MeterBar } from '../components/common/MeterBar';
 import { Footer } from '../components/layout/Footer';
 import { useAuth } from '../context/auth';
@@ -41,71 +40,25 @@ const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? '/api').replace(/\/$/, ''
 const GOOGLE_START = `${API_BASE}/auth/google`;
 const DEMO_ACCOUNTS = demoAccounts();
 
-const TELEMETRY_PREVIEWS = [
-  {
-    id: 'tree-01',
-    label: 'Tree 01 · Sugar Maple',
-    nodeCode: 'NODE_001',
-    location: 'Alumni House North Grove',
-    gallons: 3.6,
-    capacity: 5.0,
-    percent: 72,
-    meterColor: ritOrange,
-    statusLabel: 'Collect Soon (72%)',
-    shelfLife: '31h remaining',
-    shelfLifeDetail: 'Batch started 14h ago · holding steady at 37°F',
-    brix: '2.4%',
-    boilRatio: '35.8 : 1',
-    syrupEst: '0.10 gal syrup',
-    battery: '94% (4.12 V)',
-    rssi: '-74 dBm · Link Up',
-    tempDay: '38°F',
-    tempNight: '24°F',
-    flowState: 'Active Sap Run',
-  },
-  {
-    id: 'tree-02',
-    label: 'Tree 02 · Red Maple',
-    nodeCode: 'NODE_002',
-    location: 'Alumni House Lawn Edge',
-    gallons: 1.9,
-    capacity: 5.0,
-    percent: 38,
-    meterColor: sugarbush.forest,
-    statusLabel: 'Collecting (38%)',
-    shelfLife: '44h remaining',
-    shelfLifeDetail: 'Emptied yesterday morning · fresh batch',
-    brix: '2.1%',
-    boilRatio: '41.0 : 1',
-    syrupEst: '0.05 gal syrup',
-    battery: '89% (4.06 V)',
-    rssi: '-79 dBm · Link Up',
-    tempDay: '38°F',
-    tempNight: '24°F',
-    flowState: 'Steady Drip',
-  },
-  {
-    id: 'bush-summary',
-    label: 'All Taps Summary',
-    nodeCode: 'BUSH_TOTAL',
-    location: 'RIT Alumni House Sugarbush',
-    gallons: 5.5,
-    capacity: 10.0,
-    percent: 55,
-    meterColor: sugarbush.amber,
-    statusLabel: '2 Active LoRa Nodes',
-    shelfLife: '31h shortest batch',
-    shelfLifeDetail: 'Timed per bucket batch across all active trees',
-    brix: '2.25% avg',
-    boilRatio: '38.2 : 1 avg',
-    syrupEst: '0.15 gal syrup',
-    battery: '91% fleet avg',
-    rssi: '2/2 Nodes Online',
-    tempDay: '38°F',
-    tempNight: '24°F',
-    flowState: 'Ideal Freeze-Thaw Window',
-  },
-];
+const TELEMETRY_PREVIEW = {
+  nodeCode: 'BUSH_TOTAL',
+  location: 'RIT Alumni House Sugarbush',
+  gallons: 5.5,
+  capacity: 10.0,
+  percent: 55,
+  meterColor: sugarbush.amber,
+  statusLabel: '2 Active LoRa Nodes',
+  shelfLife: '31h shortest batch',
+  shelfLifeDetail: 'Timed per bucket batch across all active trees',
+  brix: '2.25% avg',
+  boilRatio: '38.2 : 1 avg',
+  syrupEst: '0.15 gal syrup',
+  battery: '91% fleet avg',
+  rssi: '2/2 Nodes Online',
+  tempDay: '38°F',
+  tempNight: '24°F',
+  flowState: 'Ideal Freeze-Thaw Window',
+};
 
 const PIPELINE_STEPS = [
   {
@@ -215,13 +168,11 @@ function scrollToSection(id) {
 export function LandingPage() {
   const { isAuthenticated, restoring, role, signIn } = useAuth();
   const [demoError, setDemoError] = useState(null);
-  const [selectedTreeId, setSelectedTreeId] = useState(TELEMETRY_PREVIEWS[0].id);
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const banner = searchParams.get('error');
 
-  const activePreview =
-    TELEMETRY_PREVIEWS.find((item) => item.id === selectedTreeId) ?? TELEMETRY_PREVIEWS[0];
+  const activePreview = TELEMETRY_PREVIEW;
 
   useEffect(() => {
     if (location.pathname === '/login' || banner) {
@@ -275,9 +226,11 @@ export function LandingPage() {
         }}
       >
         <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
-          <ForestRoundedIcon
-            titleAccess="Maple Sugaring trees"
-            sx={{ fontSize: 32, color: ritOrange, flexShrink: 0 }}
+          <Box
+            component="img"
+            src={ritTigerLogo}
+            alt="RIT tiger mascot"
+            sx={{ width: 84, height: 84, objectFit: 'contain', flexShrink: 0 }}
           />
           <Box>
             <Typography
@@ -288,7 +241,7 @@ export function LandingPage() {
                 lineHeight: 1.1,
               }}
             >
-              RIT Maple Sugaring
+              Maple Sugaring
             </Typography>
             <Typography
               variant="caption"
@@ -338,14 +291,6 @@ export function LandingPage() {
           </Button>
         </Stack>
 
-        <Stack direction="row" spacing={{ xs: 1.5, sm: 2 }} sx={{ alignItems: 'center' }}>
-          <Box
-            component="img"
-            src={ritLogo}
-            alt="Rochester Institute of Technology"
-            sx={{ display: { xs: 'none', sm: 'block' }, height: 28, width: 'auto' }}
-          />
-        </Stack>
       </Box>
 
       {/* Section 1: Hero & Embedded Sign-In */}
@@ -672,48 +617,10 @@ export function LandingPage() {
                 See What the Bush Reports in Real Time
               </Typography>
               <Typography sx={{ color: '#4A4A4A', mt: 1, maxWidth: '62ch' }}>
-                Select a tapped maple below to inspect sample live readings for bucket capacity,
-                temperature-adjusted sap shelf life, and estimated syrup yield.
+                Sample readings across all active taps, including bucket capacity, sap shelf life,
+                sugar content, and estimated syrup yield.
               </Typography>
             </Box>
-
-            {/* Interactive Tree Selector Pills */}
-            <Stack
-              direction="row"
-              spacing={1}
-               role="group"
-              aria-label="Select sample tree telemetry"
-              sx={{
-                flexWrap: 'wrap',
-                gap: 1,
-                width: { xs: '100%', md: 'auto' },
-              }}
-            >
-              {TELEMETRY_PREVIEWS.map((item) => {
-                const selected = item.id === activePreview.id;
-                return (
-                  <Button
-                    key={item.id}
-                    variant={selected ? 'contained' : 'outlined'}
-                    color={selected ? 'primary' : 'secondary'}
-                    size="small"
-                    onClick={() => setSelectedTreeId(item.id)}
-                    aria-pressed={selected}
-                    sx={{
-                      flex: { xs: '1 1 auto', sm: '0 0 auto' },
-                      minHeight: 40,
-                      px: 2,
-                      fontWeight: 700,
-                      bgcolor: selected ? ritOrange : '#fff',
-                      color: selected ? '#fff' : '#000',
-                      borderColor: selected ? ritOrange : '#D0D3D4',
-                    }}
-                  >
-                    {item.label}
-                  </Button>
-                );
-              })}
-            </Stack>
           </Stack>
 
           {/* Telemetry Cards Grid */}
