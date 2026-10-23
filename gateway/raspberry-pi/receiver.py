@@ -8,14 +8,15 @@ import threading
 import time
 from collections import deque
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 import requests
 import serial
 
 
-HISTORY_LIMIT = 20
+HISTORY_LIMIT = 200
 POST_ATTEMPTS = 3
+RECONNECT_SECONDS = 3
 
 
 def load_env(path: str = ".env") -> None:
@@ -232,19 +233,28 @@ def forward_reading(
 
 
 class PacketStore:
-    def __init__(self) -> None:
+    def __init__(self, history_limit: int = HISTORY_LIMIT) -> None:
         self._lock = threading.Lock()
-        self.packets: deque[dict[str, Any]] = deque(maxlen=HISTORY_LIMIT)
+        self.packets: deque[dict[str, Any]] = deque(maxlen=history_limit)
         self.rx_count = 0
+        self.parse_errors = 0
+        self.downlinks = 0
+        # Per-node totals outlive the history window.
+        self.nodes: dict[str, dict[str, Any]] = {}
         self.started_at = utc_millis()
         self.radio_status = "starting"
         self.radio_detail = "Opening gateway USB serial"
         self.last_error: str | None = None
+        self.config: dict[str, Any] = {}
 
     def set_radio(self, status: str, detail: str) -> None:
         with self._lock:
             self.radio_status = status
             self.radio_detail = detail
+
+    def set_config(self, config: dict[str, Any]) -> None:
+        with self._lock:
+            self.config = dict(config)
 
     def add(self, packet: dict[str, Any]) -> None:
         with self._lock:
@@ -254,19 +264,65 @@ class PacketStore:
             self.radio_status = "up"
             self.radio_detail = "Receiving gateway USB lines"
             self.last_error = packet.get("parse_error")
+            if packet.get("parse_error"):
+                self.parse_errors += 1
+            if packet.get("downlink"):
+                self.downlinks += 1
+            reading = packet.get("reading")
+            if reading:
+                self._count_node(reading, packet)
 
-    def snapshot(self) -> dict[str, Any]:
+    def _count_node(self, reading: dict[str, Any], packet: dict[str, Any]) -> None:
+        code = reading["Node_Code"]
+        node = self.nodes.setdefault(code, {
+            "node_code": code,
+            "packets": 0,
+            "faults": 0,
+            "downlinks": 0,
+            "first_seen": packet["received_at"],
+            "last_weight": None,
+            "last_weight_at": None,
+        })
+        node["packets"] += 1
+        node["last_seen"] = packet["received_at"]
+        node["last_seq"] = packet["seq"]
+        node["last_fault"] = reading.get("Fault")
+        if reading.get("Fault"):
+            node["faults"] += 1
+        if "Weight" in reading:
+            node["last_weight"] = reading["Weight"]
+            node["last_weight_at"] = packet["received_at"]
+        for key, field in (
+            ("Battery_Percent", "battery_percent"),
+            ("Signal_Rssi", "rssi_dbm"),
+            ("Interval_Seconds", "interval_seconds"),
+            ("Counts_Per_Lb", "counts_per_lb"),
+        ):
+            if key in reading:
+                node[field] = reading[key]
+        node["last_forward"] = packet["forward"]["status"]
+        if packet.get("downlink"):
+            node["downlinks"] += 1
+            node["last_downlink"] = packet["downlink"]
+
+    def snapshot(self, since: int = 0) -> dict[str, Any]:
         with self._lock:
-            packets = list(self.packets)
-            last = packets[0] if packets else None
+            packets = [packet for packet in self.packets if packet["seq"] > since]
+            last = self.packets[0] if self.packets else None
             return {
                 "radio_status": self.radio_status,
                 "radio_detail": self.radio_detail,
                 "last_error": self.last_error,
                 "rx_count": self.rx_count,
+                "parse_errors": self.parse_errors,
+                "downlinks": self.downlinks,
+                "history_limit": self.packets.maxlen,
                 "started_at": self.started_at,
+                "server_time": utc_millis(),
                 "last_received_at": last["received_at"] if last else None,
                 "last": last,
+                "nodes": sorted((dict(node) for node in self.nodes.values()), key=lambda n: n["node_code"]),
+                "config": dict(self.config),
                 "packets": packets,
             }
 
@@ -284,6 +340,7 @@ def line_packet(text: str) -> dict[str, Any] | None:
         "payload": None,
         "parse_error": None,
         "forward": {"status": "skipped", "detail": "serial only"},
+        "downlink": None,
     }
     try:
         reading = parse_reading(text)
@@ -297,6 +354,35 @@ def line_packet(text: str) -> dict[str, Any] | None:
     return packet
 
 
+def process_packet(
+    packet: dict[str, Any],
+    enabled: bool,
+    token: str,
+    api_url: str,
+    gateway_code: str,
+    send: Callable[..., str | None] = forward_reading,
+) -> str | None:
+    """Forward one packet when configured and return the line to radio back."""
+    if not packet.get("reading"):
+        return None
+    if not enabled:
+        packet["forward"] = {
+            "status": "skipped",
+            "detail": "local app only (FORWARD_TO_SERVER=0)",
+        }
+        return None
+    if not token:
+        packet["forward"] = {
+            "status": "skipped",
+            "detail": "FORWARD_TO_SERVER=1 but GATEWAY_INGEST_TOKEN is empty",
+        }
+        return None
+    command = send(packet, api_url, token, gateway_code)
+    if command:
+        packet["downlink"] = command.strip()
+    return command
+
+
 def run_receiver(store: PacketStore) -> None:
     serial_dev = os.getenv("GATEWAY_SERIAL", "/dev/ttyACM0")
     baud = int(os.getenv("GATEWAY_BAUD", "115200"))
@@ -307,50 +393,58 @@ def run_receiver(store: PacketStore) -> None:
         "https://ritmaplesugaring.privatedns.org/api/ingest",
     )
     token = os.getenv("GATEWAY_INGEST_TOKEN", "").strip()
+    store.set_config({
+        "serial": serial_dev,
+        "baud": baud,
+        "forward": forward,
+        "token_set": bool(token),
+        "gateway_code": gateway_code,
+        "api_url": api_url,
+    })
 
-    try:
-        store.set_radio("configuring", f"Opening {serial_dev} @ {baud}")
-        port = serial.Serial(serial_dev, baud, timeout=1)
-        store.set_radio("waiting", f"Listening on {serial_dev} for gateway JSON lines")
-    except Exception as exc:
-        store.set_radio("error", str(exc))
-        return
+    # Keep retrying so an unplugged gateway Heltec comes back without a restart.
+    while True:
+        try:
+            store.set_radio("configuring", f"Opening {serial_dev} @ {baud}")
+            port = serial.Serial(serial_dev, baud, timeout=1)
+            store.set_radio("waiting", f"Listening on {serial_dev} for gateway JSON lines")
+        except Exception as exc:
+            store.set_radio("error", f"{exc} (retrying in {RECONNECT_SECONDS}s)")
+            time.sleep(RECONNECT_SECONDS)
+            continue
+        try:
+            read_lines(port, store, forward, token, api_url, gateway_code)
+        except serial.SerialException as exc:
+            store.set_radio("error", f"{exc} (retrying in {RECONNECT_SECONDS}s)")
+        finally:
+            port.close()
+        time.sleep(RECONNECT_SECONDS)
 
-    try:
-        while True:
-            try:
-                raw = port.readline()
-            except serial.SerialException as exc:
-                store.set_radio("error", str(exc))
-                return
-            if not raw:
-                continue
-            text = raw.decode("utf-8", errors="replace").strip()
-            packet = line_packet(text)
-            if packet is None:
-                continue
-            command = None
-            if forward and packet.get("reading") and token:
-                command = forward_reading(packet, api_url, token, gateway_code)
-            if command:
-                port.write(command.encode("utf-8"))
-                port.flush()
-            elif forward and packet.get("reading") and not token:
-                packet["forward"] = {
-                    "status": "skipped",
-                    "detail": "FORWARD_TO_SERVER=1 but GATEWAY_INGEST_TOKEN is empty",
-                }
-            elif packet.get("reading") and not forward:
-                packet["forward"] = {
-                    "status": "skipped",
-                    "detail": "local app only (FORWARD_TO_SERVER=0)",
-                }
-            store.add(packet)
-            print(
-                f"[rx #{store.rx_count}] rssi={packet['rssi_dbm']} "
-                f"err={packet['parse_error']} reading={packet['reading']} "
-                f"fwd={packet['forward']['status']}",
-                flush=True,
-            )
-    finally:
-        port.close()
+
+def read_lines(
+    port: serial.Serial,
+    store: PacketStore,
+    forward: bool,
+    token: str,
+    api_url: str,
+    gateway_code: str,
+) -> None:
+    while True:
+        raw = port.readline()
+        if not raw:
+            continue
+        text = raw.decode("utf-8", errors="replace").strip()
+        packet = line_packet(text)
+        if packet is None:
+            continue
+        command = process_packet(packet, forward, token, api_url, gateway_code)
+        if command:
+            port.write(command.encode("utf-8"))
+            port.flush()
+        store.add(packet)
+        print(
+            f"[rx #{store.rx_count}] rssi={packet['rssi_dbm']} "
+            f"err={packet['parse_error']} reading={packet['reading']} "
+            f"fwd={packet['forward']['status']} tx={packet['downlink']}",
+            flush=True,
+        )
