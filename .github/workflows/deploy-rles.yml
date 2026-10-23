@@ -1,0 +1,192 @@
+name: Deploy to RLES
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rles-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  backend-checks:
+    name: Backend CI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require main branch
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "Run this workflow from main."
+            exit 1
+          fi
+
+      - name: Check out selected main commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Maple-Sugar-BE/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: Maple-Sugar-BE
+        run: npm ci
+
+      - name: Check environment documentation
+        working-directory: Maple-Sugar-BE
+        run: npm run check-env
+
+      - name: Lint backend
+        working-directory: Maple-Sugar-BE
+        run: npm run lint
+
+      - name: Test backend
+        working-directory: Maple-Sugar-BE
+        run: npm test
+
+  frontend-checks:
+    name: Frontend CI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require main branch
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "Run this workflow from main."
+            exit 1
+          fi
+
+      - name: Check out selected main commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Maple-Sugar-FE/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: Maple-Sugar-FE
+        run: npm ci
+
+      - name: Lint frontend
+        working-directory: Maple-Sugar-FE
+        run: npm run lint
+
+      - name: Test frontend
+        working-directory: Maple-Sugar-FE
+        run: npm test
+
+      - name: Build frontend
+        working-directory: Maple-Sugar-FE
+        run: npm run build
+
+  deploy:
+    name: Deploy web and API
+    runs-on: ubuntu-latest
+    needs:
+      - backend-checks
+      - frontend-checks
+    steps:
+      - name: Require main branch
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "Run this workflow from main."
+            exit 1
+          fi
+
+      - name: Configure pinned SSH host key and deploy key
+        env:
+          RLES_DEPLOY_KEY: ${{ secrets.RLES_DEPLOY_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$RLES_DEPLOY_KEY" ]; then
+            echo "Add the RLES_DEPLOY_KEY repository secret before deploying."
+            exit 1
+          fi
+
+          install -m 700 -d "$HOME/.ssh"
+          cat > "$HOME/.ssh/known_hosts" <<'HOSTKEY'
+          [maplesugaring01.webdev.gccis.rit.edu]:22010 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINc1SBwwG//ju17yzsoHDsL6vg/59paBAc+Dqij7eGxF
+          HOSTKEY
+          printf '%s\n' "$RLES_DEPLOY_KEY" > "$HOME/.ssh/rles_deploy"
+          chmod 600 "$HOME/.ssh/rles_deploy"
+          ssh-keygen -y -f "$HOME/.ssh/rles_deploy" >/dev/null
+
+      - name: Pull, build, restart, and verify
+        env:
+          DEPLOY_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          ssh \
+            -i "$HOME/.ssh/rles_deploy" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -p 22010 \
+            student@maplesugaring01.webdev.gccis.rit.edu \
+            bash -s -- "$DEPLOY_SHA" <<'REMOTE'
+          set -euo pipefail
+          deploy_sha="$1"
+          app_dir=/home/student/maple/app
+
+          cd "$app_dir"
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Refusing to deploy because $app_dir has local changes."
+            exit 1
+          fi
+
+          git fetch origin main
+          remote_main="$(git rev-parse origin/main)"
+          if [ "$remote_main" != "$deploy_sha" ]; then
+            echo "main advanced after this workflow started; run deployment again for the latest main."
+            echo "Workflow SHA: $deploy_sha"
+            echo "Current main: $remote_main"
+            exit 1
+          fi
+
+          git switch main
+          git pull --ff-only origin main
+          if [ "$(git rev-parse HEAD)" != "$deploy_sha" ]; then
+            echo "Checkout does not match the validated workflow commit."
+            exit 1
+          fi
+
+          docker compose build api
+          docker compose build --build-arg "RLES_DEPLOY_SHA=$deploy_sha" web
+          docker compose up -d --no-deps api web
+
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1/deployment.json -o /tmp/rles-deployment.json; then
+              if grep -Fq "\"commit\":\"$deploy_sha\"" /tmp/rles-deployment.json; then
+                printf 'Deployed commit: %s\n' "$deploy_sha"
+                cat /tmp/rles-deployment.json
+                exit 0
+              fi
+            fi
+            sleep 2
+          done
+
+          echo "Deployment did not serve the expected commit marker."
+          cat /tmp/rles-deployment.json 2>/dev/null || true
+          docker compose ps api web
+          exit 1
+          REMOTE
+
+      - name: Record deployed commit
+        run: |
+          {
+            echo "### RLES deployment succeeded"
+            echo
+            echo "- Commit: \`$GITHUB_SHA\`"
+            echo "- Site: https://maplesugaring01.webdev.gccis.rit.edu"
+            echo "- Commit marker: https://maplesugaring01.webdev.gccis.rit.edu/deployment.json"
+          } >> "$GITHUB_STEP_SUMMARY"
