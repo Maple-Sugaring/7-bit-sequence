@@ -76,6 +76,11 @@ static const uint8_t HX_MIN_GOOD_SAMPLES = 6;
 // limits follow the sensor and its calibration.
 static const float UNSTABLE_SPREAD_LB = 0.3f;
 static const float REVERSED_DELTA_LB = 0.3f;
+// A still platform spreads about 0.02 lb, so a single glitched conversion was
+// enough to call it unstable. The spread now skips the highest and lowest
+// sample (the same ones the average drops), and it takes this many unstable
+// readings in a row, about 3 s of real movement, to raise the fault.
+static const uint8_t UNSTABLE_READINGS_TO_FAULT = 3;
 
 float datasheetCountsPerLb() {
   const float fraction = (CELL_MV_PER_V / 1000.0f) / (0.5f / HX711_GAIN);
@@ -448,6 +453,7 @@ bool scaleTared = false;
 bool scaleOk = false;
 float lastPounds = 0;
 long lastRaw = 0;
+long lastSpread = 0;
 uint32_t lastTxMs = 0;
 uint32_t lastDrawMs = 0;
 uint32_t lastScaleLogMs = 0;
@@ -508,7 +514,7 @@ bool readAveraged(long *rawOut, long *spreadOut) {
   long total = 0;
   for (int i = 1; i < good - 1; i++) total += samples[i];
   *rawOut = total / (good - 2);
-  if (spreadOut) *spreadOut = samples[good - 1] - samples[0];
+  if (spreadOut) *spreadOut = samples[good - 2] - samples[1];
   return true;
 }
 
@@ -767,6 +773,7 @@ void loop() {
   const char *fault = nullptr;
   if (rawOk) {
     lastRaw = raw;
+    lastSpread = spread;
     if (!scaleTared || tareRequested) {
       const bool asked = tareRequested;
       tareRequested = false;
@@ -806,9 +813,16 @@ void loop() {
     finishCommand(false);
   }
 
+  static uint8_t unstableReadings = 0;
+  if (rawOk && spread > countsForPounds(UNSTABLE_SPREAD_LB)) {
+    if (unstableReadings < UNSTABLE_READINGS_TO_FAULT) unstableReadings++;
+  } else {
+    unstableReadings = 0;
+  }
+
   if (!rawOk) fault = "load-cell";
   else if (!scaleTared) fault = "untared";
-  else if (spread > countsForPounds(UNSTABLE_SPREAD_LB)) fault = "unstable";
+  else if (unstableReadings >= UNSTABLE_READINGS_TO_FAULT) fault = "unstable";
   else if (raw - scaleZero < -countsForPounds(REVERSED_DELTA_LB)) fault = "reversed";
 
   const bool holding = digitalRead(PIN_PRG) == LOW;
@@ -847,7 +861,7 @@ void loop() {
       if (millis() - lastScaleLogMs > 2000) {
         lastScaleLogMs = millis();
         char line[96];
-        snprintf(line, sizeof(line), "[scale] %s raw=%ld delta=%ld lb=%.2f", nodeCode, lastRaw, delta, lastPounds);
+        snprintf(line, sizeof(line), "[scale] %s raw=%ld delta=%ld lb=%.2f spread=%ld", nodeCode, lastRaw, delta, lastPounds, lastSpread);
         HostUart.println(line);
       }
     }
