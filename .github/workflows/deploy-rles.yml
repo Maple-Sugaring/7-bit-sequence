@@ -112,6 +112,10 @@ jobs:
           set -euo pipefail
           deploy_sha="$DEPLOY_SHA"
           app_dir=/home/student/maple/app
+          compose=(docker compose
+            --env-file /home/student/maple/config/compose.env
+            -f docker-compose.yml
+            -f deploy/rit/compose.rit.yml)
 
           cd "$app_dir"
           if [ -n "$(git status --porcelain)" ]; then
@@ -135,9 +139,9 @@ jobs:
             exit 1
           fi
 
-          docker compose build api
-          docker compose build --build-arg "RLES_DEPLOY_SHA=$deploy_sha" web
-          docker compose up -d --no-deps api web
+          "${compose[@]}" build api
+          "${compose[@]}" build --build-arg "RLES_DEPLOY_SHA=$deploy_sha" web
+          "${compose[@]}" up -d --no-deps api web
 
           for attempt in $(seq 1 30); do
             if curl --fail --silent --show-error http://127.0.0.1/deployment.json -o /tmp/rles-deployment.json; then
@@ -152,7 +156,7 @@ jobs:
 
           echo "Deployment did not serve the expected commit marker."
           cat /tmp/rles-deployment.json 2>/dev/null || true
-          docker compose ps api web
+          "${compose[@]}" ps api web
           exit 1
         shell: bash
 
