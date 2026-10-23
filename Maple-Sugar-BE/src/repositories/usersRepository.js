@@ -1,5 +1,6 @@
 import { query, queryAll, queryOne } from '../db/pool.js';
 import { decryptSecret, encryptSecret } from '../auth/secrets.js';
+import { canonicalEmail } from '../business/emailAddress.js';
 import { mapRole, mapUser } from './mappers.js';
 
 /**
@@ -44,10 +45,10 @@ export async function findUserById(id) {
   return row ? mapUser(row) : null;
 }
 
-/** Case-insensitive, matching how the invite flow rejects duplicates. */
+/** Case-insensitive, and an rit.edu address finds its g.rit.edu account. */
 export async function findUserByEmail(email) {
   const row = await queryOne(`select ${USER_COLUMNS} from users where lower(email) = lower($1)`, [
-    email,
+    canonicalEmail(email),
   ]);
   return row ? mapUser(row) : null;
 }
@@ -63,7 +64,7 @@ export async function createInvite({ email, roleId, firstName, lastName, account
     `insert into users (role_id, first_name, last_name, email, account_expiry, invite_pending)
      values ($1, $2, $3, $4, $5, true)
      returning ${USER_COLUMNS}`,
-    [roleId, firstName, lastName, email, accountExpiry],
+    [roleId, firstName, lastName, canonicalEmail(email), accountExpiry],
   );
   return mapUser(row);
 }
@@ -120,7 +121,7 @@ export async function updateUser(id, changes) {
 
   for (const [field, column] of Object.entries(WRITABLE_USER_COLUMNS)) {
     if (field in changes) {
-      values.push(changes[field]);
+      values.push(field === 'Email' ? canonicalEmail(changes[field]) : changes[field]);
       assignments.push(`${column} = $${values.length}`);
     }
   }
@@ -154,7 +155,7 @@ const BOOTSTRAP_NAMES = {
  */
 export async function promoteEmailsToAdmin(emails) {
   if (!emails?.length) return 0;
-  const people = emails.map((email) => ({
+  const people = emails.map(canonicalEmail).map((email) => ({
     email,
     first_name: BOOTSTRAP_NAMES[email]?.[0] ?? '',
     last_name: BOOTSTRAP_NAMES[email]?.[1] ?? '',

@@ -550,6 +550,21 @@ describe('invites and test email', () => {
     assert.ok(outbox[0].text.includes('as Student'));
   });
 
+  test('an rit.edu invite is saved and mailed as g.rit.edu', async () => {
+    const response = await call(ADMIN, 'POST', '/users/invite', { email: ' New@RIT.edu ', roleId: 2 });
+
+    assert.equal(response.status, 201);
+    assert.equal(response.json.Email, 'new@g.rit.edu');
+    assert.deepEqual(sent(), [{ to: 'new@g.rit.edu', subject: 'You are invited to RIT Maple Sugaring' }]);
+  });
+
+  test('inviting the rit.edu twin of an existing g.rit.edu account is a duplicate', async () => {
+    assert.equal((await call(ADMIN, 'POST', '/users/invite', { email: 'twin@g.rit.edu' })).status, 201);
+    const again = await call(ADMIN, 'POST', '/users/invite', { email: 'twin@rit.edu' });
+
+    assert.equal(again.status, 422);
+  });
+
   test('the admin test email goes only to the admin who asked', async () => {
     const response = await call(ADMIN, 'POST', '/notifications/test');
     assert.equal(response.status, 200);

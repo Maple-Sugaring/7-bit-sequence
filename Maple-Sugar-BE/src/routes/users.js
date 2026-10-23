@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { forbidden, invalid, notFound } from '../lib/ApiError.js';
+import { canonicalEmail } from '../business/emailAddress.js';
 import { Capability, ROLE_LABELS, roleFromId } from '../business/permissions.js';
 import { requireCapability } from '../middleware/authenticate.js';
 import { cacheKeys, cacheNamespaces, TTL } from '../cache/cacheKeys.js';
@@ -34,7 +35,7 @@ usersRouter.get('/', requireCapability(Capability.MANAGE_USERS), async (req, res
  */
 usersRouter.post('/invite', requireCapability(Capability.MANAGE_USERS), async (req, res) => {
   const body = inviteUserBody.parse(req.body);
-  const email = body.email.trim();
+  const email = canonicalEmail(body.email);
 
   // Checked explicitly so the response is a field-level 422 the invite form can
   // show on the email input, rather than a bare unique-constraint violation.

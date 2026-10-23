@@ -14,23 +14,6 @@ import { isAllowedDomain } from '../auth/googleOAuth.js';
 import * as usersRepository from '../repositories/usersRepository.js';
 import { logger } from '../lib/logger.js';
 
-/**
- * RIT Google returns either username@g.rit.edu or username@rit.edu for the
- * same person. An invite stored under one of those must match the other.
- */
-function emailCandidates(email) {
-  const normalized = String(email ?? '').trim().toLowerCase();
-  const at = normalized.lastIndexOf('@');
-  if (at < 1) return normalized ? [normalized] : [];
-
-  const local = normalized.slice(0, at);
-  const domain = normalized.slice(at + 1);
-  const candidates = [normalized];
-  if (domain === 'g.rit.edu') candidates.push(`${local}@rit.edu`);
-  if (domain === 'rit.edu') candidates.push(`${local}@g.rit.edu`);
-  return candidates;
-}
-
 export async function resolveGoogleUser(profile) {
   if (!isAllowedDomain(profile.email)) {
     throw forbidden('Sign in with your RIT account.');
@@ -42,11 +25,8 @@ export async function resolveGoogleUser(profile) {
   if (user) {
     user = (await usersRepository.touchLastLogin(user.UserID)) ?? user;
   } else {
-    let invited = null;
-    for (const email of emailCandidates(profile.email)) {
-      invited = await usersRepository.findUserByEmail(email);
-      if (invited) break;
-    }
+    // Stored under g.rit.edu, so an rit.edu Google address finds it too.
+    const invited = await usersRepository.findUserByEmail(profile.email);
 
     if (!invited) {
       logger.warn({ email: profile.email }, 'Sign-in refused for unprovisioned account');
