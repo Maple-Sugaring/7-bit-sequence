@@ -57,11 +57,11 @@ Admin assignment responds first, then starts `syncSignup` without awaiting it.
 
 ## Email (`mailService`, `notificationService`, `shiftNotifications`)
 
-Mail goes through Brevo's transactional API (`POST https://api.brevo.com/v3/smtp/email`) on the free plan (300 emails a day). It is off until `BREVO_API_KEY` and `MAIL_FROM` are both set; `MAIL_FROM` must be a sender verified in Brevo. Each recipient gets their own copy through `messageVersions`. Bodies live in `services/emailTemplates.js`, with times in `America/New_York`.
+Mail goes through the Gmail API when `GMAIL_REFRESH_TOKEN` is set, sending as the `MAIL_FROM` Gmail account (about 500 recipients a day). Google signs that mail, so receivers accept it; Brevo can't sign for gmail.com, and a Gmail sender there bounces with a 554 reputation error. The token is that account's refresh token for `https://www.googleapis.com/auth/gmail.send`, minted once with the deployment's Google client; the OAuth consent screen must be published to production, or Google revokes it after 7 days. Without it, mail goes through Brevo's transactional API (`POST https://api.brevo.com/v3/smtp/email`, 300 a day on the free plan), which needs `BREVO_API_KEY` and a `MAIL_FROM` on a domain authenticated in Brevo. With neither, mail is off. Each recipient gets their own copy. Bodies live in `services/emailTemplates.js`, with times in `America/New_York`.
 
 - Critical alerts: `notifyCriticalAlert` runs after `createAlert` for critical severity plus Full Bucket, Node Offline, Spoilage, and Tipped. Each channel is independent and turns on with its own settings:
-  - Brevo email to active, unexpired users with alert email on, plus `ALERT_EMAILS`.
-  - SMTP email (`SMTP_URL`, `ALERT_FROM`) to `ALERT_EMAILS`, used only while Brevo is off, so a deployment that predates Brevo keeps alerting after the upgrade.
+  - Email (Gmail API or Brevo) to active, unexpired users with alert email on, plus `ALERT_EMAILS`.
+  - SMTP email (`SMTP_URL`, `ALERT_FROM`) to `ALERT_EMAILS`, used only while that mail is off, so a deployment that predates Brevo keeps alerting after the upgrade.
   - Twilio SMS to `ALERT_SMS_TO` (FR-006), with or without email.
 
   A failing channel is logged and does not stop the others. Duplicate open alerts are already suppressed, so a node sitting full does not re-send.

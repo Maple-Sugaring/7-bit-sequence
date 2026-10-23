@@ -4,10 +4,11 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Divider from '@mui/material/Divider';
+import Link from '@mui/material/Link';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import GoogleIcon from '@mui/icons-material/Google';
-import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
+import { Navigate, Link as RouterLink, useLocation, useSearchParams } from 'react-router-dom';
 import mapleLogo from '../assets/MapleLogo.png';
 import ritLogo from '../assets/RITLogo.png';
 import { useAuth } from '../context/auth';
@@ -148,6 +149,12 @@ export function LoginPage() {
             )}
           </Stack>
         </Box>
+      </Box>
+
+      <Box component="footer" sx={{ py: 2, textAlign: 'center' }}>
+        <Link component={RouterLink} to="/privacy" sx={{ color: '#4A4A4A' }}>
+          Privacy policy
+        </Link>
       </Box>
     </Box>
   );

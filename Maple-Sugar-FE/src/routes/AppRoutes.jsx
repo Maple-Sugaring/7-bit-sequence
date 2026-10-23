@@ -7,6 +7,7 @@ import { apiMode } from '../data/apiClient';
 import { AuthCallbackPage } from '../pages/AuthCallbackPage';
 import { LoginPage } from '../pages/LoginPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
+import { PrivacyPage } from '../pages/PrivacyPage';
 import { ROUTE_CAPABILITIES } from './navigation';
 import { ProtectedRoute } from './ProtectedRoute';
 
@@ -84,6 +85,7 @@ export function AppRoutes() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/" element={<LoginPage />} />
       <Route path="/auth/callback" element={<AuthCallbackPage />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
 
       <Route path="/data" element={<Navigate to="/table" replace />} />
       <Route path="/input" element={<Navigate to="/collection" replace />} />
