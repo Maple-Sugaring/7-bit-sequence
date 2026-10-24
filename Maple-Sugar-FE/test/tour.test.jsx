@@ -60,11 +60,17 @@ function TreeLink() {
   return <button data-tour="tree-card" onClick={() => navigate('/nodes/7')}>tree</button>;
 }
 
+function Detour() {
+  const navigate = useNavigate();
+  return <button onClick={() => navigate('/schedule')}>leave tour</button>;
+}
+
 function renderApp(path) {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <TourProvider>
         <StartButton />
+        <Detour />
         <Routes>
           <Route path="/dashboard" element={<TreeLink />} />
           <Route path="/nodes/:nodeId" element={<p>tree page</p>} />
@@ -109,6 +115,32 @@ describe('tour overlay', () => {
     fireEvent.click(screen.getByRole('button', { name: 'End tour' }));
     expect(screen.queryByText('Tour paused')).toBeNull();
     expect(sessionStorage.getItem('maple-tour-step')).toBeNull();
+  });
+
+  it('remembers the exact tree chart when resuming and reloading', () => {
+    sessionStorage.setItem('maple-tour-step', String(indexOf('node-chart')));
+    sessionStorage.setItem('maple-tour-offset', '2');
+    renderApp('/nodes/7');
+    expect(screen.getByText('Step 5 of 6')).toBeTruthy();
+    fireEvent.click(screen.getByText('leave tour'));
+    expect(screen.getByText('Tour paused')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
+    expect(screen.getByText('Readings over time')).toBeTruthy();
+    expect(sessionStorage.getItem('maple-tour-node')).toBe('/nodes/7');
+    cleanup();
+    renderApp('/schedule');
+    fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
+    expect(screen.getByText('Readings over time')).toBeTruthy();
+    expect(screen.queryByText('Your trees')).toBeNull();
+  });
+
+  it('keeps the original eight-step count after signing in', () => {
+    sessionStorage.setItem('maple-tour-step', String(indexOf('sign-in')));
+    sessionStorage.setItem('maple-tour-offset', '0');
+    renderApp('/dashboard');
+    expect(screen.getByText('Step 3 of 8')).toBeTruthy();
+    expect(screen.queryByText('Step 0 of 6')).toBeNull();
+    expect(sessionStorage.getItem('maple-tour-step')).toBe(String(indexOf('field-overview')));
   });
 
   it('waits for sign-in instead of offering Next', () => {

@@ -6,7 +6,7 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/auth';
-import { TOUR_STEPS, firstStep, resolveStep, resumeStep } from './tourSteps';
+import { TOUR_STEPS, resolveStep, resumeStep } from './tourSteps';
 
 // Pages the app passes through on its own, where a "paused" card would flash.
 const QUIET_PATHS = ['/auth/callback'];
@@ -40,8 +40,8 @@ function useTourTarget(target) {
       const rect = box && box.width > 0 ? { top: box.top, left: box.left, width: box.width, height: box.height } : null;
       if (rect && scrolledTo.current !== target) {
         scrolledTo.current = target;
-        const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-        element.scrollIntoView({ block: 'center', behavior: reduced ? 'auto' : 'smooth' });
+        element.scrollIntoView({ block: 'start', behavior: 'instant' });
+        document.querySelector('[data-tour-viewport]')?.scrollBy({ top: -88, behavior: 'instant' });
       }
       setFound((prev) => (prev.target === target && sameRect(prev.rect, rect) ? prev : { target, rect }));
     };
@@ -64,10 +64,18 @@ function useTourTarget(target) {
   return found.target === target ? found.rect : null;
 }
 
-function TourCard({ atTop, title, children, actions }) {
+function TourCard({ title, children, actions }) {
   const ref = useRef(null);
   useEffect(() => {
     ref.current?.focus({ preventScroll: true });
+    const measure = () => document.documentElement.style.setProperty('--tour-card-height', `${ref.current?.getBoundingClientRect().height ?? 250}px`);
+    measure();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    if (ref.current) observer?.observe(ref.current);
+    return () => {
+      observer?.disconnect();
+      document.documentElement.style.removeProperty('--tour-card-height');
+    };
   }, []);
   return (
     <Paper
@@ -79,11 +87,12 @@ function TourCard({ atTop, title, children, actions }) {
       sx={{
         position: 'fixed',
         zIndex: 1401,
-        left: { xs: 16, sm: 'auto' },
+        left: 16,
         right: 16,
-        width: { sm: 360 },
-        ...(atTop ? { top: { xs: 72, md: 88 } } : { bottom: { xs: 84, md: 24 } }),
-        p: 2.5,
+        bottom: 84,
+        maxHeight: '50dvh',
+        overflowY: 'auto',
+        p: 2,
         borderTop: '4px solid #F76902',
         outline: 'none',
       }}
@@ -92,14 +101,14 @@ function TourCard({ atTop, title, children, actions }) {
         {title}
         {children}
       </Box>
-      <Stack direction="row" spacing={1} sx={{ mt: 2, alignItems: 'center' }}>
+      <Stack direction="row" spacing={1} sx={{ mt: 1, alignItems: 'center' }}>
         {actions}
       </Stack>
     </Paper>
   );
 }
 
-export function TourOverlay({ index, goTo, onEnd }) {
+export function TourOverlay({ index, offset, nodePath, transitioning, goTo, onEnd }) {
   const { pathname } = useLocation();
   const { isAuthenticated } = useAuth();
   const current = resolveStep(TOUR_STEPS, index, pathname);
@@ -114,7 +123,7 @@ export function TourOverlay({ index, goTo, onEnd }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onEnd]);
 
-  if (QUIET_PATHS.includes(pathname)) return null;
+  if (QUIET_PATHS.includes(pathname) || transitioning) return null;
 
   const endButton = (
     <Button size="small" color="inherit" onClick={onEnd} sx={{ mr: 'auto' }}>
@@ -129,7 +138,7 @@ export function TourOverlay({ index, goTo, onEnd }) {
         actions={
           <>
             {endButton}
-            <Button variant="contained" onClick={() => goTo(resumeStep(TOUR_STEPS, index, isAuthenticated))}>
+            <Button variant="contained" onClick={() => goTo(nodePath && isAuthenticated ? index : resumeStep(TOUR_STEPS, index, isAuthenticated))}>
               Resume
             </Button>
           </>
@@ -142,12 +151,10 @@ export function TourOverlay({ index, goTo, onEnd }) {
     );
   }
 
-  // Someone signed in never sees the sign-in steps, so they are not counted.
-  const offset = firstStep(TOUR_STEPS, isAuthenticated);
+  // Keep the starting offset throughout the tour, including across sign-in.
   const previous = TOUR_STEPS[current - 1];
-  const canGoBack = current > offset && previous != null;
+  const canGoBack = current > offset && previous != null && !(isAuthenticated && previous.signedOut);
   const last = current === TOUR_STEPS.length - 1;
-  const atTop = rect != null && rect.top + rect.height / 2 > window.innerHeight / 2;
 
   const next = () => {
     if (last) onEnd();
@@ -168,7 +175,7 @@ export function TourOverlay({ index, goTo, onEnd }) {
             top: rect.top - SPOTLIGHT_PAD,
             left: rect.left - SPOTLIGHT_PAD,
             width: rect.width + SPOTLIGHT_PAD * 2,
-            height: rect.height + SPOTLIGHT_PAD * 2,
+            height: Math.max(0, Math.min(rect.height + SPOTLIGHT_PAD * 2, (document.querySelector('[data-tour-viewport]')?.getBoundingClientRect().bottom ?? window.innerHeight) - rect.top)),
             borderRadius: 3,
             outline: '3px solid #F76902',
             boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.45)',
@@ -178,7 +185,6 @@ export function TourOverlay({ index, goTo, onEnd }) {
         />
       ) : null}
       <TourCard
-        atTop={atTop}
         title={
           <>
             <Typography variant="overline" color="text.secondary">

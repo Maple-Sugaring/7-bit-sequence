@@ -1,13 +1,21 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/auth';
 import { TourContext } from './tour';
 import { TourOverlay } from './TourOverlay';
-import { TOUR_STEPS, firstStep, staticPath, stepMatches } from './tourSteps';
+import { TOUR_STEPS, firstStep, resolveStep, staticPath, stepMatches } from './tourSteps';
 
 // sessionStorage, not state alone: Google sign-in leaves the app and comes
 // back through /auth/callback, and the tour has to survive that round trip.
 const STORAGE_KEY = 'maple-tour-step';
+
+function readSession(key) {
+  try { return sessionStorage.getItem(key); } catch { return null; }
+}
+
+function writeSession(key, value) {
+  try { sessionStorage.setItem(key, String(value)); } catch { /* Storage is optional. */ }
+}
 
 function readStoredStep() {
   try {
@@ -32,25 +40,47 @@ export function TourProvider({ children }) {
   const { pathname } = useLocation();
   const { isAuthenticated } = useAuth();
   const [index, setIndex] = useState(readStoredStep);
+  const [offset, setOffset] = useState(() => Number(readSession('maple-tour-offset') ?? 0));
+  const [nodePath, setNodePath] = useState(() => {
+    const stored = readSession('maple-tour-node');
+    return /^\/nodes\/[^/]+$/.test(stored ?? '') ? stored : null;
+  });
+  const [destination, setDestination] = useState(null);
+  if (destination === pathname) setDestination(null);
+  const resolved = index == null ? -1 : resolveStep(TOUR_STEPS, index, pathname);
+  if (resolved >= 0 && resolved !== index) {
+    setIndex(resolved);
+  }
+  if (pathname.startsWith('/nodes/') && pathname !== nodePath) {
+    setNodePath(pathname);
+  }
+  useEffect(() => { storeStep(index); }, [index]);
+  useEffect(() => { if (nodePath) writeSession('maple-tour-node', nodePath); }, [nodePath]);
+  useEffect(() => { writeSession('maple-tour-offset', offset); }, [offset]);
 
   const goTo = useCallback(
     (next) => {
       setIndex(next);
       storeStep(next);
       if (next == null || stepMatches(TOUR_STEPS[next], pathname)) return;
-      // A step on a page like /nodes/:nodeId has no address of its own, so going
-      // back to it means going back in history to the tree that was open.
-      const to = staticPath(TOUR_STEPS[next]);
-      if (to) navigate(to);
-      else navigate(-1);
+      // Revisit the actual tree, even after a detour or page reload.
+      const to = staticPath(TOUR_STEPS[next]) ?? nodePath;
+      if (to) {
+        setDestination(to);
+        navigate(to);
+      } else navigate(-1);
     },
-    [navigate, pathname],
+    [navigate, pathname, nodePath],
   );
 
   const value = useMemo(
     () => ({
       active: index != null,
-      start: () => goTo(firstStep(TOUR_STEPS, isAuthenticated)),
+      start: () => {
+        const start = firstStep(TOUR_STEPS, isAuthenticated);
+        setOffset(start);
+        goTo(start);
+      },
       end: () => goTo(null),
     }),
     [goTo, index, isAuthenticated],
@@ -58,8 +88,12 @@ export function TourProvider({ children }) {
 
   return (
     <TourContext.Provider value={value}>
-      {children}
-      {index != null ? <TourOverlay index={index} goTo={goTo} onEnd={value.end} /> : null}
+      <div data-tour-viewport style={index == null ? undefined : {
+        height: 'calc(100dvh - var(--tour-card-height, 250px) - 84px)',
+        overflowY: 'auto',
+        position: 'relative',
+      }}>{children}</div>
+      {index != null ? <TourOverlay index={index} offset={offset} nodePath={nodePath} transitioning={destination != null} goTo={goTo} onEnd={value.end} /> : null}
     </TourContext.Provider>
   );
 }
