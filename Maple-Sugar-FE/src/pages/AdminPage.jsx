@@ -20,6 +20,7 @@ import Typography from '@mui/material/Typography';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import MoreTimeIcon from '@mui/icons-material/MoreTime';
 import PersonAddAltIcon from '@mui/icons-material/PersonAddAlt';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { DataGrid } from '@mui/x-data-grid';
 import { ColumnCards } from '../components/common/ColumnCards';
@@ -39,6 +40,21 @@ import {
   setActive,
 } from '../services/adminService';
 import { useAction, useUsers } from '../services/hooks';
+
+function GatewayButton() {
+  return (
+    <Button
+      variant="outlined"
+      href="http://maplegate.device.rit.edu:8080/"
+      target="_blank"
+      rel="noopener noreferrer"
+      endIcon={<OpenInNewIcon />}
+      aria-label="Open Maple gateway (opens in a new tab)"
+    >
+      Open Maple gateway
+    </Button>
+  );
+}
 
 function ExpiryDialog({ user, onClose, onSave, pending, error }) {
   const [value, setValue] = useState(() =>
@@ -329,7 +345,11 @@ export function AdminPage() {
   if (error) {
     return (
       <>
-        <PageHeader title="Admin" subtitle="Invite accounts, change roles, and lock or extend access." />
+        <PageHeader
+          title="Admin"
+          subtitle="Invite accounts, change roles, and lock or extend access."
+          actions={<GatewayButton />}
+        />
         <ErrorBlock error={error} onRetry={refresh} />
       </>
     );
@@ -343,9 +363,12 @@ export function AdminPage() {
         title="Admin"
         subtitle="Invite accounts, change roles, and lock or extend access."
         actions={
-          <Button variant="contained" startIcon={<PersonAddAltIcon />} onClick={() => setInviteOpen(true)}>
-            Invite user
-          </Button>
+          <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+            <GatewayButton />
+            <Button variant="contained" startIcon={<PersonAddAltIcon />} onClick={() => setInviteOpen(true)}>
+              Invite user
+            </Button>
+          </Stack>
         }
       />
 
