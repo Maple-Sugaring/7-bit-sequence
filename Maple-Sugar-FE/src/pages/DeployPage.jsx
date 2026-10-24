@@ -487,7 +487,7 @@ export function DeployPage() {
                   Edit details, flash firmware, or remove a tree from the system.
                 </Typography>
               </Box>
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ width: { xs: '100%', sm: 'auto' } }}>
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} sx={{ width: { xs: '100%', md: 'auto' }, flexShrink: 0 }}>
                 <TextField
                   size="small"
                   placeholder="Search nodes"

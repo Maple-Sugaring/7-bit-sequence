@@ -73,6 +73,26 @@ const theme = createTheme({
     MuiCard: {
       defaultProps: { elevation: 0 },
     },
+    MuiDialog: {
+      styleOverrides: {
+        paper: { '@media (max-width:599px)': { margin: 12, maxWidth: 'calc(100% - 24px)', width: 'calc(100% - 24px)' } },
+      },
+    },
+    MuiDialogContent: {
+      styleOverrides: { root: { '@media (max-width:599px)': { padding: 16 } } },
+    },
+    MuiDialogActions: {
+      styleOverrides: { root: { flexWrap: 'wrap', gap: 8, '& > :not(style) ~ :not(style)': { marginLeft: 0 } } },
+    },
+    MuiChip: {
+      styleOverrides: {
+        root: { maxWidth: '100%', height: 'auto', minHeight: 24 },
+        label: { whiteSpace: 'normal', overflowWrap: 'anywhere', paddingTop: 3, paddingBottom: 3 },
+      },
+    },
+    MuiPickersTextField: {
+      styleOverrides: { root: { minWidth: 0, '@media (max-width:359px)': { '& .MuiPickersInputBase-root': { fontSize: 14 } } } },
+    },
     MuiIconButton: {
       styleOverrides: { root: { minWidth: 44, minHeight: 44 } },
     },

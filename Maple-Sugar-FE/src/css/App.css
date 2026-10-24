@@ -37,6 +37,7 @@ html, body, #root {
 }
 
 .app-brand {
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -94,6 +95,7 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  flex-wrap: wrap;
   margin-bottom: 24px;
 }
 
@@ -124,6 +126,31 @@ html, body, #root {
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.page-header-actions > .MuiStack-root {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.page-header-actions > .MuiStack-root > :not(style) {
+  margin: 0;
+}
+
+/* Let content reflow within flex and grid tracks, including long field data. */
+.layout, .page-container > *, .MuiStack-root > *, .MuiGrid-root > * {
+  min-width: 0;
+}
+
+.page-container, .app-topbar, .MuiDialog-paper {
+  overflow-wrap: anywhere;
+}
+
+.page-container img, .page-container video {
+  max-width: 100%;
+  height: auto;
 }
 
 .page-main {

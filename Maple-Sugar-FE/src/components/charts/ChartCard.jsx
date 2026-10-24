@@ -28,7 +28,14 @@ export function ChartCard({
         }
         subheader={description}
         action={action}
-        sx={{ pb: 0 }}
+        sx={{
+          pb: 0,
+          flexWrap: 'wrap',
+          gap: 1,
+          '& .MuiCardHeader-content': { minWidth: 0, flexBasis: 200 },
+          '& .MuiCardHeader-action': { m: 0, maxWidth: '100%' },
+          '& .MuiCardHeader-action > *': { flexWrap: 'wrap', gap: 1 },
+        }}
       />
       <CardContent sx={{ flexGrow: 1, pt: 2 }}>
         {loading ? (

@@ -225,7 +225,7 @@ export function SapDataPage() {
             </MenuItem>
           ))}
         </TextField>
-        <Stack direction="row" spacing={1} sx={{ order: { xs: 6, md: 0 } }}>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ order: { xs: 6, md: 0 } }}>
           <DatePicker
             label="From"
             value={from}
