@@ -10,7 +10,7 @@ import { TOUR_STEPS, resolveStep, resumeStep } from './tourSteps';
 
 // Pages the app passes through on its own, where a "paused" card would flash.
 const QUIET_PATHS = ['/auth/callback'];
-const SPOTLIGHT_PAD = 6;
+const SPOTLIGHT_PAD = 3;
 
 function findTarget(target) {
   return document.querySelector(`[data-tour="${target}"]`);
@@ -27,7 +27,7 @@ function sameRect(a, b) {
  * step does; polling covers that, and scroll/resize keep the spotlight on it.
  */
 function useTourTarget(target) {
-  const [found, setFound] = useState({ target: null, rect: null });
+  const [found, setFound] = useState({ target: null, rect: null, bounds: null });
   const scrolledTo = useRef(null);
 
   useEffect(() => {
@@ -36,32 +36,49 @@ function useTourTarget(target) {
     const measure = () => {
       frame = 0;
       const element = findTarget(target);
+      const viewport = document.querySelector('[data-tour-viewport]');
+      const area = viewport?.getBoundingClientRect();
+      const header = document.querySelector('.app-topbar')?.getBoundingClientRect();
+      const top = Math.max(0, area?.top ?? 0, header?.bottom ?? 0) + 8;
+      const left = Math.max(0, area?.left ?? 0) + 8;
+      const bounds = {
+        top, left,
+        width: Math.max(0, Math.min(window.innerWidth, area?.right ?? window.innerWidth) - left - 8),
+        height: Math.max(0, Math.min(window.innerHeight, area?.bottom ?? window.innerHeight) - top - 8),
+      };
+      if (element && element.getBoundingClientRect().width > 0 && scrolledTo.current !== target) {
+        scrolledTo.current = target;
+        viewport?.scrollBy({ top: element.getBoundingClientRect().top - top - SPOTLIGHT_PAD, behavior: 'instant' });
+      }
       const box = element?.getBoundingClientRect();
       const rect = box && box.width > 0 ? { top: box.top, left: box.left, width: box.width, height: box.height } : null;
-      if (rect && scrolledTo.current !== target) {
-        scrolledTo.current = target;
-        element.scrollIntoView({ block: 'start', behavior: 'instant' });
-        document.querySelector('[data-tour-viewport]')?.scrollBy({ top: -88, behavior: 'instant' });
-      }
-      setFound((prev) => (prev.target === target && sameRect(prev.rect, rect) ? prev : { target, rect }));
+      setFound((prev) => (prev.target === target && sameRect(prev.rect, rect) && sameRect(prev.bounds, bounds) ? prev : { target, rect, bounds }));
     };
     const schedule = () => {
       if (!frame) frame = requestAnimationFrame(measure);
     };
+    const reframe = () => {
+      scrolledTo.current = null;
+      schedule();
+    };
     schedule();
     const timer = setInterval(schedule, 250);
     window.addEventListener('scroll', schedule, { capture: true, passive: true });
-    window.addEventListener('resize', schedule);
+    window.addEventListener('resize', reframe);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(reframe);
+    const viewport = document.querySelector('[data-tour-viewport]');
+    if (viewport) observer?.observe(viewport);
     return () => {
       clearInterval(timer);
       if (frame) cancelAnimationFrame(frame);
       window.removeEventListener('scroll', schedule, { capture: true });
-      window.removeEventListener('resize', schedule);
+      window.removeEventListener('resize', reframe);
+      observer?.disconnect();
     };
   }, [target]);
 
   // Until the new step's element is found, show nothing rather than the last one.
-  return found.target === target ? found.rect : null;
+  return found.target === target ? found : { rect: null, bounds: null };
 }
 
 function TourCard({ title, children, actions }) {
@@ -87,13 +104,18 @@ function TourCard({ title, children, actions }) {
       sx={{
         position: 'fixed',
         zIndex: 1401,
-        left: 16,
-        right: 16,
+        left: { xs: 8, sm: 16 },
+        right: { xs: 8, sm: 16 },
         bottom: 84,
         maxHeight: '50dvh',
         overflowY: 'auto',
-        p: 2,
-        borderTop: '4px solid #F76902',
+        p: { xs: 1.5, sm: 2 },
+        borderTop: '3px solid #F76902',
+        borderRadius: 2,
+        '& .MuiButton-root': { minHeight: 44, px: 1.5, fontSize: '0.8125rem', lineHeight: 1.25 },
+        '& .MuiTypography-h6': { fontSize: { xs: '1.125rem', sm: '1.25rem' }, lineHeight: 1.3, fontWeight: 600 },
+        '& .MuiTypography-body2': { fontSize: '0.875rem', lineHeight: 1.45 },
+        '& .MuiTypography-overline': { display: 'block', fontSize: '0.625rem', lineHeight: 1.4, letterSpacing: '0.06em', mb: 0.5 },
         outline: 'none',
       }}
     >
@@ -113,7 +135,7 @@ export function TourOverlay({ index, offset, nodePath, transitioning, goTo, onEn
   const { isAuthenticated } = useAuth();
   const current = resolveStep(TOUR_STEPS, index, pathname);
   const step = TOUR_STEPS[current] ?? null;
-  const rect = useTourTarget(step?.target);
+  const { rect, bounds } = useTourTarget(step?.target);
 
   useEffect(() => {
     const onKey = (event) => {
@@ -145,7 +167,7 @@ export function TourOverlay({ index, offset, nodePath, transitioning, goTo, onEn
         }
       >
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-          This page is not part of the walkthrough. Resume to pick up where you left off.
+          Resume to return to your last step.
         </Typography>
       </TourCard>
     );
@@ -165,24 +187,33 @@ export function TourOverlay({ index, offset, nodePath, transitioning, goTo, onEn
 
   return (
     <>
-      {rect ? (
+      {rect && bounds ? (
         <Box
           aria-hidden
+          data-tour-spotlight-clip
           sx={{
             position: 'fixed',
             zIndex: 1400,
             pointerEvents: 'none',
-            top: rect.top - SPOTLIGHT_PAD,
-            left: rect.left - SPOTLIGHT_PAD,
-            width: rect.width + SPOTLIGHT_PAD * 2,
-            height: Math.max(0, Math.min(rect.height + SPOTLIGHT_PAD * 2, (document.querySelector('[data-tour-viewport]')?.getBoundingClientRect().bottom ?? window.innerHeight) - rect.top)),
-            borderRadius: 3,
-            outline: '3px solid #F76902',
-            boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.45)',
-            transition: 'top 200ms ease, left 200ms ease, width 200ms ease, height 200ms ease',
-            '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+            top: bounds.top,
+            left: bounds.left,
+            width: bounds.width,
+            height: bounds.height,
+            overflow: 'hidden',
           }}
-        />
+        >
+          <Box data-tour-spotlight sx={{
+            position: 'absolute',
+            top: rect.top - bounds.top - SPOTLIGHT_PAD,
+            left: rect.left - bounds.left - SPOTLIGHT_PAD,
+            width: rect.width + SPOTLIGHT_PAD * 2,
+            height: rect.height + SPOTLIGHT_PAD * 2,
+            boxSizing: 'border-box',
+            borderRadius: 2,
+            border: '2px solid #F76902',
+            boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.45)',
+          }} />
+        </Box>
       ) : null}
       <TourCard
         title={

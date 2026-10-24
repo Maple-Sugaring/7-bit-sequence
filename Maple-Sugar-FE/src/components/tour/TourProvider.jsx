@@ -47,7 +47,8 @@ export function TourProvider({ children }) {
   });
   const [destination, setDestination] = useState(null);
   if (destination === pathname) setDestination(null);
-  const resolved = index == null ? -1 : resolveStep(TOUR_STEPS, index, pathname);
+  const resolved = index == null || (destination != null && destination !== pathname)
+    ? -1 : resolveStep(TOUR_STEPS, index, pathname);
   if (resolved >= 0 && resolved !== index) {
     setIndex(resolved);
   }
