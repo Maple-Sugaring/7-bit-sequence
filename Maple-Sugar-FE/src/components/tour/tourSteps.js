@@ -56,7 +56,7 @@ export const TOUR_STEPS = [
     path: '/nodes/:nodeId',
     target: 'node-chart',
     title: 'Readings over time',
-    body: 'Try Hour to see recent changes. Tap Next when ready.',
+    body: 'Track sap flow over time. Change the timescale for detail.',
   },
   {
     path: '/table',
