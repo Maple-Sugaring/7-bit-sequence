@@ -73,7 +73,7 @@ export function WeightChart({ rows, series, unit = 'day' }) {
             return [scale, name];
           }}
         />
-        <Legend />
+        <Legend height={36} wrapperStyle={{ maxHeight: 36, overflowY: 'auto', fontSize: 11 }} />
         {series.map((item, index) => (
           <Line
             key={item.key}

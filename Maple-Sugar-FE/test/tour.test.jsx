@@ -102,8 +102,8 @@ describe('tour overlay', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     expect(screen.getByText('Your trees')).toBeTruthy();
 
-    // Next clicks the highlighted tree, and the tour follows it to the tree page.
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    // Skip opens the tree so the tour can continue.
+    fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
     expect(screen.getByText('tree page')).toBeTruthy();
     expect(screen.getByText('Live bucket weight')).toBeTruthy();
   });
@@ -144,15 +144,14 @@ describe('tour overlay', () => {
     expect(sessionStorage.getItem('maple-tour-step')).toBe(String(indexOf('field-overview')));
   });
 
-  it('can collapse instructions and advance by choosing Hours', () => {
+  it('keeps Hours on the chart until Next is clicked', () => {
     sessionStorage.setItem('maple-tour-step', String(indexOf('node-chart')));
     renderApp('/nodes/7');
-    fireEvent.click(screen.getByRole('button', { name: 'Collapse tour' }));
-    expect(screen.queryByText('Tap Hour to see recent sap changes and continue.')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Skip' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Expand tour' }));
-    expect(screen.getByText('Tap Hour to see recent sap changes and continue.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Collapse tour' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Hours' }));
+    expect(screen.getByText('Readings over time')).toBeTruthy();
+    expect(screen.queryByText('Sugar Woods')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     expect(screen.getByText('Sugar Woods')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
     expect(screen.queryByRole('dialog')).toBeNull();

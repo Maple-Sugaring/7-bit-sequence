@@ -55,15 +55,14 @@ export const TOUR_STEPS = [
   {
     path: '/nodes/:nodeId',
     target: 'node-chart',
-    actionSelector: '[data-tour-unit="hour"]',
     title: 'Readings over time',
-    body: 'Tap Hour to see recent sap changes and continue.',
+    body: 'Try Hour to see recent changes. Tap Next when ready.',
   },
   {
     path: '/table',
     target: 'sugar-woods-chart',
     title: 'Sugar Woods',
-    body: 'Compare trees and export CSV or PDF. You are ready to explore.',
+    body: 'Compare readings. Export CSV or PDF.',
   },
 ];
 

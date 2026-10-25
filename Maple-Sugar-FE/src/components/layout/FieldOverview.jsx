@@ -21,8 +21,8 @@ export function FieldOverview({ fleet }) {
   const offline = fleet.nodes.filter((node) => node.mapStatus === MapStatus.OFFLINE).length;
   const unavailable = fleet.loading || (fleet.error && fleet.nodes.length === 0);
   return (
-    <section className="dashboard-overview" aria-label="Field overview" data-tour="field-overview">
-      <div className="field-summary">
+    <section className="dashboard-overview" aria-label="Field overview">
+      <div className="field-summary" data-tour="field-overview">
         <div className="field-eyebrow"><ForestRoundedIcon fontSize="small" /> The sugarbush at a glance</div>
         <h2>{fleet.loading ? 'Getting the woods ready…' : unavailable ? 'Waiting for field data' : full ? 'Time to make the rounds.' : 'A little closer to the woods.'}</h2>
         <p>{fleet.error || fleet.stale ? 'Some field data is unavailable. Check the fleet map below for details.' : full ? `${full} ${full === 1 ? 'bucket is' : 'buckets are'} full. Check the map before heading out.` : 'Check your trees, plan a shift, and keep the sap moving.'}</p>

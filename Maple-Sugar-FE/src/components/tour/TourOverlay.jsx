@@ -7,8 +7,6 @@ import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import LinearProgress from '@mui/material/LinearProgress';
 import CloseIcon from '@mui/icons-material/Close';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/auth';
 import { TOUR_STEPS, resolveStep, resumeStep } from './tourSteps';
@@ -38,6 +36,8 @@ function useTourTarget(target) {
   useEffect(() => {
     if (!target) return undefined;
     let frame = 0;
+    let lastDocumentTop = null;
+    let controlFrame = 0;
     const measure = () => {
       frame = 0;
       const element = findTarget(target);
@@ -51,10 +51,12 @@ function useTourTarget(target) {
         width: Math.max(0, Math.min(window.innerWidth, area?.right ?? window.innerWidth) - left - 8),
         height: Math.max(0, Math.min(window.innerHeight, area?.bottom ?? window.innerHeight) - top - 8),
       };
-      if (element && element.getBoundingClientRect().width > 0 && scrolledTo.current !== target) {
+      const documentTop = element ? element.getBoundingClientRect().top + (viewport?.scrollTop ?? 0) : null;
+      if (element && element.getBoundingClientRect().width > 0 && (scrolledTo.current !== target || (lastDocumentTop != null && Math.abs(documentTop - lastDocumentTop) > 1))) {
         scrolledTo.current = target;
         viewport?.scrollBy({ top: element.getBoundingClientRect().top - top - SPOTLIGHT_PAD, behavior: 'instant' });
       }
+      lastDocumentTop = documentTop;
       const box = element?.getBoundingClientRect();
       const rect = box && box.width > 0 ? { top: box.top, left: box.left, width: box.width, height: box.height } : null;
       setFound((prev) => (prev.target === target && sameRect(prev.rect, rect) && sameRect(prev.bounds, bounds) ? prev : { target, rect, bounds }));
@@ -66,6 +68,13 @@ function useTourTarget(target) {
       scrolledTo.current = null;
       schedule();
     };
+    const onControlClick = (event) => {
+      if (event.target instanceof Element && event.target.closest('[data-tour-unit]')) {
+        clearTimeout(controlFrame);
+        controlFrame = setTimeout(reframe, 150);
+      }
+    };
+    document.addEventListener('click', onControlClick, true);
     schedule();
     const timer = setInterval(schedule, 250);
     window.addEventListener('scroll', schedule, { capture: true, passive: true });
@@ -74,6 +83,8 @@ function useTourTarget(target) {
     const viewport = document.querySelector('[data-tour-viewport]');
     if (viewport) observer?.observe(viewport);
     return () => {
+      document.removeEventListener('click', onControlClick, true);
+      clearTimeout(controlFrame);
       clearInterval(timer);
       if (frame) cancelAnimationFrame(frame);
       window.removeEventListener('scroll', schedule, { capture: true });
@@ -88,7 +99,6 @@ function useTourTarget(target) {
 
 function TourCard({ title, children, actions, onEnd, progress, total }) {
   const ref = useRef(null);
-  const [collapsed, setCollapsed] = useState(false);
   useEffect(() => {
     ref.current?.focus({ preventScroll: true });
     const measure = () => document.documentElement.style.setProperty('--tour-card-height', `${ref.current?.getBoundingClientRect().height ?? 250}px`);
@@ -127,15 +137,13 @@ function TourCard({ title, children, actions, onEnd, progress, total }) {
     >
       <Stack direction="row" alignItems="center" spacing={0.5}>
         <Box aria-live="polite" sx={{ flex: 1, minWidth: 0 }}>{title}</Box>
-        {progress ? <Typography variant="caption" aria-label={`Step ${progress} of ${total}`} sx={{ whiteSpace: 'nowrap' }}>{progress} / {total}</Typography> : null}
-        <IconButton aria-label={collapsed ? 'Expand tour' : 'Collapse tour'} aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)} sx={{ width: 44, height: 44 }}>
-          {collapsed ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-        </IconButton>
         <IconButton aria-label="End tour" onClick={onEnd} sx={{ width: 44, height: 44 }}><CloseIcon /></IconButton>
       </Stack>
-      {!collapsed ? <Box aria-live="polite">{children}</Box> : null}
+      <Box aria-live="polite">{children}</Box>
       <Stack direction="row" spacing={1} sx={{ mt: 1, alignItems: 'center', justifyContent: 'space-between' }}>
-        {actions}
+        {actions?.[0] ?? actions}
+        {progress ? <Typography variant="caption" aria-label={`Step ${progress} of ${total}`}>{progress} / {total}</Typography> : null}
+        {actions?.[1]}
       </Stack>
       {progress ? <LinearProgress variant="determinate" value={100 * progress / total} aria-label="Tour progress" sx={{ mt: 1, height: 3, borderRadius: 1 }} /> : null}
     </Paper>
@@ -157,16 +165,6 @@ export function TourOverlay({ index, offset, nodePath, transitioning, goTo, onEn
     return () => window.removeEventListener('keydown', onKey);
   }, [onEnd]);
 
-  useEffect(() => {
-    if (!step?.actionSelector || transitioning) return undefined;
-    const advance = (event) => {
-      if (event.target instanceof Element && event.target.closest(step.actionSelector)) {
-        goTo(current + 1);
-      }
-    };
-    document.addEventListener('click', advance);
-    return () => document.removeEventListener('click', advance);
-  }, [current, goTo, step, transitioning]);
 
   if (QUIET_PATHS.includes(pathname) || transitioning) return null;
 
@@ -243,18 +241,10 @@ export function TourOverlay({ index, offset, nodePath, transitioning, goTo, onEn
             </Typography>
           </>
         }
-        actions={
-          <>
-              <Button variant="outlined" disabled={!canGoBack} onClick={() => goTo(current - 1)}>
-                Back
-              </Button>
-            {step.waitFor ? null : (
-              <Button variant="contained" onClick={next}>
-                {last ? 'Finish' : step.actionSelector ? 'Skip' : 'Next'}
-              </Button>
-            )}
-          </>
-        }
+        actions={[
+          <Button key="back" variant="outlined" disabled={!canGoBack} onClick={() => goTo(current - 1)}>Back</Button>,
+          step.waitFor ? null : <Button key="next" variant="contained" onClick={next}>{last ? 'Finish' : step.clickToAdvance ? 'Skip' : 'Next'}</Button>,
+        ]}
       >
         <Typography variant="body2" sx={{ mt: 0.5 }}>
           {step.body}
