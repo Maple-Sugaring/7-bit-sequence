@@ -51,16 +51,13 @@ Bootloader tip shown in errors: hold PRG, tap RST, release PRG, then press Flash
 
 The browser downloads the files from `Maple-Sugar-FE/public/firmware/`, served at `/firmware/`. nginx sets `Cache-Control: no-cache, must-revalidate` there so a cached image is never written to a board.
 
-These binaries are committed build outputs of the PlatformIO `field` environment. There is no script in the repo that rebuilds and copies them. To update:
+These binaries are committed build outputs of the PlatformIO `field` environment. To update them after a firmware change:
 
 ```bash
-cd firmware/heltec-v3-node
-pio run -e field
-# copy .pio/build/field/{bootloader.bin,partitions.bin,firmware.bin} into Maple-Sugar-FE/public/firmware/
-# boot_app0.bin comes from the PlatformIO arduino-esp32 package (tools/partitions/boot_app0.bin)
+firmware/heltec-v3-node/scripts/publish-web-flasher.sh
 ```
 
-**TODO**: the exact source path of `boot_app0.bin` and the build-to-publish steps were not scripted or documented in the repo; the paths above are the usual PlatformIO layout and have not been verified here. The `field` environment's `NODE_CODE` is the placeholder `MAPLENODE00000000` and its packet interval defaults to 20 s.
+The script runs the native unit tests and builds `field`. It copies `bootloader.bin`, `partitions.bin` and `firmware.bin` from `.pio/build/field/`, and `boot_app0.bin` from the Arduino core's `tools/partitions/`. It then rewrites `manifest.json` with `"version": "<FW_VERSION> field"` (`FW_VERSION` is in `src/config.h`). Commit the five files. Library and platform versions are pinned in `platformio.ini`, so the same commit rebuilds the same image. The `field` environment's `NODE_CODE` is the placeholder `MAPLENODE00000000` and its packet interval defaults to 20 s; flashing never touches `0x670000` or NVS, so a reflashed board keeps its code and calibration.
 
 ## Server-side routes used
 
