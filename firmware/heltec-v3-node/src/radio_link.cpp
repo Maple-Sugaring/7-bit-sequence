@@ -63,7 +63,8 @@ int16_t radioSend(const char *json) {
 int radioListen(char *buf, size_t len, uint32_t ms) {
   if (!ready || len < 2) return -1;
   const int16_t state = radio.receive(reinterpret_cast<uint8_t *>(buf), len - 1, ms);
-  if (state != RADIOLIB_ERR_NONE) return -1;
+  if (state == RADIOLIB_ERR_RX_TIMEOUT) return -1;
+  if (state != RADIOLIB_ERR_NONE) return 0;  // corrupted packet: keep listening
   size_t got = radio.getPacketLength();
   if (got > len - 1) got = len - 1;
   buf[got] = '\0';

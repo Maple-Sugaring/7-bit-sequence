@@ -12,7 +12,7 @@ bool radioReady();
 // Transmits one packet, retrying once. Returns the RadioLib status.
 int16_t radioSend(const char *json);
 // Waits up to `ms` for one packet. Returns its length (NUL terminated in
-// `buf`), or -1 on timeout or a bad packet.
+// `buf`), 0 for a corrupted packet, or -1 when the time ran out.
 int radioListen(char *buf, size_t len, uint32_t ms);
 // Warm sleep (about 1 uA, keeps its settings); the next send wakes it.
 void radioSleep();

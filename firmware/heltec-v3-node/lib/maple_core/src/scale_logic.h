@@ -11,13 +11,15 @@ static const long HX_SATURATION_COUNTS = 8388600L;
 // A live bridge at gain 128 always shows tens of counts of noise. A burst this
 // flat is a DT line stuck high or low (a floating pin reads 0 and -1).
 static const long HX_STUCK_SPREAD_COUNTS = 4;
-// Movement inside one ~1.5 s burst: past 0.3 lb it is wind or a loose cable,
-// past 5 lb it is not a scale at all. Both are in pounds so they follow the
-// calibration, whichever cell is fitted.
-static const float UNSTABLE_SPREAD_LB = 0.3f;
+// Movement inside one ~1.5 s burst, on the trimmed samples. A still bucket
+// reads steady to a few hundredths, so past 0.5 lb it is wind or a loose
+// cable; past 5 lb it is not a scale at all. In pounds so the limits follow
+// the calibration, whichever cell is fitted.
+static const float UNSTABLE_SPREAD_LB = 0.5f;
 static const float GARBAGE_SPREAD_LB = 5.0f;
-// More than this below the tare is a reversed or tension-loaded cell.
-static const float REVERSED_DELTA_LB = 0.3f;
+// Creep or cold can pull the zero down a few tenths. More than a pound below
+// the tare is a reversed or tension-loaded cell.
+static const float REVERSED_DELTA_LB = 1.0f;
 static const int MAX_BURST_SAMPLES = 16;
 
 enum class SampleVerdict { Ok, NoResponse, Stuck, Saturated, Garbage, Unstable };
