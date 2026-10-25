@@ -60,6 +60,10 @@ uint32_t lastDisplayAt = 0;
 bool prgDown = false;
 bool prgFired = false;
 uint32_t prgSince = 0;
+// A result (tared, calibrated) stays on the OLED this long before the live view.
+const uint32_t RESULT_HOLD_MS = 4000;
+bool resultShown = false;
+uint32_t resultAt = 0;
 
 bool due(uint32_t at) {
   return static_cast<int32_t>(millis() - at) >= 0;
@@ -72,6 +76,17 @@ uint32_t secondsUntil(uint32_t at) {
 
 uint32_t jitter() {
   return static_cast<uint32_t>(random(TX_JITTER_MS));
+}
+
+void showResult(const char *title, const char *line1, const char *line2) {
+  displayMessage(title, line1, line2);
+  resultShown = true;
+  resultAt = millis();
+}
+
+bool resultOnScreen() {
+  if (resultShown && millis() - resultAt >= RESULT_HOLD_MS) resultShown = false;
+  return resultShown;
 }
 
 void blink(int times) {
@@ -219,13 +234,21 @@ void runAppCommand(const maple::Downlink &down) {
     nextTxAt = millis() + ACK_DELAY_MS;
     return;
   }
+  // Someone is at the tree emptying the platform or setting the test weight,
+  // so wake the screen for them.
+  extendService();
   bool ok = false;
+  char detail[24];
   if (down.action == maple::Action::Tare) {
     logf("[app] tare #%lu", static_cast<unsigned long>(down.commandId));
     ok = tareNow();
+    snprintf(detail, sizeof(detail), "%s", nodeCode);
+    showResult(ok ? "Tared from app" : "Tare failed", detail, ok ? "Platform is 0.00 lb" : "Empty it and retry");
   } else {
     logf("[app] calibrate #%lu with %.3f lb", static_cast<unsigned long>(down.commandId), down.pounds);
     ok = calibrateNow(down.pounds);
+    snprintf(detail, sizeof(detail), "%.0f counts/lb", scaleCountsPerLb());
+    showResult(ok ? "Calibrated" : "Calibrate failed", ok ? detail : "No weight on cell?", nodeCode);
   }
   rememberCommand(down.commandId, ok);
   ackPacketsLeft = ACK_PACKETS;
@@ -467,11 +490,17 @@ void serviceTick() {
     prgDown = false;
   } else if (holding && !prgFired && millis() - prgSince >= TARE_HOLD_MS) {
     prgFired = true;
-    tareNow();
-    lastDisplayAt = 0;
+    if (tareNow()) {
+      showResult("Tared 0.00 lb", nodeCode, "Release PRG");
+    } else {
+      const char *title;
+      const char *hint;
+      scaleExplain(lastMeasurement, &title, &hint);
+      showResult("Tare failed", title ? title : "Reading not steady", hint);
+    }
   }
 
-  if (millis() - lastDisplayAt >= DISPLAY_REFRESH_MS) {
+  if (millis() - lastDisplayAt >= DISPLAY_REFRESH_MS && !resultOnScreen()) {
     lastDisplayAt = millis();
     showLive();
   }
@@ -535,7 +564,7 @@ void loop() {
   watchdogFeed();
   handleConsole();
 
-  if (!radioReady() && due(lastRadioTry + RADIO_RETRY_MS)) {
+  if (!radioReady() && millis() - lastRadioTry >= RADIO_RETRY_MS) {
     lastRadioTry = millis();
     radioBegin();
   }

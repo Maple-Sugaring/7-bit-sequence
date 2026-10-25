@@ -34,8 +34,17 @@
 | Board boots but OLED says "No node code" | Identity block at `0x670000` missing. Flash again from Deploy. |
 | Board never starts after a manual flash | The field image is built DIO; a QIO write bricks boot on the V3. The web flasher uses `dio`. |
 | Chrome crashes on repeated resets (macOS) | The flasher connects once by design. Do not retry rapidly; unplug and replug. |
-| Reading shows `untared` / "No load cell" on OLED | Hold PRG 3 s with an empty platform. "No load cell" means check the HX711 wiring on GPIO 6 and 7. |
-| Fault alerts `unstable` or `reversed` | Electrical noise or cell wired backwards; see node firmware thresholds in [hardware.md](hardware.md). |
+| OLED is blank on a deployed node | Normal: between reports the node sleeps with the panel off. Press PRG for 2 minutes of live weight. |
+| Serial console does not answer | The node is asleep. Press PRG, or reopen the port (that resets the board into service mode), then type `STATUS`. |
+| `load-cell` alert, OLED "HX711 not found" | Nothing answered on GPIO 6/7: check the HX711's 3V3 and GND, then DT (white) and SCK (green). Swapping DT and SCK is detected and corrected (`STATUS` shows `wiring=DT/SCK swapped`), so swapping them does not fix this one. |
+| `load-cell` alert, OLED "HX711 data stuck" | DT stays low or high for the whole burst: the HX711 has lost power, or DT is shorted. |
+| `load-cell` alert, OLED "Load cell open" or "Load cell noisy" | The amplifier answers but the bridge does not: check E+ E- A+ A- at the HX711 and the cell wires in the platform tray. |
+| `unstable` alert | The trimmed spread stayed over 0.5 lb on three bursts in a row (about 7 s): wind on the bucket, a loose cable, or a platform touching something. |
+| `reversed` alert | More than 1 lb below the tare: re-tare with the platform empty, or the cell is mounted upside down. |
+| `untared` / OLED "Not tared" | Hold PRG 3 s with an empty platform, or Tare from the tree page. |
+| Battery shows "—" | No pack on the SH1.25-2P port, or the gateway still runs the old image (it reported 100% for a missing value, so flash it to see "—"). |
+| Battery % looks off | Measure the pack with a multimeter and send `BATCAL <mV>` (for example `BATCAL 3987`) in service mode. Charging over USB reads the charge voltage, close to 100%. |
+| Node reports every 30+ minutes, OLED "Battery low" | The pack is under 3.3 V. The node reports, then deep-sleeps 30 minutes (or the interval, if longer) until the solar panel brings it back above 3.4 V. Under 3.15 V it does not transmit at all. |
 
 ## Hardware: radio and Pi
 

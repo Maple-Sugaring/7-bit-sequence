@@ -22,6 +22,7 @@ Requirement keys in brackets (`B5`) are the trace keys from that sheet.
 6. **Phone.** Signed in on the same site, on Collection.
 7. **Second account.** A Student login on another browser profile (or the mock site's *Student* button) for the role switch.
 8. **Dry run** the calibration once. Each step lands within about 10 to 15 seconds at a 10 s interval.
+9. **Wake the node** with a PRG press just before the demo: between reports it sleeps with the OLED off. An app tare or calibration wakes it on its own.
 
 ## Script
 
@@ -29,8 +30,8 @@ Requirement keys in brackets (`B5`) are the trace keys from that sheet.
 | --- | --- | --- | --- |
 | 0:00 | Problem and system | One sentence on the problem (buckets checked by hand, sap spoils, nobody knows which bucket is full). Architecture slide or the diagram in [architecture.md](architecture.md): load cell node → LoRa → gateway → Pi → API → web app. | B36 (LoRa, see gaps) |
 | 1:00 | Live weight | The Bush. Field lifts the bucket off and puts it back; the tree card changes within one packet, no reload. Open the tree: battery, signal, last seen, weight in pounds and gallons, syrup estimate. | B3, B12, B47, B40 |
-| 3:00 | Calibrate from the app | Tree page → *Calibrate the scale*. (1) Field empties the platform, driver clicks **Tare**; the alert goes "Waiting" → "Radioed" → step done, OLED shows "Tare from app". (2) Field sets the test weight, driver enters the pounds, **Calibrate**; OLED shows "Calibrated". (3) *Check the reading* turns green when the platform reads within 0.2 lb. Point out: no laptop cable, works on a deployed tree. | B7 (sensor health), supports #50 |
-| 6:00 | Fault warning | Field presses down hard on one edge and keeps rocking it for 5+ seconds, or unplugs the HX711 lead. Next packet raises an "unstable" or "load-cell" alert; open Notifications to show it. Plug back in; the next good reading clears it. | B7, B14 |
+| 3:00 | Calibrate from the app | Tree page → *Calibrate the scale*. (1) Field empties the platform, driver clicks **Tare**; the alert goes "Waiting" → "Radioed" → step done, the OLED wakes and shows "Tared from app". (2) Field sets the test weight, driver enters the pounds, **Calibrate**; OLED shows "Calibrated". (3) *Check the reading* turns green when the platform reads within 0.2 lb. Point out: no laptop cable, works on a deployed tree. | B7 (sensor health), supports #50 |
+| 6:00 | Fault warning | Field unplugs the HX711 lead (or presses down hard on one edge and keeps rocking it through the next packet, about 7 s). That packet raises a "load-cell" (or "unstable") alert; open Notifications to show it. Press PRG: the OLED says "HX711 not found" and what to check. Plug back in; the next good reading clears the alert. | B7, B14 |
 | 7:30 | Collection round on the phone | Collection on the phone: start a round, label it, the tree's weight is already filled in from the sensor, enter an optional Brix, save. Mention the offline queue (airplane mode keeps entries and sends later). | B5, B6, B46, B48, B47 |
 | 9:30 | Dashboard and data | The Bush: sugar content, shelf life per bucket, full-bucket warning, fleet map. Sugar Woods: weight over time per tree, export **CSV** and **PDF**. | B2, B11, B4, B13, B14 |
 | 11:00 | Alerts and notifications | Notifications page: open and resolved alerts, flag a node issue from the tree page ("Report a spill"). Show the critical email setting on Profile and send the test email. | B27 (email), B16 (partial) |

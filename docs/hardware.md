@@ -25,13 +25,25 @@ Always attach the antenna before a board transmits.
 
 | Project | Environments | Purpose |
 | --- | --- | --- |
-| `heltec-v3-node` | `node_001`, `node_002`, `field` | Weighs a bucket and transmits. |
+| `heltec-v3-node` | `node_001`, `node_002`, `field`, `field_four_cell`, `native` (host tests) | Weighs a bucket and transmits. |
 | `heltec-v3-gateway` | `gateway` | Receives LoRa, prints JSON lines to USB, forwards `INTERVAL` commands from the Pi. |
 | `hx711-test` | `heltec_v3` | Bench sketch that shows raw HX711 readings on the OLED. |
 
 `platformio.ini` hard-codes `upload_port` and `monitor_port` to `/dev/cu.usbserial-0001` (a Mac). Change them if the board enumerates elsewhere.
 
-### Node firmware (`heltec-v3-node/src/main.cpp`)
+### Node firmware 2.0 (`heltec-v3-node/`)
+
+Versions are pinned in `platformio.ini` (espressif32 7.1.3 / Arduino-ESP32 2.0.17, RadioLib 7.8.1, U8g2 2.36.18) so the flasher image can be rebuilt exactly.
+
+| Path | Responsibility |
+| --- | --- |
+| `lib/maple_core/` | Pure logic, no Arduino: sample analysis and fault decision (`scale_logic`), Li-ion curve and pack protection (`battery_logic`), LoRa JSON and serial commands (`protocol`). Unit tested on the laptop with `pio test -e native`. |
+| `src/config.h` | Pinout, radio settings, timings, cell constants, `FW_VERSION`. |
+| `src/hx711.*` | Bit-banged HX711: wiring probe, power up/down, bursts. |
+| `src/scale.*` | Tare and counts/lb in NVS, measuring with retries, what to tell the person at the tree. |
+| `src/battery.*` | Pack voltage from the onboard divider. |
+| `src/radio_link.*`, `display.*`, `console.*`, `identity.*`, `power.*` | SX1262, OLED, UART0 console, node code, sleep and watchdog. |
+| `src/main.cpp` | Service and field modes, reports, app commands. |
 
 Environments:
 
@@ -42,36 +54,57 @@ Environments:
 | `field` | `MAPLENODE00000000` placeholder | The image the website flashes. Node code is stamped into flash at `0x670000` by the web flasher. `TX_INTERVAL_MS=20000`. |
 | `field_four_cell` | same as `field` | `field` plus `-DLOAD_CELL_FOUR_HALF_BRIDGE` for the four-cell platform. Flash from a laptop (`pio run -e field_four_cell -t upload`); the website only serves `field`. Keeps the stamped node code. Run `CAL <pounds>` once after flashing. |
 
-Hardware: HX711 on GPIO 6 (DT) and 7 (SCK); load cell Guang Ce YZC-1B, 50 kg, 2.0 mV/V (`CELL_CAL_REV 2`), or with `LOAD_CELL_FOUR_HALF_BRIDGE` four 50 kg half-bridge cells as one bridge, 200 kg, about 2.1 mV/V measured on NODE-001 (`CELL_CAL_REV 3`); channel A gain 128, counts per pound from those figures until `CAL` stores a measured value. Switching sensor type discards the stored zero and calibration and tares again on the next reading; OLED SSD1306 on GPIO 17/18/21; battery ADC GPIO 1 (enable 37); PRG button GPIO 0. The USB-C jack is a CP2102 on UART0 (GPIO 43/44), which is what the web flasher and a laptop open.
+Hardware (pinout unchanged from 1.x): HX711 on GPIO 6 (DT) and 7 (SCK), powered from 3V3 (see `hardware/platforms/wiring-tree.png`); load cell Guang Ce YZC-1B, 50 kg, 2.0 mV/V (`CELL_CAL_REV 2`), or with `LOAD_CELL_FOUR_HALF_BRIDGE` four 50 kg half-bridge cells as one bridge, 200 kg, about 2.1 mV/V measured on NODE-001 (`CELL_CAL_REV 3`); channel A gain 128, counts per pound from those figures until `CAL` stores a measured value. Switching sensor type discards the stored zero and tares again on the next clean reading. OLED SSD1306 on GPIO 17/18/21 (hardware I2C at 400 kHz); PRG button GPIO 0. The USB-C jack is a CP2102 on UART0 (GPIO 43/44), which is what the web flasher and a laptop open.
 
-Identity: at boot the node reads `MAPLEID1` + code at flash `0x670000` (written by the web flasher). Otherwise it uses a compiled `NODE_CODE` that is not the placeholder. If neither, the OLED says "No node code / Flash again from Deploy" and the node idles.
+Power: the D5 enclosure's Heltec 5 W solar kit feeds its 18650 pack into the **SH1.25-2P lithium battery port underneath the board**. The board measures that pack through its 390k/100k divider on GPIO 1, switched by GPIO 37. GPIO 37 is pulled up on V3.0/V3.1 (divider on when driven LOW) and pulled down on V3.2 (on when HIGH), so the firmware reads the idle level and drives the opposite. ADC at 2.5 dB, 16 reads with the extremes dropped, × 4.9 × `bat_k` (default 1.045, set with `BATCAL`). The percentage follows a resting Li-ion curve (4.20 V 100%, 3.79 V 46%, 3.67 V 17%, 3.30 V 0%). Outside 2.5–4.5 V there is no pack on the port (USB only), and `Battery_Percent` is left out of the packet. A pack being charged over USB reads its charge voltage, so it shows near 100%.
 
-Behavior (loop):
+Identity: at boot the node reads `MAPLEID1` + code at flash `0x670000` (written by the web flasher), then an NVS `node_code` from `PROVISION`, then a compiled `NODE_CODE` that is not the placeholder. If none, the OLED says "No node code / Flash again from the Deploy page" and the node stays awake without reporting.
 
-- Reads the HX711 averaged, tares on first good reading, then every `txIntervalMs` transmits a reading.
-- Reads the HX711 with a 10 µs clock half-period. At 1 µs the four-cell cable had not settled when DT was read, so bits 12 and 16 flipped and the weight jumped about 6.8 lb. A reading needs 6 good samples of 10, so one slow conversion is not a `load-cell` fault. The node stays awake (no deep sleep), so the OLED is always live.
-- Hold PRG for 3 seconds to tare ("Taring..." then blink). Do this with an empty platform.
-- After transmitting it listens for 4 s for one downlink addressed to its code (`"Node_Code":"<code>"`). An `Interval_Seconds` is applied (10 to 86400 s) and persisted in NVS (`Preferences` namespace `maple`). A `Command_Id` with `Action` `TARE` or `CAL` (+ `Pounds`) queues a tare or a test-weight calibration; see [Calibration from the app](#calibration-from-the-app).
-- Up to 750 ms of random jitter is added to each packet so two nodes on the same interval do not keep colliding.
-- Faults are sent instead of weight: `load-cell` (no HX711, or ten identical samples, which means DT is stuck), `untared`, `unstable` (spread over 0.5 lb in a sample, after dropping the high and low), `reversed` (more than 1 lb below tare). Both limits are in pounds, converted with the current counts per pound. Except `untared`, a fault is sent only after it shows on 5 measurements in a row (about 5 s), so a gust or a bump does not raise one.
+Modes:
 
-Serial commands (newline terminated, on USB or UART0):
+- **Service** (OLED on, live weight, serial console answering): for 2 minutes after boot, a PRG press, a serial command, or a tare/calibration from the app. Hold PRG 3 s to tare (an empty platform). A tap keeps the window open. The OLED shows the node code, pack % and voltage (or `USB`), the weight or the fault with what to check, and the seconds to the next report.
+- **Field** (everything else): the ESP32 light-sleeps between reports at 80 MHz. The HX711 and the load-cell bridge are powered down (PD_SCK held high by a pull-up), the SX1262 sleeps warm, and the OLED panel sleeps. A PRG press wakes it into service mode. Serial input is not heard while it sleeps; press PRG or reset first (opening the port from a laptop or the flasher resets the board).
+
+Each report (every `Interval_Seconds`, measured from the start of the previous report, plus up to 750 ms of jitter):
+
+1. Reads the pack. Below 3.15 V (cutoff) it sends nothing and deep-sleeps for an hour. A pack that browns the board out, or wakes from protective sleep still low, goes straight back to deep sleep instead of booting the radio again.
+2. Probes and measures the HX711. Probe: both lines are pulled up (the chip powers down), then pulled down (it powers up, and its DOUT drives high until the first conversion). The pin that reads high is DT, so a cable with DT and SCK swapped is detected and used as-is (`STATUS` says `wiring=DT/SCK swapped`). Neither pin is ever driven against the chip. If neither pin answers, the HX711 is missing or unpowered. DT has a pull-up, so a missing chip reads "not ready" instead of floating to the 0 / -1 that firmware 1.x reported as 0.00 lb.
+3. Takes 12 conversions after dropping 2 settling ones (10 µs clock half-period, as in 1.x). The two highest and two lowest are trimmed; the reading is the mean of the rest.
+4. Decides at most one fault, most fundamental first:
+   - `load-cell`: no conversion arrived, a stuck DT (the whole burst within 4 counts), a saturated reading (an open bridge wire), or a trimmed spread over 5 lb.
+   - `unstable`: trimmed spread over 0.5 lb.
+   - `untared`: no zero stored.
+   - `reversed`: more than 1 lb below the tare.
+
+   Except `untared`, a fault has to show on 3 bursts in a row (power-cycling the HX711 each time, about 7 s) before it is sent, so a gust or a bump does not raise one. The first clean reading on an untared scale becomes the zero. A stored zero of exactly 0 or -1 (left by 1.x taring a floating pin) is discarded.
+5. Sends the packet, then listens 4 s for a downlink addressed to its code, skipping other trees' packets. `Interval_Seconds` (10–86400 s) is stored in NVS. A `Command_Id` with `TARE` or `CAL` (+ `Pounds`) wakes the OLED and runs right away; see [Calibration from the app](#calibration-from-the-app).
+6. Below 3.30 V (critical) it deep-sleeps for 30 minutes, or for the interval if that is longer, then reports again. Leaving cutoff or critical needs 100 mV of headroom.
+
+A task watchdog (60 s) restarts a hung board. The radio retries init every 30 s if it failed. Stored settings (namespace `maple`: `node_code`, `rf_tag`, `interval_s`, `cmd_id`, `cmd_ok`, `hx_zero`, `hx_cpl`, `hx_tared`, `hx_rev`, `bat_k`) survive reflashing, power loss, and upgrading from 1.x.
+
+Serial commands (115200 baud, newline terminated, UART0 behind the USB-C jack, in service mode):
 
 | Command | Effect |
 | --- | --- |
-| `PROVISION {"Node_Code":"...","Rf_Tag":"..."}` | Store identity; replies `PROVISIONED`. |
-| `FACTORY` | Clear identity; replies `CLEARED`. |
-| `TARE` | Queue a tare; replies `TARE queued`. |
-| `CAL <pounds>` | With a known weight on the cell, set counts/lb; replies `CAL ok` or `CAL failed`. |
+| `HELP` | Lists the commands. |
+| `STATUS` | One line: firmware, code, mode, wiring, raw, zero, counts/lb, pounds, fault, pack mV and %, `bat_k`, interval, next report, radio, reset reason. |
+| `TARE` | Replies `TARE queued`, tares now, then `TARE ok` or `TARE failed`. |
+| `CAL <pounds>` | With a known weight on the tared cell, sets counts/lb; replies `CAL ok` or `CAL failed`. |
+| `BATCAL <mV>` | Pack voltage from a multimeter; scales future readings; replies `BATCAL ok factor=...`. |
+| `INTERVAL <s>` | Sets the report interval locally (the API's value wins on the next accepted packet). |
+| `PROVISION {"Node_Code":"...","Rf_Tag":"..."}` | Stores an identity; replies `PROVISIONED` or `PROVISION failed`. A code stamped by the flasher still wins at boot. |
+| `FACTORY` | Clears the whole NVS namespace (identity, calibration, interval); replies `CLEARED`. |
+| `REBOOT` | Restarts. |
 
 LoRa uplink payload (node to gateway):
 
 ```json
-{"Node_Code":"NODE-001","Weight":35.9,"Battery_Percent":88,"Interval_Seconds":20}
+{"Node_Code":"NODE-001","Weight":35.90,"Battery_Percent":88,"Interval_Seconds":20}
 {"Node_Code":"NODE-001","Fault":"unstable","Battery_Percent":88,"Interval_Seconds":20}
+{"Node_Code":"NODE-001","Fault":"load-cell","Interval_Seconds":20}
 ```
 
-`Interval_Seconds` is the node's current packet interval (verified in `sendScaleReading` and `sendFault`). Weight is gross pounds including the bucket, floored at 0.
+`Interval_Seconds` is the node's current packet interval. Weight is gross pounds including the bucket, floored at 0. `Battery_Percent` is absent when no pack is on the lithium port.
 
 For three packets after it applies an app command, the node also sends `"Command_Id":N,"Command_Ok":1|0,"Counts_Per_Lb":10246`.
 
@@ -93,10 +126,11 @@ API settles the command (done or failed); the page polls GET /nodes/:id/calibrat
 - `CAL` fails (`Command_Ok` 0) when the reading moved less than 1000 counts from the tare, which means no weight was on the platform.
 - Each step takes about one packet interval. Set the tree to 10 s on Deploy for a demo, then back to 900 s.
 - Serial `TARE` and `CAL <pounds>` still work over USB and do not touch the command id.
+- A tare or calibration needs a clean measurement (the same retries as a report); a platform still moving fails the command instead of storing a bad zero.
 
 ### Gateway firmware (`heltec-v3-gateway/src/main.cpp`)
 
-Receives packets, extracts `Node_Code`, `Weight` or `Fault`, `Battery_Percent`, optional `Interval_Seconds`, adds `Signal_Rssi`, and prints one JSON line on USB:
+Receives packets, extracts `Node_Code` (up to 16 characters), `Weight` or `Fault`, optional `Battery_Percent` (passed on only when the node sent it; before #126 a missing value became 100), optional `Interval_Seconds`, adds `Signal_Rssi`, and prints one JSON line on USB:
 
 ```json
 {"Node_Code":"NODE-001","Weight":35.90,"Battery_Percent":88,"Signal_Rssi":-74}
@@ -108,9 +142,10 @@ It also prints plain-text `[rx]`/status lines that the Pi ignores. Lines from th
 
 ```bash
 cd firmware/heltec-v3-node
-pio run -e node_001 -t upload     # one board at a time
-pio run -e node_002 -t upload
-pio device monitor
+pio test -e native                # logic tests on the laptop, no board needed
+pio run -e field -t upload        # keeps the code the flasher stamped at 0x670000
+pio run -e node_001 -t upload     # or a compiled code, one board at a time
+pio device monitor                # opening the port resets into service mode
 
 cd ../heltec-v3-gateway
 pio run -e gateway -t upload      # leave plugged into the Pi
