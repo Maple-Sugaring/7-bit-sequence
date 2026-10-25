@@ -89,8 +89,8 @@ export function TourProvider({ children }) {
 
   return (
     <TourContext.Provider value={value}>
-      <div data-tour-viewport style={index == null ? undefined : {
-        height: 'calc(100dvh - var(--tour-card-height, 250px) - 84px)',
+      <div data-tour-viewport data-tour-active={index != null ? 'true' : undefined} style={index == null ? undefined : {
+        height: 'calc(100dvh - var(--tour-card-height, 180px) - 16px - env(safe-area-inset-bottom, 0px))',
         overflowY: 'auto',
         position: 'relative',
       }}>{children}</div>

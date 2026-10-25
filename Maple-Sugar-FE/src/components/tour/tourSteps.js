@@ -44,7 +44,7 @@ export const TOUR_STEPS = [
     target: 'tree-card',
     clickToAdvance: true,
     title: 'Your trees',
-    body: 'Check battery, sap level, and freshness. Next opens this tree.',
+    body: 'Tap this tree to see its latest readings.',
   },
   {
     path: '/nodes/:nodeId',
@@ -55,8 +55,9 @@ export const TOUR_STEPS = [
   {
     path: '/nodes/:nodeId',
     target: 'node-chart',
+    actionSelector: '[data-tour-unit="hour"]',
     title: 'Readings over time',
-    body: 'Track sap flow over time. Change the timescale for detail.',
+    body: 'Tap Hour to see recent sap changes and continue.',
   },
   {
     path: '/table',

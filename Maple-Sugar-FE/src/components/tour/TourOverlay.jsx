@@ -4,6 +4,11 @@ import Button from '@mui/material/Button';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
+import LinearProgress from '@mui/material/LinearProgress';
+import CloseIcon from '@mui/icons-material/Close';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/auth';
 import { TOUR_STEPS, resolveStep, resumeStep } from './tourSteps';
@@ -81,8 +86,9 @@ function useTourTarget(target) {
   return found.target === target ? found : { rect: null, bounds: null };
 }
 
-function TourCard({ title, children, actions }) {
+function TourCard({ title, children, actions, onEnd, progress, total }) {
   const ref = useRef(null);
+  const [collapsed, setCollapsed] = useState(false);
   useEffect(() => {
     ref.current?.focus({ preventScroll: true });
     const measure = () => document.documentElement.style.setProperty('--tour-card-height', `${ref.current?.getBoundingClientRect().height ?? 250}px`);
@@ -106,7 +112,7 @@ function TourCard({ title, children, actions }) {
         zIndex: 1401,
         left: { xs: 8, sm: 16 },
         right: { xs: 8, sm: 16 },
-        bottom: 84,
+        bottom: 'calc(8px + env(safe-area-inset-bottom, 0px))',
         maxHeight: '50dvh',
         overflowY: 'auto',
         p: { xs: 1.5, sm: 2 },
@@ -119,13 +125,19 @@ function TourCard({ title, children, actions }) {
         outline: 'none',
       }}
     >
-      <Box aria-live="polite">
-        {title}
-        {children}
-      </Box>
-      <Stack direction="row" spacing={1} sx={{ mt: 1, alignItems: 'center' }}>
+      <Stack direction="row" alignItems="center" spacing={0.5}>
+        <Box aria-live="polite" sx={{ flex: 1, minWidth: 0 }}>{title}</Box>
+        {progress ? <Typography variant="caption" aria-label={`Step ${progress} of ${total}`} sx={{ whiteSpace: 'nowrap' }}>{progress} / {total}</Typography> : null}
+        <IconButton aria-label={collapsed ? 'Expand tour' : 'Collapse tour'} aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)} sx={{ width: 44, height: 44 }}>
+          {collapsed ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+        </IconButton>
+        <IconButton aria-label="End tour" onClick={onEnd} sx={{ width: 44, height: 44 }}><CloseIcon /></IconButton>
+      </Stack>
+      {!collapsed ? <Box aria-live="polite">{children}</Box> : null}
+      <Stack direction="row" spacing={1} sx={{ mt: 1, alignItems: 'center', justifyContent: 'space-between' }}>
         {actions}
       </Stack>
+      {progress ? <LinearProgress variant="determinate" value={100 * progress / total} aria-label="Tour progress" sx={{ mt: 1, height: 3, borderRadius: 1 }} /> : null}
     </Paper>
   );
 }
@@ -145,21 +157,26 @@ export function TourOverlay({ index, offset, nodePath, transitioning, goTo, onEn
     return () => window.removeEventListener('keydown', onKey);
   }, [onEnd]);
 
-  if (QUIET_PATHS.includes(pathname) || transitioning) return null;
+  useEffect(() => {
+    if (!step?.actionSelector || transitioning) return undefined;
+    const advance = (event) => {
+      if (event.target instanceof Element && event.target.closest(step.actionSelector)) {
+        goTo(current + 1);
+      }
+    };
+    document.addEventListener('click', advance);
+    return () => document.removeEventListener('click', advance);
+  }, [current, goTo, step, transitioning]);
 
-  const endButton = (
-    <Button size="small" color="inherit" onClick={onEnd} sx={{ mr: 'auto' }}>
-      End tour
-    </Button>
-  );
+  if (QUIET_PATHS.includes(pathname) || transitioning) return null;
 
   if (!step) {
     return (
       <TourCard
+        onEnd={onEnd}
         title={<Typography id="tour-title" variant="h6" component="h2">Tour paused</Typography>}
         actions={
           <>
-            {endButton}
             <Button variant="contained" onClick={() => goTo(nodePath && isAuthenticated ? index : resumeStep(TOUR_STEPS, index, isAuthenticated))}>
               Resume
             </Button>
@@ -216,11 +233,11 @@ export function TourOverlay({ index, offset, nodePath, transitioning, goTo, onEn
         </Box>
       ) : null}
       <TourCard
+        onEnd={onEnd}
+        progress={current - offset + 1}
+        total={TOUR_STEPS.length - offset}
         title={
           <>
-            <Typography variant="overline" color="text.secondary">
-              Step {current - offset + 1} of {TOUR_STEPS.length - offset}
-            </Typography>
             <Typography id="tour-title" variant="h6" component="h2">
               {step.title}
             </Typography>
@@ -228,15 +245,12 @@ export function TourOverlay({ index, offset, nodePath, transitioning, goTo, onEn
         }
         actions={
           <>
-            {endButton}
-            {canGoBack ? (
-              <Button variant="outlined" onClick={() => goTo(current - 1)}>
+              <Button variant="outlined" disabled={!canGoBack} onClick={() => goTo(current - 1)}>
                 Back
               </Button>
-            ) : null}
             {step.waitFor ? null : (
               <Button variant="contained" onClick={next}>
-                {last ? 'Finish' : 'Next'}
+                {last ? 'Finish' : step.actionSelector ? 'Skip' : 'Next'}
               </Button>
             )}
           </>
