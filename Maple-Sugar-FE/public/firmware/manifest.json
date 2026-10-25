@@ -1,6 +1,6 @@
 {
   "name": "Maple Sugaring field node",
-  "version": "field",
+  "version": "2.0.0 field",
   "chipFamily": "ESP32-S3",
   "parts": [
     { "path": "bootloader.bin", "offset": 0 },
