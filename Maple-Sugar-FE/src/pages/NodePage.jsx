@@ -210,7 +210,7 @@ export function NodePage() {
           loading={history.loading}
           isEmpty={weights.rows.length === 0}
           action={
-            <Stack direction="row" spacing={0} role="group" aria-label="Chart timescale" sx={{ width: '100%', border: '1px solid', borderColor: 'primary.main', borderRadius: '999px', overflow: 'hidden' }}>
+            <Stack data-tour="node-chart" direction="row" spacing={0} role="group" aria-label="Chart timescale" sx={{ width: '100%', border: '1px solid', borderColor: 'primary.main', borderRadius: '999px', overflow: 'hidden' }}>
               {TIME_UNITS.map(([id, label]) => (
                 <Button key={id} data-tour-unit={id} aria-label={label} aria-pressed={unit === id} sx={{ flex: 1, minWidth: 0, minHeight: 44, px: 0.5, borderRadius: 0, boxShadow: 'none', '&:first-of-type': { borderRadius: '999px 0 0 999px' }, '&:last-of-type': { borderRadius: '0 999px 999px 0' } }} size="small" variant={unit === id ? 'contained' : 'text'} onClick={() => setUnit(id)}>
                   {{ day: 'Day', hour: 'Hour', minute: 'Min', second: 'Sec' }[id]}
