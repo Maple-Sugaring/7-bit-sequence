@@ -21,6 +21,8 @@ const state = {
   touches: [],
   bucketId: 11,
   command: null,
+  alertResolves: [],
+  alertInserts: [],
 };
 
 function nodeRow(overrides) {
@@ -61,6 +63,8 @@ function reset() {
   state.touches = [];
   state.bucketId = 11;
   state.command = null;
+  state.alertResolves = [];
+  state.alertInserts = [];
 }
 
 mock.method(pool, 'query', async (text, params = []) => {
@@ -79,6 +83,17 @@ mock.method(pool, 'query', async (text, params = []) => {
       state.command.counts_per_lb = params[2];
     }
     return { rows: [state.command], rowCount: 1 };
+  }
+
+  if (sql.includes('update alerts')) {
+    state.alertResolves.push({ nodeId: params[0], types: params[1] });
+    return { rows: [], rowCount: params[1]?.length ?? 0 };
+  }
+
+  if (sql.includes('insert into alerts')) {
+    const row = { id: 70 + state.alertInserts.length, node_id: params[0], alert_type: params[1], severity: params[2] };
+    state.alertInserts.push(row);
+    return { rows: [row], rowCount: 1 };
   }
 
   if (sql.includes('from gateway')) {
@@ -387,6 +402,25 @@ describe('POST /ingest', () => {
     });
     assert.equal(response.status, 200);
     assert.deepEqual(response.json.Accepted[0].Command, { Command_Id: 32, Action: 'TARE' });
+  });
+
+  test("a fault resolves the node's other fault alerts and raises its own", async () => {
+    reset();
+    const response = await send({
+      Gateway_Code: 'GW-ALUMNI',
+      Node_Code: 'NODE-001',
+      Recorded_At: '2026-03-02T14:20:00.000Z',
+      Fault: 'load-cell',
+      Battery_Percent: 88,
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(state.alertResolves, [
+      { nodeId: 1, types: ['Unstable Reading', 'Reversed Load Cell', 'Untared'] },
+    ]);
+    assert.deepEqual(
+      state.alertInserts.map((row) => row.alert_type),
+      ['Load Cell'],
+    );
   });
 
   test('rejects a body that names no node', async () => {

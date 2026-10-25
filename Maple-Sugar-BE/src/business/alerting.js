@@ -196,12 +196,19 @@ export function alertForFault(fault, nodeLabel = 'The node') {
   }
 }
 
+/** Alert types raised from a node-reported fault, in `alertForFault` order. */
+export const FAULT_ALERT_TYPES = ['Load Cell', 'Unstable Reading', 'Reversed Load Cell', 'Untared'];
+
 /**
- * Alert types a trustworthy weight clears. A fault packet does not clear the
- * electrical alerts, because the cell is still the thing that failed.
+ * Alert types this reading clears. A trustworthy weight clears the fault and
+ * health alerts. A node reports one fault at a time, so a fault packet clears
+ * only the other fault types: the newest fault is the one that is true now.
  */
 export function clearedAlertTypes(reading) {
-  if (reading?.Fault) return [];
+  if (reading?.Fault) {
+    const current = alertForFault(reading.Fault)?.Alert_Type;
+    return current ? FAULT_ALERT_TYPES.filter((type) => type !== current) : [];
+  }
   const clear = ['Node Offline', 'Missed Readings', 'Load Cell', 'Untared'];
   if (reading?.Battery_Percent == null || reading.Battery_Percent >= LOW_BATTERY_PERCENT) {
     clear.push('Low Battery');

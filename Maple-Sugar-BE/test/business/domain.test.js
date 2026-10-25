@@ -237,7 +237,10 @@ describe('spoilage alerts', () => {
     assert.equal(alertForFault('load-cell', 'North maple').Alert_Type, 'Load Cell');
     assert.equal(alertForFault('not-a-fault'), null);
     assert.ok(clearedAlertTypes({ Weight: 4, Battery_Percent: 90, Signal_Rssi: -40 }).includes('Load Cell'));
-    assert.deepEqual(clearedAlertTypes({ Fault: 'load-cell' }), []);
+    // A node reports one fault at a time, so the newest supersedes the others.
+    assert.deepEqual(clearedAlertTypes({ Fault: 'load-cell' }), ['Unstable Reading', 'Reversed Load Cell', 'Untared']);
+    assert.deepEqual(clearedAlertTypes({ Fault: 'unstable' }), ['Load Cell', 'Reversed Load Cell', 'Untared']);
+    assert.deepEqual(clearedAlertTypes({ Fault: 'mystery' }), []);
   });
 });
 

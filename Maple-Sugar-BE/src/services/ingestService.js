@@ -72,6 +72,11 @@ async function acceptReading(gateway, reading) {
       batteryPercent: reading.Battery_Percent ?? null,
       signalRssi: reading.Signal_Rssi ?? null,
     });
+    const superseded = await alertsRepository.resolveOpenByTypes(node.NodeID, clearedAlertTypes(reading));
+    if (superseded) {
+      await invalidateNamespaces([cacheNamespaces.ALERTS]);
+      logger.info({ nodeId: node.NodeID, superseded, fault: reading.Fault }, 'Cleared older fault alerts');
+    }
     await raiseOnce(node.NodeID, alertForFault(reading.Fault, node.Node_Name));
     return { Fault: reading.Fault, Duplicate: false, ...(await replyFor(node, reading)) };
   }
