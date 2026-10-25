@@ -87,6 +87,10 @@ const char *faultCode(Fault fault) {
   return nullptr;
 }
 
+bool storedZeroIsBogus(long zero) {
+  return zero == 0 || zero == -1;
+}
+
 Wiring classifyWiring(bool gpio6DrivenHigh, bool gpio7DrivenHigh) {
   if (gpio6DrivenHigh) return Wiring::Normal;
   if (gpio7DrivenHigh) return Wiring::Swapped;

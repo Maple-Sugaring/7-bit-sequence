@@ -48,6 +48,11 @@ void scaleLoad() {
     zero = 0;
     changed = true;
   }
+  if (tared && maple::storedZeroIsBogus(zero)) {
+    logf("[scale] stored zero %ld came from a disconnected HX711; taring again on the next clean reading", zero);
+    tared = false;
+    changed = true;
+  }
   if (rev != CELL_CAL_REV || !(countsPerLb > 100.0f)) {
     countsPerLb = datasheetCountsPerLb();
     changed = true;

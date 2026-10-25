@@ -249,6 +249,9 @@ void listenForDownlink() {
 }
 
 void report() {
+  // The period runs from the start of one report to the next, so the time
+  // spent measuring does not stretch the interval the API expects.
+  const uint32_t started = millis();
   battery = batteryRead();
   const maple::PowerState power = updatePowerState();
   if (power == maple::PowerState::Cutoff) protectPack(CUTOFF_SLEEP_S);
@@ -276,7 +279,7 @@ void report() {
   char json[200];
   buildUplink(up, json, sizeof(json));
 
-  nextTxAt = millis() + intervalMs + jitter();
+  nextTxAt = started + intervalMs + jitter();
   if (!radioReady()) {
     logf("[tx] skipped, radio not ready: %s", json);
   } else {

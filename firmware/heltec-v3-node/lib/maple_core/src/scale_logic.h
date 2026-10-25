@@ -47,4 +47,8 @@ Wiring classifyWiring(bool gpio6DrivenHigh, bool gpio7DrivenHigh);
 
 long countsForPounds(float pounds, float countsPerLb);
 
+// Firmware 1.x tared on the 0 / -1 a floating DT pin reads. A real bridge
+// never zeroes at exactly those counts, so such a stored zero is re-tared.
+bool storedZeroIsBogus(long zero);
+
 }  // namespace maple
