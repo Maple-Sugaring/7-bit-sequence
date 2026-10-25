@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { can, Role } from '../src/business/permissions';
@@ -29,10 +29,6 @@ function renderAs(role) {
   );
 }
 
-function openProfileMenu() {
-  fireEvent.click(screen.getByRole('button', { name: 'Your profile' }));
-}
-
 beforeEach(() => {
   getOpenAlertCount.mockReset();
   getOpenAlertCount.mockResolvedValue(2);
@@ -40,19 +36,17 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('top bar alerts', () => {
-  it('hides the bell and the Notifications menu item from MSS, and skips the count', () => {
+  it('hides the bell from MSS and skips the count', () => {
     renderAs(Role.MSS);
     expect(screen.queryByRole('button', { name: /^Notifications/ })).toBeNull();
-    openProfileMenu();
-    expect(screen.queryByRole('menuitem', { name: 'Notifications' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Your profile' })).toBeNull();
     expect(getOpenAlertCount).not.toHaveBeenCalled();
   });
 
-  it('shows both to a student', () => {
+  it('shows the bell to a student without a profile menu', () => {
     renderAs(Role.STUDENT);
     expect(screen.getByRole('button', { name: /^Notifications/ })).toBeTruthy();
-    openProfileMenu();
-    expect(screen.getByRole('menuitem', { name: 'Notifications' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Your profile' })).toBeNull();
     expect(getOpenAlertCount).toHaveBeenCalled();
   });
 });

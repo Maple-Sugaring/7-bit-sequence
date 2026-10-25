@@ -47,7 +47,8 @@ export function TourProvider({ children }) {
   });
   const [destination, setDestination] = useState(null);
   if (destination === pathname) setDestination(null);
-  const resolved = index == null ? -1 : resolveStep(TOUR_STEPS, index, pathname);
+  const resolved = index == null || (destination != null && destination !== pathname)
+    ? -1 : resolveStep(TOUR_STEPS, index, pathname);
   if (resolved >= 0 && resolved !== index) {
     setIndex(resolved);
   }
@@ -88,8 +89,8 @@ export function TourProvider({ children }) {
 
   return (
     <TourContext.Provider value={value}>
-      <div data-tour-viewport style={index == null ? undefined : {
-        height: 'calc(100dvh - var(--tour-card-height, 250px) - 84px)',
+      <div data-tour-viewport data-tour-active={index != null ? 'true' : undefined} style={index == null ? undefined : {
+        height: 'calc(100dvh - var(--tour-card-height, 180px) - 16px - env(safe-area-inset-bottom, 0px))',
         overflowY: 'auto',
         position: 'relative',
       }}>{children}</div>

@@ -1,4 +1,5 @@
 /* Mobile is the base layout. Wide screens use a sidebar. */
+[data-tour-active="true"] .mobile-nav { display: none; }
 html {
   font-family: "Roboto Variable", "Roboto", sans-serif;
   scroll-padding-top: 88px;
@@ -17,7 +18,7 @@ html, body, #root {
 }
 
 .layout {
-  --header-height: 72px;
+  --header-height: 56px;
   --sidebar-width: 224px;
   --ink: #24241f;
   --muted: #69675f;
@@ -37,16 +38,29 @@ html, body, #root {
 }
 
 .app-brand {
+  flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 4px;
   color: #fff;
   text-decoration: none;
-  font-size: 17px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: -0.4px;
   line-height: 1.2;
+}
+
+.brand-tiger {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.brand-copy {
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .brand-mark {
@@ -61,12 +75,19 @@ html, body, #root {
 }
 
 .brand-caption {
-  display: block;
+  display: none;
   color: #c3c6bc;
   font-size: 9px;
   letter-spacing: 1.5px;
   font-weight: 500;
   margin-top: 5px;
+}
+
+@media (min-width: 600px) {
+  .layout { --header-height: 72px; }
+  .app-brand { font-size: 17px; gap: 10px; }
+  .brand-caption { display: block; }
+  .brand-tiger { width: 48px; height: 48px; }
 }
 
 .demo-badge {
@@ -465,15 +486,6 @@ a:focus-visible, button:focus-visible {
   }
 }
 
-@media (max-width: 359px) {
-  .brand-mark {
-    display: none;
-  }
-  .app-brand {
-    font-size: 16px;
-  }
-}
-
 @media (min-width: 600px) {
   .main-content {
     padding: 32px 24px 40px;
@@ -565,3 +577,23 @@ a:focus-visible, button:focus-visible {
     padding: 18px;
   }
 }
+
+/* Keep charts and maps above the mobile tour navigation. */
+@media (max-width: 600px) {
+  [data-tour-active] [data-tour="node-chart"] .chart-plot,
+  [data-tour-active] [data-tour="sugar-woods-chart"] .chart-plot {
+    height: clamp(130px, calc(100dvh - var(--tour-card-height, 180px) - 260px), 280px);
+  }
+  [data-tour-active] [data-tour="node-chart"] .MuiCardHeader-root,
+  [data-tour-active] [data-tour="sugar-woods-chart"] .MuiCardHeader-root { padding: 10px 12px 0; }
+  [data-tour-active] [data-tour="node-chart"] .MuiCardHeader-subheader,
+  [data-tour-active] [data-tour="sugar-woods-chart"] .MuiCardHeader-subheader { display: none; }
+  [data-tour-active] [data-tour="node-chart"] .MuiCardContent-root,
+  [data-tour-active] [data-tour="sugar-woods-chart"] .MuiCardContent-root { padding: 8px 12px 12px; }
+  [data-tour-active] [data-tour="fleet-map"] .MuiCardContent-root { padding: 10px; }
+  [data-tour-active] [data-tour="fleet-map"] [aria-label="Status legend"] { gap: 4px; }
+  [data-tour-active] [data-tour="fleet-map"] .MuiChip-root { font-size: 10px; height: 20px; }
+  [data-tour-active] [data-tour="fleet-map"] .leaflet-container { height: clamp(130px, calc(100dvh - var(--tour-card-height, 180px) - 240px), 260px) !important; }
+}
+
+[data-tour-active] { overflow-anchor: none; }

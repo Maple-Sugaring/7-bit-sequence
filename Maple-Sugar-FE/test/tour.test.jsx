@@ -73,7 +73,8 @@ function renderApp(path) {
         <Detour />
         <Routes>
           <Route path="/dashboard" element={<TreeLink />} />
-          <Route path="/nodes/:nodeId" element={<p>tree page</p>} />
+          <Route path="/nodes/:nodeId" element={<><p>tree page</p><button data-tour-unit="hour">Hours</button></>} />
+          <Route path="/table" element={<p>all readings</p>} />
           <Route path="/schedule" element={<p>schedule</p>} />
         </Routes>
       </TourProvider>
@@ -92,17 +93,17 @@ describe('tour overlay', () => {
     renderApp('/dashboard');
     fireEvent.click(screen.getByText('start'));
     expect(screen.getByText('The Bush')).toBeTruthy();
-    expect(screen.getByText(`Step 1 of ${TOUR_STEPS.length - firstStep(TOUR_STEPS, true)}`)).toBeTruthy();
+    expect(screen.getByLabelText(`Step 1 of ${TOUR_STEPS.length - firstStep(TOUR_STEPS, true)}`)).toBeTruthy();
     // No Back into the sign-in steps once signed in.
-    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Back' }).disabled).toBe(true);
 
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     expect(screen.getByText('Fleet map')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     expect(screen.getByText('Your trees')).toBeTruthy();
 
-    // Next clicks the highlighted tree, and the tour follows it to the tree page.
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    // Skip opens the tree so the tour can continue.
+    fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
     expect(screen.getByText('tree page')).toBeTruthy();
     expect(screen.getByText('Live bucket weight')).toBeTruthy();
   });
@@ -121,7 +122,7 @@ describe('tour overlay', () => {
     sessionStorage.setItem('maple-tour-step', String(indexOf('node-chart')));
     sessionStorage.setItem('maple-tour-offset', '2');
     renderApp('/nodes/7');
-    expect(screen.getByText('Step 5 of 6')).toBeTruthy();
+    expect(screen.getByLabelText('Step 5 of 6')).toBeTruthy();
     fireEvent.click(screen.getByText('leave tour'));
     expect(screen.getByText('Tour paused')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
@@ -138,9 +139,23 @@ describe('tour overlay', () => {
     sessionStorage.setItem('maple-tour-step', String(indexOf('sign-in')));
     sessionStorage.setItem('maple-tour-offset', '0');
     renderApp('/dashboard');
-    expect(screen.getByText('Step 3 of 8')).toBeTruthy();
+    expect(screen.getByLabelText('Step 3 of 8')).toBeTruthy();
     expect(screen.queryByText('Step 0 of 6')).toBeNull();
     expect(sessionStorage.getItem('maple-tour-step')).toBe(String(indexOf('field-overview')));
+  });
+
+  it('keeps Hours on the chart until Next is clicked', () => {
+    sessionStorage.setItem('maple-tour-step', String(indexOf('node-chart')));
+    renderApp('/nodes/7');
+    expect(screen.queryByRole('button', { name: 'Collapse tour' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Hours' }));
+    expect(screen.getByText('Readings over time')).toBeTruthy();
+    expect(screen.queryByText('Sugar Woods')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByText('Sugar Woods')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.querySelector('[data-tour-active="true"]')).toBeNull();
   });
 
   it('waits for sign-in instead of offering Next', () => {

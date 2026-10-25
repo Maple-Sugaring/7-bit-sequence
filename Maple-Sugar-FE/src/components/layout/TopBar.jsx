@@ -1,21 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import Badge from '@mui/material/Badge';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
-import Typography from '@mui/material/Typography';
-import AccountCircleIcon from '@mui/icons-material/AccountCircle';
+import tigerLogo from '../../assets/RITTigerTransparent.png';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import Tooltip from '@mui/material/Tooltip';
-import Divider from '@mui/material/Divider';
-import ListItemIcon from '@mui/material/ListItemIcon';
-import ListItemText from '@mui/material/ListItemText';
-import Menu from '@mui/material/Menu';
-import MenuItem from '@mui/material/MenuItem';
-import EventIcon from '@mui/icons-material/Event';
 import ExploreOutlinedIcon from '@mui/icons-material/ExploreOutlined';
-import LogoutIcon from '@mui/icons-material/Logout';
-import SettingsIcon from '@mui/icons-material/Settings';
-import ritTigerLogo from '../../assets/RITTigerTransparent.png';
 import { Capability } from '../../business/permissions';
 import { useAuth } from '../../context/auth';
 import { useOpenAlertCount } from '../../services/hooks';
@@ -27,9 +17,8 @@ import { Link, useNavigate } from 'react-router-dom';
 
 export function TopBar() {
   const navigate = useNavigate();
-  const { user, role, can, signOut } = useAuth();
+  const { role, can } = useAuth();
   const tour = useTour();
-  const [profileAnchor, setProfileAnchor] = useState(null);
   const canViewAlerts = can(Capability.VIEW_ALERTS);
   const alerts = useOpenAlertCount(canViewAlerts);
   const openCount = Number(alerts.data) || 0;
@@ -50,23 +39,6 @@ export function TopBar() {
     notice.onclick = () => navigate('/notifications');
   }, [navigate, openCount]);
 
-  const profileItems = [
-    { to: '/profile', label: 'Profile & settings', Icon: SettingsIcon },
-    ...(can(Capability.VIEW_SCHEDULE) ? [{ to: '/schedule?show=mine', label: 'My upcoming shifts', Icon: EventIcon }] : []),
-    ...(canViewAlerts ? [{ to: '/notifications', label: 'Notifications', Icon: NotificationsIcon }] : []),
-  ];
-
-  const goTo = (to) => {
-    setProfileAnchor(null);
-    navigate(to);
-  };
-
-  const handleSignOut = async () => {
-    setProfileAnchor(null);
-    await signOut();
-    navigate('/login', { replace: true });
-  };
-
   return (
     <Box
       component="header"
@@ -74,67 +46,29 @@ export function TopBar() {
       sx={{
         display: "flex",
         alignItems: "center",
-        gap: 1,
-        px: { xs: 2, md: 3 },
+        gap: { xs: 0, sm: 1 },
+        px: { xs: 1, sm: 2, md: 3 },
+        '& > .MuiIconButton-root': { width: 40, height: 44, flexShrink: 0 },
         color: "#fff",
       }}
     >
       <Link className="app-brand" to={landingRouteFor(role)}>
-        <img src={ritTigerLogo} alt="RIT tiger mascot" style={{ width: 48, height: 48, objectFit: 'contain', flexShrink: 0 }} />
-        <span>Maple Sugaring<span className="brand-caption">RIT · FIELD WORKSPACE</span></span>
+        <img className="brand-tiger" src={tigerLogo} alt="RIT tiger mascot" width="40" height="40" />
+        <span className="brand-copy">Maple Sugaring<span className="brand-caption">RIT · FIELD WORKSPACE</span></span>
       </Link>
-      <Box sx={{ flex: 1 }} />
       {apiMode === 'mock' ? <span className="demo-badge">Demo</span> : null}
       <Tooltip title="Take the tour">
-        <IconButton aria-label="Take the tour" onClick={tour.start} disabled={tour.active} sx={{ color: '#fff' }}>
+        <IconButton aria-label="Take the tour" onClick={tour.start} disabled={tour.active} sx={{ color: '#fff', '&.Mui-disabled': { color: 'rgba(255, 255, 255, 0.45)' } }}>
           <ExploreOutlinedIcon />
         </IconButton>
       </Tooltip>
       {canViewAlerts ? (
         <IconButton aria-label={`Notifications${openCount ? `, ${openCount} open` : ''}`} onClick={() => navigate('/notifications')} sx={{ color: '#fff' }}>
-          <Badge badgeContent={openCount} color="error" invisible={openCount === 0}>
+          <Badge badgeContent={openCount} color="error" invisible={openCount === 0} sx={{ '& .MuiBadge-badge': { minWidth: 28, px: 0.75, right: 3, letterSpacing: '0.04em', fontVariantNumeric: 'tabular-nums' } }}>
             <NotificationsIcon />
           </Badge>
         </IconButton>
       ) : null}
-      <Tooltip title={user?.fullName ? `${user.fullName} · Profile` : 'Profile'}>
-        <IconButton aria-label="Your profile" aria-haspopup="menu" aria-expanded={profileAnchor ? 'true' : undefined} onClick={(event) => setProfileAnchor(event.currentTarget)} sx={{ color: '#fff' }}>
-          <AccountCircleIcon />
-        </IconButton>
-      </Tooltip>
-      <Menu
-        anchorEl={profileAnchor}
-        open={Boolean(profileAnchor)}
-        onClose={() => setProfileAnchor(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-        slotProps={{ paper: { sx: { minWidth: 220, mt: 0.5 } } }}
-      >
-        <Box sx={{ px: 2, py: 1 }}>
-          <Typography sx={{ fontWeight: 600 }}>{user?.fullName || 'Your account'}</Typography>
-          {user?.email ? (
-            <Typography variant="caption" color="text.secondary">
-              {user.email}
-            </Typography>
-          ) : null}
-        </Box>
-        <Divider />
-        {profileItems.map(({ to, label, Icon }) => (
-          <MenuItem key={to} onClick={() => goTo(to)}>
-            <ListItemIcon>
-              <Icon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText>{label}</ListItemText>
-          </MenuItem>
-        ))}
-        <Divider />
-        <MenuItem onClick={handleSignOut}>
-          <ListItemIcon>
-            <LogoutIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Log out</ListItemText>
-        </MenuItem>
-      </Menu>
     </Box>
   );
 }

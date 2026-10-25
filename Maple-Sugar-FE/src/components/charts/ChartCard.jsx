@@ -27,23 +27,16 @@ export function ChartCard({
           </Typography>
         }
         subheader={description}
-        action={action}
-        sx={{
-          pb: 0,
-          flexWrap: 'wrap',
-          gap: 1,
-          '& .MuiCardHeader-content': { minWidth: 0, flexBasis: 200 },
-          '& .MuiCardHeader-action': { m: 0, maxWidth: '100%' },
-          '& .MuiCardHeader-action > *': { flexWrap: 'wrap', gap: 1 },
-        }}
+        sx={{ pb: 0 }}
       />
+      {action ? <Box sx={{ px: 2, pt: 1.5, minWidth: 0, maxWidth: '100%', '& > *': { flexWrap: 'wrap', maxWidth: '100%' } }}>{action}</Box> : null}
       <CardContent sx={{ flexGrow: 1, pt: 2 }}>
         {loading ? (
-          <Skeleton variant="rounded" height={height} />
+          <Box className="chart-plot" sx={{ height }}><Skeleton variant="rounded" height="100%" /></Box>
         ) : isEmpty ? (
           <EmptyBlock title={emptyTitle} description={emptyDescription} />
         ) : (
-          <Box sx={{ height }}>{children}</Box>
+          <Box className="chart-plot" sx={{ height }}>{children}</Box>
         )}
       </CardContent>
     </Card>
