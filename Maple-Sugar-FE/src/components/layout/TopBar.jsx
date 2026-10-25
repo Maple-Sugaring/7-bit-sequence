@@ -3,6 +3,7 @@ import Badge from '@mui/material/Badge';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
+import tigerLogo from '../../assets/RITTigerTransparent.png';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import Tooltip from '@mui/material/Tooltip';
@@ -15,7 +16,6 @@ import EventIcon from '@mui/icons-material/Event';
 import ExploreOutlinedIcon from '@mui/icons-material/ExploreOutlined';
 import LogoutIcon from '@mui/icons-material/Logout';
 import SettingsIcon from '@mui/icons-material/Settings';
-import ritTigerLogo from '../../assets/RITTigerTransparent.png';
 import { Capability } from '../../business/permissions';
 import { useAuth } from '../../context/auth';
 import { useOpenAlertCount } from '../../services/hooks';
@@ -74,19 +74,19 @@ export function TopBar() {
       sx={{
         display: "flex",
         alignItems: "center",
-        gap: 1,
-        px: { xs: 2, md: 3 },
+        gap: { xs: 0, sm: 1 },
+        px: { xs: 1, sm: 2, md: 3 },
+        '& > .MuiIconButton-root': { width: 40, height: 44, flexShrink: 0 },
         color: "#fff",
       }}
     >
       <Link className="app-brand" to={landingRouteFor(role)}>
-        <img src={ritTigerLogo} alt="RIT tiger mascot" style={{ width: 48, height: 48, objectFit: 'contain', flexShrink: 0 }} />
-        <span>Maple Sugaring<span className="brand-caption">RIT · FIELD WORKSPACE</span></span>
+        <img className="brand-tiger" src={tigerLogo} alt="RIT tiger mascot" width="40" height="40" />
+        <span className="brand-copy">Maple Sugaring<span className="brand-caption">RIT · FIELD WORKSPACE</span></span>
       </Link>
-      <Box sx={{ flex: 1 }} />
       {apiMode === 'mock' ? <span className="demo-badge">Demo</span> : null}
       <Tooltip title="Take the tour">
-        <IconButton aria-label="Take the tour" onClick={tour.start} disabled={tour.active} sx={{ color: '#fff' }}>
+        <IconButton aria-label="Take the tour" onClick={tour.start} disabled={tour.active} sx={{ color: '#fff', '&.Mui-disabled': { color: 'rgba(255, 255, 255, 0.45)' } }}>
           <ExploreOutlinedIcon />
         </IconButton>
       </Tooltip>
