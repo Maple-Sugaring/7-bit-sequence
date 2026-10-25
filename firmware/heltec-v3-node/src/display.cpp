@@ -8,7 +8,9 @@
 
 namespace {
 
-U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, PIN_OLED_SCL, PIN_OLED_SDA, PIN_OLED_RST);
+// Hardware I2C on the same pins. Software I2C toggles pinMode per bit and
+// took about 2 s per frame at 80 MHz, stalling live weighing and the button.
+U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, PIN_OLED_RST, PIN_OLED_SCL, PIN_OLED_SDA);
 bool panelOn = false;
 bool begun = false;
 
@@ -46,6 +48,7 @@ void displayBegin() {
   delay(20);
   digitalWrite(PIN_OLED_RST, HIGH);
   delay(20);
+  u8g2.setBusClock(400000);
   u8g2.begin();
   u8g2.setContrast(180);
   panelOn = true;

@@ -118,6 +118,15 @@ void test_counts_for_pounds() {
   TEST_ASSERT_EQUAL(0, countsForPounds(0.3f, 0.0f));
 }
 
+void test_zero_from_floating_pin_is_bogus() {
+  // 1.x tared on the 0 / -1 a floating DT pin reads, so a board that never had
+  // a working cell can carry one of these as its stored zero.
+  TEST_ASSERT_TRUE(storedZeroIsBogus(0));
+  TEST_ASSERT_TRUE(storedZeroIsBogus(-1));
+  TEST_ASSERT_FALSE(storedZeroIsBogus(-48211));
+  TEST_ASSERT_FALSE(storedZeroIsBogus(1));
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_floating_zero_and_minus_one_is_stuck);
@@ -132,5 +141,6 @@ int main() {
   RUN_TEST(test_untared_when_never_tared);
   RUN_TEST(test_wiring_classification);
   RUN_TEST(test_counts_for_pounds);
+  RUN_TEST(test_zero_from_floating_pin_is_bogus);
   return UNITY_END();
 }
