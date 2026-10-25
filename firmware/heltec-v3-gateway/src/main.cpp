@@ -273,7 +273,8 @@ void pollDownlink() {
 }
 
 void publishReading(const char *payload, int rssi) {
-  char nodeCode[16];
+  // Stamped codes run to 16 characters, plus the terminator.
+  char nodeCode[24];
   char fault[24];
   if (!extractString(payload, "Node_Code", nodeCode, sizeof(nodeCode))) {
     char bad[160];
@@ -283,9 +284,11 @@ void publishReading(const char *payload, int rssi) {
     return;
   }
 
-  float battery = 100;
+  // A node on USB power, or with no pack on its battery port, leaves the
+  // field out. Pass that on instead of inventing a full battery.
+  float battery = 0;
   const bool hasBattery = extractNumber(payload, "Battery_Percent", &battery);
-  const int batteryPercent = hasBattery ? static_cast<int>(lroundf(battery)) : 100;
+  const int batteryPercent = hasBattery ? static_cast<int>(lroundf(battery)) : -1;
   float interval = 0.0f;
   const bool hasInterval = extractNumber(payload, "Interval_Seconds", &interval);
 
@@ -303,7 +306,8 @@ void publishReading(const char *payload, int rssi) {
   int used = hasFault
       ? snprintf(line, sizeof(line), "{\"Node_Code\":\"%s\",\"Fault\":\"%s\"", nodeCode, fault)
       : snprintf(line, sizeof(line), "{\"Node_Code\":\"%s\",\"Weight\":%.2f", nodeCode, weight);
-  used += snprintf(line + used, sizeof(line) - used, ",\"Battery_Percent\":%d,\"Signal_Rssi\":%d", batteryPercent, rssi);
+  if (hasBattery) used += snprintf(line + used, sizeof(line) - used, ",\"Battery_Percent\":%d", batteryPercent);
+  used += snprintf(line + used, sizeof(line) - used, ",\"Signal_Rssi\":%d", rssi);
   if (hasInterval) {
     used += snprintf(line + used, sizeof(line) - used, ",\"Interval_Seconds\":%d", static_cast<int>(lroundf(interval)));
   }
@@ -339,7 +343,11 @@ void publishReading(const char *payload, int rssi) {
   char detail[28];
   char extra[28];
   snprintf(action, sizeof(action), "RX #%lu", static_cast<unsigned long>(rxCount));
-  snprintf(detail, sizeof(detail), "%s %.2flb %d%%", nodeCode, weight, batteryPercent);
+  if (hasBattery) {
+    snprintf(detail, sizeof(detail), "%s %.2flb %d%%", nodeCode, weight, batteryPercent);
+  } else {
+    snprintf(detail, sizeof(detail), "%s %.2flb", nodeCode, weight);
+  }
   snprintf(extra, sizeof(extra), "RSSI %d dBm", rssi);
   announce(action, detail, extra);
 }
