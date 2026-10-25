@@ -77,9 +77,12 @@ Measurement scaleMeasure(Hx711 &hx, int attempts) {
     hx.probe();
     const int good = hx.burst(samples, BURST_SAMPLES);
     m = scaleEvaluate(samples, good, BURST_SAMPLES, hx.wiring());
-    if (m.stats.verdict == maple::SampleVerdict::Ok) break;
-    logf("[scale] attempt %d/%d not clean (%s, %d samples)", attempt, attempts,
-         maple::faultCode(maple::decideFault(m.stats, true, zero, countsPerLb)), good);
+    // One bad burst (a gust, a bump, a slow conversion) is not a fault: it has
+    // to show on every attempt, several seconds of evidence, before it is
+    // sent. Untared is a state, not a glitch, so it needs no confirming.
+    if (m.fault == maple::Fault::None || m.fault == maple::Fault::Untared) break;
+    logf("[scale] attempt %d/%d: %s (%d samples, spread %ld)", attempt, attempts, maple::faultCode(m.fault), good,
+         m.stats.spread);
   }
   return m;
 }

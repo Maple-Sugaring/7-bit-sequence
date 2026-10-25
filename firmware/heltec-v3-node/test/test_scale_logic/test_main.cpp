@@ -64,9 +64,10 @@ void test_single_outlier_is_trimmed() {
   TEST_ASSERT_EQUAL(SampleVerdict::Ok, stats.verdict);
 }
 
-void test_spread_over_point_three_lb_is_unstable() {
+void test_spread_over_half_lb_is_unstable() {
+  // Trimmed spread 7 x 0.09 = 0.63 lb.
   long samples[12];
-  for (int i = 0; i < 12; i++) samples[i] = 500000 + static_cast<long>(i * 0.06f * CPL);
+  for (int i = 0; i < 12; i++) samples[i] = 500000 + static_cast<long>(i * 0.09f * CPL);
   const SampleStats stats = analyzeSamples(samples, 12, 12, CPL);
   TEST_ASSERT_EQUAL(SampleVerdict::Unstable, stats.verdict);
   const Fault fault = decideFault(stats, true, 0, CPL);
@@ -83,18 +84,25 @@ void test_spread_over_five_lb_is_garbage_load_cell() {
   TEST_ASSERT_EQUAL(Fault::LoadCell, decideFault(stats, true, 0, CPL));
 }
 
+void test_still_platform_spread_is_ok() {
+  // A still platform spreads a few hundredths; 0.4 lb trimmed is wind, not a fault.
+  long samples[12];
+  for (int i = 0; i < 12; i++) samples[i] = 500000 + static_cast<long>(i * 0.055f * CPL);
+  TEST_ASSERT_EQUAL(SampleVerdict::Ok, analyzeSamples(samples, 12, 12, CPL).verdict);
+}
+
 void test_reversed_below_tare() {
   long samples[10];
   const long zero = 800000;
-  for (int i = 0; i < 10; i++) samples[i] = zero - static_cast<long>(0.5f * CPL) + i * 30;
+  for (int i = 0; i < 10; i++) samples[i] = zero - static_cast<long>(1.5f * CPL) + i * 30;
   const SampleStats stats = analyzeSamples(samples, 10, 10, CPL);
   TEST_ASSERT_EQUAL(SampleVerdict::Ok, stats.verdict);
   const Fault fault = decideFault(stats, true, zero, CPL);
   TEST_ASSERT_EQUAL(Fault::Reversed, fault);
   TEST_ASSERT_EQUAL_STRING("reversed", faultCode(fault));
 
-  // A little under zero is drift, not a reversed cell.
-  for (int i = 0; i < 10; i++) samples[i] = zero - static_cast<long>(0.1f * CPL) + i * 30;
+  // Creep or cold can pull the zero down a few tenths: drift, not a reversed cell.
+  for (int i = 0; i < 10; i++) samples[i] = zero - static_cast<long>(0.6f * CPL) + i * 30;
   TEST_ASSERT_EQUAL(Fault::None, decideFault(analyzeSamples(samples, 10, 10, CPL), true, zero, CPL));
 }
 
@@ -114,8 +122,8 @@ void test_wiring_classification() {
 }
 
 void test_counts_for_pounds() {
-  TEST_ASSERT_EQUAL(11689, countsForPounds(0.3f, CPL));
-  TEST_ASSERT_EQUAL(0, countsForPounds(0.3f, 0.0f));
+  TEST_ASSERT_EQUAL(19482, countsForPounds(0.5f, CPL));
+  TEST_ASSERT_EQUAL(0, countsForPounds(0.5f, 0.0f));
 }
 
 void test_zero_from_floating_pin_is_bogus() {
@@ -135,7 +143,8 @@ int main() {
   RUN_TEST(test_too_few_samples_is_no_response);
   RUN_TEST(test_quiet_samples_are_ok_with_trimmed_mean);
   RUN_TEST(test_single_outlier_is_trimmed);
-  RUN_TEST(test_spread_over_point_three_lb_is_unstable);
+  RUN_TEST(test_spread_over_half_lb_is_unstable);
+  RUN_TEST(test_still_platform_spread_is_ok);
   RUN_TEST(test_spread_over_five_lb_is_garbage_load_cell);
   RUN_TEST(test_reversed_below_tare);
   RUN_TEST(test_untared_when_never_tared);

@@ -168,7 +168,9 @@ maple::PowerState updatePowerState() {
 // ---- measuring ----
 
 Measurement measureNow() {
+  watchdogFeed();
   const Measurement m = scaleMeasure(hx, MEASURE_ATTEMPTS);
+  watchdogFeed();
   lastMeasurement = m;
   haveMeasurement = true;
   liveCount = 0;  // the burst power-cycled the chip
@@ -238,7 +240,8 @@ void listenForDownlink() {
     const int32_t left = static_cast<int32_t>(until - millis());
     if (left <= 0) return;
     const int len = radioListen(packet, sizeof(packet), static_cast<uint32_t>(left));
-    if (len <= 0) return;
+    if (len < 0) return;
+    if (len == 0) continue;
     maple::Downlink down;
     if (!maple::parseDownlink(packet, nodeCode, &down)) continue;  // another tree's packet
     logf("[rx] %s", packet);
@@ -297,7 +300,8 @@ void report() {
     radioSleep();
   }
 
-  if (power == maple::PowerState::Critical) protectPack(CRITICAL_SLEEP_S);
+  // Never report more often than the site asked for, even to save the pack.
+  if (power == maple::PowerState::Critical) protectPack(max(CRITICAL_SLEEP_S, static_cast<uint32_t>(intervalMs / 1000UL)));
 }
 
 // ---- console ----
