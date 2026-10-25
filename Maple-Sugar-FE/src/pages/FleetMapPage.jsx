@@ -88,7 +88,7 @@ export function FleetMapPage() {
     body = <EmptyBlock title="No nodes deployed yet" description="Deployed nodes appear here once they are sited." />;
   } else if (wide) {
     body = (
-      <Box sx={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 2, alignItems: 'start' }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 360px) minmax(0, 1fr)', gap: 2, alignItems: 'start' }}>
         <Paper variant="outlined" sx={{ maxHeight: 'calc(100vh - 260px)', overflowY: 'auto' }}>
           {list}
         </Paper>

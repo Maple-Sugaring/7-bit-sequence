@@ -18,6 +18,7 @@ import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import CloudDoneIcon from '@mui/icons-material/CloudDone';
 import DeviceThermostatIcon from '@mui/icons-material/DeviceThermostat';
 import GoogleIcon from '@mui/icons-material/Google';
+import ExploreOutlinedIcon from '@mui/icons-material/ExploreOutlined';
 import GroupsIcon from '@mui/icons-material/Groups';
 import LocalDrinkIcon from '@mui/icons-material/LocalDrink';
 import ParkIcon from '@mui/icons-material/Park';
@@ -32,6 +33,7 @@ import ritTigerLogo from '../assets/RITTigerTransparent.png';
 import { MeterBar } from '../components/common/MeterBar';
 import { Footer } from '../components/layout/Footer';
 import { useAuth } from '../context/auth';
+import { useTour } from '../components/tour/tour';
 import { canVisit, landingRouteFor } from '../routes/navigation';
 import { demoAccounts } from '../services/authService';
 import { accessibleOrange, ritOrange, sugarbush } from '../theme/ritColors';
@@ -166,6 +168,7 @@ function scrollToSection(id) {
 }
 
 export function LandingPage() {
+  const tour = useTour();
   const { isAuthenticated, restoring, role, signIn } = useAuth();
   const [demoError, setDemoError] = useState(null);
   const location = useLocation();
@@ -439,6 +442,7 @@ export function LandingPage() {
             <Grid size={{ xs: 12, md: 5 }}>
               <Box
                 id="sign-in-card"
+                data-tour="login-card"
                 sx={{
                   width: '100%',
                   scrollMarginTop: { xs: 76, md: 88 },
@@ -476,7 +480,7 @@ export function LandingPage() {
                   </Typography>
                 </Box>
 
-                <Stack spacing={2} sx={{ px: { xs: 3, sm: 4 }, pb: 4 }}>
+                <Stack data-tour="sign-in" spacing={2} sx={{ px: { xs: 3, sm: 4 }, pb: 4 }}>
                   {restoring ? (
                     <Box sx={{ display: 'grid', placeItems: 'center', py: 3 }}>
                       <CircularProgress size={28} sx={{ color: '#000' }} />
@@ -534,6 +538,11 @@ export function LandingPage() {
                         </>
                       ) : null}
                     </>
+                  )}
+                  {tour.active ? null : (
+                    <Button startIcon={<ExploreOutlinedIcon />} onClick={tour.start}>
+                      Take a quick tour
+                    </Button>
                   )}
                 </Stack>
               </Box>

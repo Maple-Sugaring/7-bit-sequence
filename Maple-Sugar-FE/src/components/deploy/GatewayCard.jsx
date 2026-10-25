@@ -14,7 +14,7 @@ function Fact({ icon: Icon, children }) {
   return (
     <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', minWidth: 0 }}>
       <Icon sx={{ fontSize: 16, color: 'text.secondary', flexShrink: 0 }} />
-      <Typography variant="body2" color="text.secondary" noWrap>
+      <Typography variant="body2" color="text.secondary">
         {children}
       </Typography>
     </Stack>
@@ -50,7 +50,7 @@ export function GatewayCard({ gateway, nodeCount, onOpen }) {
 
       <Box sx={{ minWidth: 0, flex: 1, textAlign: 'left' }}>
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-          <Typography variant="subtitle1" noWrap sx={{ fontWeight: 700, lineHeight: 1.25 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.25 }}>
             {gateway.Gateway_Name}
           </Typography>
           <Box

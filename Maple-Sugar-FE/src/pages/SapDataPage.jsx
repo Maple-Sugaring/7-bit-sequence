@@ -225,7 +225,7 @@ export function SapDataPage() {
             </MenuItem>
           ))}
         </TextField>
-        <Stack direction="row" spacing={1} sx={{ order: { xs: 6, md: 0 } }}>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ order: { xs: 6, md: 0 } }}>
           <DatePicker
             label="From"
             value={from}
@@ -330,7 +330,7 @@ export function SapDataPage() {
               </Button>
             ) : null}
           </Box>
-          <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Box data-tour="sugar-woods-chart" sx={{ flex: 1, minWidth: 0 }}>
             <ChartCard
               title="2026 weight"
               description={chartDescription}

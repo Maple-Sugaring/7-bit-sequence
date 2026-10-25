@@ -17,7 +17,7 @@ function cellValue(column, row) {
 }
 
 /**
- * Phone-friendly stand-in for a DataGrid: one card per row, built from the same
+ * Responsive stand-in for a DataGrid: one card per row, built from the same
  * column definitions. The first column is the card title; a column with an
  * empty headerName (row actions) is pinned to the top right.
  */
@@ -45,10 +45,10 @@ export function ColumnCards({ rows, columns, getRowId, loading, emptyLabel = 'No
   }
 
   return (
-    <Stack spacing={1.5} sx={{ p: 1.5 }}>
+    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: 1.5 }}>
       {rows.slice(0, shown).map((row) => (
         <Card key={getRowId(row)} variant="outlined" sx={{ p: 1.5 }}>
-          <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+          <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mb: 1 }}>
             <Typography component="h3" sx={{ fontWeight: 700 }}>
               {cellValue(title, row)}
             </Typography>
@@ -59,12 +59,12 @@ export function ColumnCards({ rows, columns, getRowId, loading, emptyLabel = 'No
               <Stack
                 key={column.field}
                 direction="row"
-                sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 2, minHeight: 28 }}
+                sx={{ alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, minHeight: 28 }}
               >
                 <Typography variant="caption" color="text.secondary">
                   {column.headerName}
                 </Typography>
-                <Box sx={{ fontSize: 14, textAlign: 'right', minWidth: 0, overflowWrap: 'anywhere' }}>
+                <Box sx={{ fontSize: 14, textAlign: 'right', minWidth: 0, maxWidth: '100%', overflowWrap: 'anywhere', '& .MuiInputBase-root': { maxWidth: '100%', minWidth: 0 } }}>
                   {cellValue(column, row)}
                 </Box>
               </Stack>
@@ -75,6 +75,6 @@ export function ColumnCards({ rows, columns, getRowId, loading, emptyLabel = 'No
       {rows.length > shown ? (
         <Button onClick={() => setShown((count) => count + PAGE)}>Show more ({rows.length - shown} left)</Button>
       ) : null}
-    </Stack>
+    </Box>
   );
 }

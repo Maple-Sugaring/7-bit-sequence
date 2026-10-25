@@ -21,8 +21,6 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import MoreTimeIcon from '@mui/icons-material/MoreTime';
 import PersonAddAltIcon from '@mui/icons-material/PersonAddAlt';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import useMediaQuery from '@mui/material/useMediaQuery';
-import { DataGrid } from '@mui/x-data-grid';
 import { ColumnCards } from '../components/common/ColumnCards';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import dayjs from 'dayjs';
@@ -235,10 +233,8 @@ export function AdminPage() {
     await refresh();
   });
 
-  const phone = useMediaQuery('(max-width:600px)');
   const columns = [
     { field: 'fullName', headerName: 'Name', width: 180 },
-    // Second, not last: the columns are wider than the page, so a trailing column is scrolled off.
     {
       field: 'actions',
       headerName: '',
@@ -406,27 +402,13 @@ export function AdminPage() {
         ))}
       </Grid>
 
-      {phone ? (
-        <ColumnCards
-          rows={data?.users ?? []}
-          columns={columns}
-          getRowId={(row) => row.UserID}
-          loading={loading}
-          emptyLabel="No users yet."
-        />
-      ) : (
-        <Card sx={{ height: 560 }}>
-          <DataGrid
-            rows={data?.users ?? []}
-            columns={columns}
-            loading={loading}
-            disableRowSelectionOnClick
-            pageSizeOptions={[10, 25, 50]}
-            initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
-            sx={{ border: 0 }}
-          />
-        </Card>
-      )}
+      <ColumnCards
+        rows={data?.users ?? []}
+        columns={columns}
+        getRowId={(row) => row.UserID}
+        loading={loading}
+        emptyLabel="No users yet."
+      />
 
       <ExpiryDialog
         key={expiryUser?.UserID ?? 'none'}

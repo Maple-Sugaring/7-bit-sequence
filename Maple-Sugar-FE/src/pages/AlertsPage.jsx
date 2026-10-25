@@ -215,7 +215,7 @@ export function AlertsPage() {
                     fontSize="small"
                     sx={{ color: group.open ? `${group.severity}.main` : 'text.disabled' }}
                   />
-                  <Typography variant="caption" color="text.secondary" noWrap>
+                  <Typography variant="caption" color="text.secondary">
                     {group.type}
                   </Typography>
                 </Stack>
@@ -232,7 +232,7 @@ export function AlertsPage() {
         })}
       </Grid>
 
-      <Tabs value={tab} onChange={(unused, next) => setTab(next)} sx={{ mb: 2 }}>
+      <Tabs value={tab} onChange={(unused, next) => setTab(next)} sx={{ mb: 2, '& .MuiTab-root': { minWidth: 0, flex: 1, px: 1 } }}>
         <Tab value="open" label={`Open (${openCount})`} />
         <Tab value="resolved" label={`Resolved (${(alerts?.length ?? 0) - openCount})`} />
         <Tab value="all" label={`All (${alerts?.length ?? 0})`} />

@@ -19,7 +19,7 @@ function Fact({ icon: Icon, children }) {
   return (
     <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', minWidth: 0 }}>
       <Icon sx={{ fontSize: 16, color: 'text.disabled', flexShrink: 0 }} />
-      <Typography variant="body2" color="text.secondary" noWrap>
+      <Typography variant="body2" color="text.secondary">
         {children}
       </Typography>
     </Stack>
@@ -101,7 +101,7 @@ export function NodeRow({ node, status, gatewayName, canDeploy, onOpen, onEdit, 
         </Box>
       </Stack>
 
-      <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', flexShrink: 0 }}>
+      <Stack direction="row" spacing={0.5} useFlexGap sx={{ alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
         <Button size="small" onClick={onOpen}>
           Open tree
         </Button>

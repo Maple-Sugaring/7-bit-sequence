@@ -310,11 +310,11 @@ export function SchedulePage() {
               aria-label="Which shifts to show"
               sx={{
                 display: 'grid',
-                gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, auto)' },
+                gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(4, minmax(0, 1fr))' },
                 gap: 1,
                 '& .MuiToggleButton-root': {
                   px: 2,
-                  whiteSpace: 'nowrap',
+                  whiteSpace: 'normal',
                   // Each button is its own pill so a wrapped row never leaves mismatched edges.
                   border: '1px solid',
                   borderColor: 'divider',
