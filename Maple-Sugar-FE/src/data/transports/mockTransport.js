@@ -44,6 +44,7 @@ let nextId = {
 // Calibration commands. A real node answers on its next packets; here each
 // GET moves a command one step (pending, sent, done) so the page shows them all.
 const calibrationCommands = [];
+const FAULT_ALERT_TYPES = { 'Load Cell': 'load-cell', 'Unstable Reading': 'unstable', 'Reversed Load Cell': 'reversed', Untared: 'untared' };
 
 let session = null;
 
@@ -507,12 +508,42 @@ const routes = [
         node.Last_Seen = latest.Completed_At;
       }
       const calibrations = mine.filter((command) => command.Action === 'calibrate' && command.Status === 'done');
+      const scales = mine.filter((command) => command.Status === 'done' && command.Counts_Per_Lb != null);
+      const reading = db.metrics
+        .filter((metric) => metric.NodeID === node.NodeID)
+        .reduce((newest, metric) => (!newest || metric.Recorded_At > newest.Recorded_At ? metric : newest), null);
+      const fault = db.alerts.findLast(
+        (alert) => alert.NodeID === node.NodeID && !alert.Is_Resolved && FAULT_ALERT_TYPES[alert.Alert_Type],
+      );
       return {
         NodeID: node.NodeID,
         Report_Interval_Seconds: node.Report_Interval_Seconds ?? null,
         Command: latest ? { ...latest } : null,
         Last_Calibration: calibrations.length ? { ...calibrations.at(-1) } : null,
+        Last_Scale: scales.length ? { ...scales.at(-1) } : null,
+        Live: {
+          Weight: reading?.Weight ?? null,
+          Recorded_At: reading?.Recorded_At ?? null,
+          Last_Seen: node.Last_Seen ?? null,
+          Fault: fault
+            ? { Code: FAULT_ALERT_TYPES[fault.Alert_Type], Description: fault.Description, Since: fault.Created_At }
+            : null,
+        },
       };
+    },
+  },
+  {
+    method: 'DELETE',
+    match: /^\/nodes\/(\d+)\/calibration$/,
+    handler: ([id]) => {
+      const node = db.nodes.find((candidate) => candidate.NodeID === Number(id));
+      if (!node) notFound('Node');
+      const latest = calibrationCommands.filter((command) => command.NodeID === node.NodeID).at(-1) ?? null;
+      if (latest && ['pending', 'sent'].includes(latest.Status)) {
+        latest.Status = 'cancelled';
+        latest.Completed_At = dayjs().toISOString();
+      }
+      return latest ? { ...latest } : null;
     },
   },
   {
