@@ -72,6 +72,21 @@ export async function hasOpenAlertOfType(nodeId, alertType) {
   return Boolean(row);
 }
 
+/** The newest unresolved alert on a node among the given types, or null. */
+export async function findOpenAlertOfTypes(nodeId, types) {
+  const row = await queryOne(
+    `select ${ALERT_COLUMNS}
+       from alerts
+      where node_id = $1
+        and is_resolved = false
+        and alert_type = any($2::text[])
+      order by created_at desc, id desc
+      limit 1`,
+    [nodeId, types],
+  );
+  return row ? mapAlert(row) : null;
+}
+
 export async function setResolved(id, isResolved) {
   const row = await queryOne(
     `update alerts set is_resolved = $2 where id = $1 returning ${ALERT_COLUMNS}`,

@@ -10,6 +10,8 @@ import * as metricsRepository from '../repositories/metricsRepository.js';
 import * as journalRepository from '../repositories/journalRepository.js';
 import * as calibrationRepository from '../repositories/calibrationRepository.js';
 import { query } from '../db/pool.js';
+import { FAULT_ALERT_TYPES } from '../business/alerting.js';
+import { liveState } from '../business/calibration.js';
 import { calibrationBody, createNodeBody, flagNodeBody, idParam, nodeActionBody, nodeDetailsBody, nodeIntervalBody, updateNodeBody } from './schemas.js';
 
 export const nodesRouter = Router();
@@ -143,21 +145,27 @@ nodesRouter.patch('/:id/interval', requireCapability(Capability.DEPLOY_NODES), a
 
 /**
  * Tare and test-weight calibration over LoRa. The command rides back to the
- * node on its next packet, so the page polls GET until it settles.
+ * node on its next packet, so the page polls GET until it settles. `Live` is
+ * what the platform reads meanwhile, so the person can see the weight is on.
  */
 nodesRouter.get('/:id/calibration', requireCapability(Capability.DEPLOY_NODES), async (req, res) => {
   const id = idParam.parse(req.params.id);
   const node = await nodesRepository.findNodeById(id);
   if (!node) throw notFound('Node');
-  const [command, lastCalibration] = await Promise.all([
+  const [command, lastCalibration, lastScale, [latest], fault] = await Promise.all([
     calibrationRepository.findLatestCommand(id),
     calibrationRepository.findLastCalibration(id),
+    calibrationRepository.findLastScale(id),
+    metricsRepository.listRecentForNode(id, 1),
+    alertsRepository.findOpenAlertOfTypes(id, FAULT_ALERT_TYPES),
   ]);
   res.json({
     NodeID: id,
     Report_Interval_Seconds: node.Report_Interval_Seconds,
     Command: command,
     Last_Calibration: lastCalibration,
+    Last_Scale: lastScale,
+    Live: liveState(node, latest, fault),
   });
 });
 
@@ -173,6 +181,19 @@ nodesRouter.post('/:id/calibration', requireCapability(Capability.DEPLOY_NODES),
     userId: req.user.UserID,
   });
   res.status(202).json(command);
+});
+
+/**
+ * Cancels the waiting command so the next ingest reply no longer carries it.
+ * Answers with the node's latest command, which is the settled one when the
+ * node answered before the cancel landed.
+ */
+nodesRouter.delete('/:id/calibration', requireCapability(Capability.DEPLOY_NODES), async (req, res) => {
+  const id = idParam.parse(req.params.id);
+  const node = await nodesRepository.findNodeById(id);
+  if (!node) throw notFound('Node');
+  const cancelled = await calibrationRepository.cancelOpenCommand(id);
+  res.json(cancelled ?? (await calibrationRepository.findLatestCommand(id)));
 });
 
 nodesRouter.patch('/:id', requireCapability(Capability.MANAGE_USERS), async (req, res) => {
