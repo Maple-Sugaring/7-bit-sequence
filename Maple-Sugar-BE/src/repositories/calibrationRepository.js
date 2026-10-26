@@ -33,15 +33,17 @@ function mapCommand(row) {
   };
 }
 
+const CANCEL_OPEN = `
+  update calibration_commands
+     set status = 'cancelled', completed_at = CURRENT_TIMESTAMP
+   where node_id = $1 and status in ('pending', 'sent')
+  returning ${COMMAND_COLUMNS}
+`;
+
 /** A new request replaces whatever was still waiting for that node. */
 export async function queueCommand({ nodeId, action, pounds = null, userId = null }) {
   return transaction(async (client) => {
-    await client.query(
-      `update calibration_commands
-          set status = 'cancelled', completed_at = CURRENT_TIMESTAMP
-        where node_id = $1 and status in ('pending', 'sent')`,
-      [nodeId],
-    );
+    await client.query(CANCEL_OPEN, [nodeId]);
     const row = await queryOneOn(
       client,
       `insert into calibration_commands (node_id, action, pounds, requested_by_user_id)
@@ -88,6 +90,28 @@ export async function findLastCalibration(nodeId) {
     [nodeId],
   );
   return mapCommand(row);
+}
+
+/**
+ * The newest scale factor the node reported. Every ack carries the node's
+ * counts per pound, a tare's too, so this also catches a calibration done over
+ * USB that the app never asked for.
+ */
+export async function findLastScale(nodeId) {
+  const row = await queryOne(
+    `select ${COMMAND_COLUMNS}
+       from calibration_commands
+      where node_id = $1 and status = 'done' and counts_per_lb is not null
+      order by id desc
+      limit 1`,
+    [nodeId],
+  );
+  return mapCommand(row);
+}
+
+/** Stops the Pi radioing a command the person gave up on. Null when nothing was waiting. */
+export async function cancelOpenCommand(nodeId) {
+  return mapCommand(await queryOne(CANCEL_OPEN, [nodeId]));
 }
 
 export async function markSent(commandId) {

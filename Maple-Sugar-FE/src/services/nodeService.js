@@ -142,6 +142,10 @@ export function calibrateNode(nodeId, pounds) {
   return nodesRepository.requestCalibration(nodeId, { Action: 'calibrate', Pounds: Number(pounds) });
 }
 
+export function cancelCalibration(nodeId) {
+  return nodesRepository.cancelCalibration(nodeId);
+}
+
 export function setMaintenanceMode(nodeId, enabled) {
   return nodesRepository.updateNode(nodeId, { Status_Code: enabled ? 3 : 1 });
 }
