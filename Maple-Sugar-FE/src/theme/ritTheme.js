@@ -1,7 +1,9 @@
 import { createTheme } from '@mui/material/styles';
 import {
   accent,
+  accessibleGreen,
   accessibleOrange,
+  accessibleBlue,
   inputBorder,
   neutral,
   ritOrange,
@@ -9,22 +11,32 @@ import {
   white,
 } from './ritColors';
 
+// WCAG 2.2 SC 1.4.3- Color contrast for large text
+// Large text 3:1, Everything else 4.5:1
+export const isLargeText = (fontSizePx, fontWeight = 400) =>
+  fontSizePx >= 24 || (fontSizePx >= 18.67 && Number(fontWeight) >= 700);
+
+//Defines the params for the orangeText to be used
+export const orangeText = (fontSizePx, fontWeight = 400, surface = 'white') =>
+  surface === 'white' && isLargeText(fontSizePx, fontWeight) ? ritOrange : accessibleOrange;
+
 const semantic = {
   error: { main: accent.red },
   warning: { main: accent.amber },
-  success: { main: accent.green },
-  info: { main: accent.blue },
+  success: { main: accessibleGreen, light: accent.green, contrastText: white },
+  info: { main: accessibleBlue, light: accent.blue, contrastText: white },
 };
 
 const theme = createTheme({
   palette: {
     mode: 'light',
     primary: {
-      main: ritOrange,
-      dark: accessibleOrange,
-      light: '#FF8C3A',
+      main: accessibleOrange,
+      dark: '#8A3900',
+      light: ritOrange,
       contrastText: white,
     },
+    brand: {main: ritOrange, contrastText: neutral.black},
     secondary: {
       main: neutral.black,
       dark: '#333333',
@@ -33,7 +45,7 @@ const theme = createTheme({
     },
     ...semantic,
     background: { default: '#F6F3F0', paper: white },
-    text: { primary: neutral.black, secondary: '#4A4A4A' },
+    text: { primary: neutral.black, secondary: '#4A4A4A', disabled: '#707070' },
     divider: inputBorder,
   },
   shape: { borderRadius: 12 },
@@ -53,12 +65,14 @@ const theme = createTheme({
         // paragraph margins and a different font to popup content.
         '.leaflet-popup-content p': { margin: 0 },
         '.leaflet-container': { fontFamily: 'inherit' },
+        '.leaflet-control-attribution a': {color: accessibleOrange},
       },
     },
     MuiButton: {
       defaultProps: { disableElevation: true },
       styleOverrides: {
         root: { minHeight: 44, borderRadius: 12 },
+        outlinedPrimary: {borderColor:accessibleOrange},
       },
     },
     MuiPaper: {

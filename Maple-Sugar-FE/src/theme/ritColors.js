@@ -8,7 +8,13 @@ export const ritOrange = '#F76902';
 // ritOrange may only be used on text that is >=18.76px AND bold. Anything
 // smaller or non-bold must use accessibleOrange instead, which in turn must
 // never be used as a solid background.
+// accessibility verified colors
 export const accessibleOrange = '#C75300';
+export const accessibleGreen = '#4D6B00';
+export const accessibleBlue = '#007A94';
+
+
+
 
 export const white = '#FFFFFF';
 
