@@ -12,7 +12,30 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { ritOrange, accent } from '../../theme/ritColors';
+import { 
+  ritOrange, 
+  accent, 
+  accessibleBlue, 
+  accessibleGreen,
+  accessibleOrange, 
+  neutral 
+} from '../../theme/ritColors';
+
+//ACCESSIBILITY 1.4.3 fix
+const CHART_TEXT = neutral.black;
+const TICK = { fontSize: 12, fill: '#4A4A4A' }; // 8.86:1 on white
+ 
+// Legend: keep the colored swatch, render the label in dark text.
+const legendText = (value) => <span style={{ color: CHART_TEXT }}>{value}</span>;
+ 
+// Tooltip: dark label and item text; series identified by name.
+const tooltipProps = {
+  labelStyle: { color: CHART_TEXT, fontWeight: 600 },
+  itemStyle: { color: CHART_TEXT },
+  contentStyle: { border: '1px solid #E2DDD7', borderRadius: 8 },
+};
+
+
 
 function dateTick(value) {
   return dayjs(value).format('MMM D');
@@ -37,7 +60,7 @@ export function DailyTemperatureChart({ rows }) {
         <Tooltip labelFormatter={tipLabel} />
         <Legend />
         <Line type="monotone" dataKey="Temp_Max_F" name="High °F" stroke={ritOrange} dot={false} strokeWidth={2} />
-        <Line type="monotone" dataKey="Temp_Min_F" name="Low °F" stroke={accent.blue} dot={false} strokeWidth={2} />
+        <Line type="monotone" dataKey="Temp_Min_F" name="Low °F" stroke={accessibleBlue} dot={false} strokeWidth={2} />
       </LineChart>
     </ResponsiveContainer>
   );
@@ -73,7 +96,7 @@ export function WeightChart({ rows, series, unit = 'day' }) {
             return [scale, name];
           }}
         />
-        <Legend height={36} wrapperStyle={{ maxHeight: 36, overflowY: 'auto', fontSize: 11 }} />
+        <Legend height={36} wrapperStyle={{ maxHeight: 36, overflowY: 'auto', fontSize: 12 }} />
         {series.map((item, index) => (
           <Line
             key={item.key}
@@ -117,7 +140,7 @@ export function DailySugarChart({ rows }) {
           type="monotone"
           dataKey="Sugar_Percent"
           name="Sugar %"
-          stroke={accent.green}
+          stroke={accessibleGreen}
           connectNulls
           dot={false}
           strokeWidth={2}
@@ -138,13 +161,22 @@ export function SiteForecastChart({ rows }) {
         <Tooltip labelFormatter={tipLabel} />
         <Legend />
         <Bar yAxisId="flow" dataKey="Flow_Gal" name="Sap gal" fill={ritOrange} radius={[3, 3, 0, 0]} />
-        <Line yAxisId="temp" type="monotone" dataKey="Temp_Max_F" name="Afternoon high" stroke="#009CBD" dot={false} strokeWidth={2} />
+        <Line yAxisId="temp" type="monotone" dataKey="Temp_Max_F" name="Afternoon high" stroke={accessibleBlue} dot={false} strokeWidth={2} />
       </ComposedChart>
     </ResponsiveContainer>
   );
 }
 
-const TREE_COLORS = ['#F76902', '#009CBD', '#84BD00', '#000000', '#7D55C7', '#DA291C', '#C75300', '#7C878E'];
+const TREE_COLORS = [
+  ritOrange, 
+  accessibleBlue,
+  accessibleGreen, 
+  '#000000',
+  '#7D55C7', 
+  '#DA291C', 
+  accessibleOrange, 
+  '#6B7378'
+];
 
 export function OverlayChart({ rows, flowSeries, tempSeries }) {
   return (
