@@ -475,25 +475,25 @@ export function DeployPage() {
             }}
           >
             <Stack
-              direction={{ xs: 'column', sm: 'row' }}
+              direction={{ xs: 'column', md: 'row' }}
               spacing={1.5}
-              sx={{ justifyContent: 'space-between', alignItems: { sm: 'center' }, mb: 1.5 }}
+              sx={{ justifyContent: 'space-between', alignItems: { md: 'center' }, mb: 1.5 }}
             >
               <Box>
-                <Typography variant="h6" component="h2">
+                <Typography variant="h6" component="h2" >
                   Nodes
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Edit details, flash firmware, or remove a tree from the system.
                 </Typography>
               </Box>
-              <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} sx={{ width: { xs: '100%', md: 'auto' }, flexShrink: 0 }}>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ width: { xs: '100%', md: 'auto' }, flexShrink: 0 }}>
                 <TextField
                   size="small"
                   placeholder="Search nodes"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  sx={{ minWidth: { sm: 220 } }}
+                  sx={{ flexGrow: 1, minWidth: { sm: 220 } }}
                 />
                 {canDeploy ? (
                   <Button
