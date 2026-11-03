@@ -79,10 +79,11 @@ Redirect URIs must match `PUBLIC_API_URL`:
 | POST | `/nodes/:id/flag` | Flag node | `{ type, description }` creates an alert. |
 | POST | `/nodes/:id/actions` | Session, then a finer check | `{ Action, Notes }`. |
 | PATCH | `/nodes/:id/interval` | Deploy nodes | `{ Report_Interval_Seconds }` from 10 to 86400 (or the older `{ Report_Interval_Minutes }`, 1 to 1440). The node picks it up on its next packet. |
-| GET | `/nodes/:id/calibration` | Deploy nodes | `{ NodeID, Report_Interval_Seconds, Command, Last_Calibration }`. `Command` is the newest calibration request; `Last_Calibration` the newest successful test-weight one. |
+| GET | `/nodes/:id/calibration` | Deploy nodes | `{ NodeID, Report_Interval_Seconds, Command, Last_Calibration, Last_Scale, Live }`. `Command` is the newest calibration request; `Last_Calibration` the newest successful test-weight one; `Last_Scale` the newest command the node acked with its counts per pound (a tare's ack carries it too). `Live` is `{ Weight, Recorded_At, Last_Seen, Fault }`: the newest stored weight, the node's last packet, and the fault it is reporting (`{ Code, Description, Since }` with `Code` one of `load-cell`, `unstable`, `reversed`, `untared`, or null). |
 | POST | `/nodes/:id/calibration` | Deploy nodes | `{ Action: "tare" }` or `{ Action: "calibrate", Pounds }` (0.5 to 400). 202 with the queued command. Replaces a request still waiting. |
+| DELETE | `/nodes/:id/calibration` | Deploy nodes | Cancels the waiting command so the next ingest reply no longer carries it. 200 with the node's latest command: the cancelled one, or the settled one when the node answered first. A node that already heard the downlink may still apply it. |
 
-A calibration command has `CommandID`, `Action`, `Pounds`, `Status` (`pending` → `sent` → `done` or `failed`, or `cancelled` when replaced), `Counts_Per_Lb` (what the node reported), and the times. It reaches the node through the ingest reply below. See `docs/hardware.md#calibration-from-the-app`.
+A calibration command has `CommandID`, `Action`, `Pounds`, `Status` (`pending` → `sent` → `done` or `failed`, or `cancelled` when replaced or cancelled), `Counts_Per_Lb` (what the node reported), and the times. It reaches the node through the ingest reply below. See `docs/hardware.md#calibration-from-the-app`.
 
 `Action`:
 

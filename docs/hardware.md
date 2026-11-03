@@ -112,6 +112,8 @@ For three packets after it applies an app command, the node also sends `"Command
 
 The tree page (Admin and MSS) has a *Calibrate the scale* card: tare with the platform empty, put a known test weight on and enter its pounds, then check the reading.
 
+While it is open the card shows what the platform reads now and how old that reading is, any fault the node is reporting (a `load-cell` fault disables Tare and Calibrate), and, while a command waits, how long it has been radioed and about how many packets. The check step only uses a reading taken with or after the node's ack; a reading under half the test weight asks for the weight back on rather than another calibration. The scale factor shown is the one the node reported on its last ack, so after any app tare it also reflects a USB `CAL`.
+
 ```
 App --POST /nodes/:id/calibration--> API (calibration_commands: pending)
 Node packet --> Pi --> API: reply Accepted[0].Command {Command_Id, Action, Pounds} (status sent)
@@ -122,7 +124,7 @@ API settles the command (done or failed); the page polls GET /nodes/:id/calibrat
 
 - The Pi sends one downlink per packet; a waiting command goes before an interval change.
 - The API resends an open command on every packet until the node echoes its id, so a missed downlink costs one interval. The node keeps the last applied id in NVS (`cmd_id`) and does not apply the same id twice, even after a reboot; it repeats the echo instead.
-- A new request replaces one that is still waiting (`cancelled`).
+- A new request replaces one that is still waiting (`cancelled`), and the card's *Cancel* does the same with nothing after it. The Pi stops sending it on the next packet; a node that already heard it may still apply it, and that ack is ignored.
 - `CAL` fails (`Command_Ok` 0) when the reading moved less than 1000 counts from the tare, which means no weight was on the platform.
 - Each step takes about one packet interval. Set the tree to 10 s on Deploy for a demo, then back to 900 s.
 - Serial `TARE` and `CAL <pounds>` still work over USB and do not touch the command id.
