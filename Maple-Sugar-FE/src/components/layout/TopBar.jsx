@@ -62,6 +62,9 @@ export function TopBar() {
           <ExploreOutlinedIcon />
         </IconButton>
       </Tooltip>
+      <IconButton title="Dark Mode">
+
+      </IconButton>
       {canViewAlerts ? (
         <IconButton aria-label={`Notifications${openCount ? `, ${openCount} open` : ''}`} onClick={() => navigate('/notifications')} sx={{ color: '#fff' }}>
           <Badge badgeContent={openCount} color="error" invisible={openCount === 0} sx={{ '& .MuiBadge-badge': { minWidth: 28, px: 0.75, right: 3, letterSpacing: '0.04em', fontVariantNumeric: 'tabular-nums' } }}>
