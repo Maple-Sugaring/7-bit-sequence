@@ -6,7 +6,10 @@ import tigerLogo from '../../assets/RITTigerTransparent.png';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import Tooltip from '@mui/material/Tooltip';
 import ExploreOutlinedIcon from '@mui/icons-material/ExploreOutlined';
+import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
+import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
 import { Capability } from '../../business/permissions';
+import { useColorMode } from '../../theme/colorMode';
 import { useAuth } from '../../context/auth';
 import { useOpenAlertCount } from '../../services/hooks';
 import { useTour } from '../tour/tour';
@@ -19,6 +22,8 @@ export function TopBar() {
   const navigate = useNavigate();
   const { role, can } = useAuth();
   const tour = useTour();
+  const { mode, toggleMode } = useColorMode();
+  const modeLabel = mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
   const canViewAlerts = can(Capability.VIEW_ALERTS);
   const alerts = useOpenAlertCount(canViewAlerts);
   const openCount = Number(alerts.data) || 0;
@@ -60,6 +65,11 @@ export function TopBar() {
       <Tooltip title="Take the tour">
         <IconButton aria-label="Take the tour" onClick={tour.start} disabled={tour.active} sx={{ color: '#fff', '&.Mui-disabled': { color: 'rgba(255, 255, 255, 0.45)' } }}>
           <ExploreOutlinedIcon />
+        </IconButton>
+      </Tooltip>
+      <Tooltip title={modeLabel}>
+        <IconButton aria-label={modeLabel} onClick={toggleMode} sx={{ color: '#fff' }}>
+          {mode === 'dark' ? <LightModeOutlinedIcon /> : <DarkModeOutlinedIcon />}
         </IconButton>
       </Tooltip>
       {canViewAlerts ? (
