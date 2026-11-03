@@ -98,7 +98,7 @@ export function DashboardPage() {
 
       <FleetMapCard fleet={fleet} />
 
-      <div className="section-heading"><h2>Your trees</h2><span>Tap a tree for readings & details</span></div>
+      <div className="section-heading"><h2>Your Trees</h2><span>Tap a tree for readings & details.</span></div>
       <Grid container spacing={2}>
         {bushNodes.map((node, index) => {
           const status = node.mapStatus;
@@ -168,7 +168,7 @@ export function DashboardPage() {
                       ) : null}
                       {node.Temperature != null ? (
                         <Typography variant="body2" color="text.secondary">
-                          Sap temperature {node.Temperature}°F
+                          Sap Temperature {node.Temperature}°F
                         </Typography>
                       ) : null}
                       {node.Sap_Flow_Rate_Lph != null ? (
@@ -185,13 +185,13 @@ export function DashboardPage() {
         })}
       </Grid>
 
-      <div className="section-heading"><h2>Conditions & yield</h2><span>A closer look at the season</span></div>
+      <div className="section-heading"><h2>Conditions & Yield</h2><span>Take a closer look at the season.</span></div>
       <Box sx={{ mb: 3 }}>
         <Card>
           <CardContent>
             <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline', justifyContent: 'space-between' }}>
               <Typography variant="h6" component="h2">
-                RIT weather
+                RIT Weather
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 {dateOnly(new Date())}
@@ -226,7 +226,7 @@ export function DashboardPage() {
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ justifyContent: 'space-between' }}>
             <Box>
               <Typography variant="h6" component="h2">
-                2026 weight
+                2026 Weight
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Gallons of sap in each 10 gallon bucket. Sugar content is the Brix reading from collection.

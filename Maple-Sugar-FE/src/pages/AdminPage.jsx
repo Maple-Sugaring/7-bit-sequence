@@ -49,7 +49,7 @@ function GatewayButton() {
       endIcon={<OpenInNewIcon />}
       aria-label="Open Maple gateway (opens in a new tab)"
     >
-      Open Maple gateway
+      Open Maple Gateway
     </Button>
   );
 }
@@ -161,10 +161,10 @@ function InviteDialog({ open, onClose, roles, onInvite, pending, error }) {
             />
           </Grid>
           <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField label="First name" value={form.firstName} onChange={update('firstName')} fullWidth />
+            <TextField label="First Name" value={form.firstName} onChange={update('firstName')} fullWidth />
           </Grid>
           <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField label="Last name" value={form.lastName} onChange={update('lastName')} fullWidth />
+            <TextField label="Last Name" value={form.lastName} onChange={update('lastName')} fullWidth />
           </Grid>
           <Grid size={12}>
             <DateTimePicker
@@ -198,7 +198,7 @@ function InviteDialog({ open, onClose, roles, onInvite, pending, error }) {
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
         <Button variant="contained" onClick={handleInvite} loading={pending}>
-          Send invite
+          Send Invite
         </Button>
       </DialogActions>
     </Dialog>

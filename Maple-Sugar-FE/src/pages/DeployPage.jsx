@@ -261,7 +261,7 @@ export function DeployPage() {
       return target;
     }
 
-    if (!draft.GatewayID) throw new Error('Choose the gateway this tree reports through.');
+    if (!draft.GatewayID) throw new Error('Choose the gateway this tree reports to.');
     const createdNode = await createNode({
       Node_Name: draft.Node_Name.trim(),
       Stand: draft.Stand.trim(),
@@ -402,7 +402,7 @@ export function DeployPage() {
                 <Stack spacing={2} sx={{ alignItems: 'center', width: '100%', maxWidth: 420 }}>
                   <SetupSteps activeStep={0} />
                   <Button variant="contained" size="large" onClick={() => setDialog('gateway')}>
-                    Register gateway
+                    Register Gateway
                   </Button>
                 </Stack>
               ) : null
