@@ -1,7 +1,6 @@
 /* Mobile is the base layout. Wide screens use a sidebar. */
 [data-tour-active="true"] .mobile-nav { display: none; }
 html {
-  /* UPDATE: using Helvetica as the font to match RIT branding */
   font-family: "Roboto Variable", "Roboto", sans-serif;
   scroll-padding-top: 88px;
   scroll-padding-bottom: 100px;
