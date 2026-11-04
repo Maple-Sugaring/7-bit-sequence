@@ -8,6 +8,7 @@ import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import Grid from '@mui/material/Grid';
 import { MeterBar } from '../components/common/MeterBar';
+import { batteryMeterColor, bucketMeterColor } from '../components/common/meterColors';
 import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
@@ -152,7 +153,7 @@ export function NodePage() {
             <CardContent>
               <Typography variant="overline">Battery</Typography>
               <Typography variant="h4">{node?.Battery_Percent == null ? '—' : `${Math.round(node.Battery_Percent)}%`}</Typography>
-              <MeterBar percent={node?.Battery_Percent ?? 0} color={node?.Battery_Percent < 20 ? '#c62828' : '#2e7d32'} />
+              <MeterBar percent={node?.Battery_Percent ?? 0} color={batteryMeterColor(node?.Battery_Percent)} />
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                 Signal {node?.Signal_Rssi ?? '—'} dBm · last seen {dateTime(node?.Last_Seen)}
               </Typography>
@@ -166,7 +167,7 @@ export function NodePage() {
               <Typography variant="h4">
                 {gallons == null ? '—' : `${gallons.toFixed(1)} gal · ${Number(node.Weight).toFixed(1)} lb`}
               </Typography>
-              <MeterBar percent={fill ?? 0} color={(fill ?? 0) >= 90 ? '#ed6c02' : '#F76902'} />
+              <MeterBar percent={fill ?? 0} color={bucketMeterColor(fill)} />
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                 {gallons == null
                   ? 'No weight yet'

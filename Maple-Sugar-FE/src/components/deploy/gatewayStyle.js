@@ -1,15 +1,14 @@
 import RouterIcon from '@mui/icons-material/Router';
+import { gatewayAccents } from '../../theme/tokens';
 
 // Every gateway wears the same icon; only the accent color tells them apart.
 // Each gateway keeps one color for good, chosen from its id, so cards do not
 // shuffle when the list reorders.
 export const GatewayIcon = RouterIcon;
 
-const ACCENTS = ['#F76902', '#1E6FB8', '#2E7D4F', '#7A4FB0', '#0F8B8D', '#B5483A'];
-
 export function gatewayLook(gatewayId) {
-  const index = Math.abs(Number(gatewayId) || 0) % ACCENTS.length;
-  return { accent: ACCENTS[index], icon: GatewayIcon };
+  const index = Math.abs(Number(gatewayId) || 0) % gatewayAccents.length;
+  return { accent: gatewayAccents[index], icon: GatewayIcon };
 }
 
 /** "12 s ago", "3 min 12 s ago", "2 h 5 min ago", "3 d ago", or "No posts yet". */

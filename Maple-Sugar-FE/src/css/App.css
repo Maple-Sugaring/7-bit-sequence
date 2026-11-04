@@ -1,56 +1,9 @@
 /* Mobile is the base layout. Wide screens use a sidebar. */
 [data-tour-active="true"] .mobile-nav { display: none; }
 
-/* Colors live on :root because dialogs and drawers render outside .layout. */
-:root {
-  --ink: #24241f;
-  --muted: #69675f;
-  --line: #e2ddd7;
-  --handle: #d6d4cd;
-  --orange-dark: #a34300;
-  --hover-border: #b04b00;
-  --surface: #fff;
-  --surface-page: #f6f3f0;
-  --surface-sidebar: #fffdf9;
-  --surface-hover: #f2eee8;
-  --accent-soft: #fff0e3;
-  --accent-hover: #fff8f2;
-  --nav-ink: #57594f;
-  --sidebar-ink: #33392e;
-  --sidebar-muted: #77776f;
-  --field-bg: #eaf0e3;
-  --field-line: #d5ddce;
-  --field-ink: #263520;
-  --field-muted: #506247;
-  --field-eyebrow: #4e6341;
-  --meter-track: rgba(0, 0, 0, 0.12);
-  --chart-contrast: #000;
-}
-
+/* Color variables come from src/theme/tokens.js, through the MUI theme. */
 :root[data-color-mode="dark"] {
   color-scheme: dark;
-  --ink: #f2efea;
-  --muted: #bdb9b0;
-  --line: #3d3f39;
-  --handle: #5a5c55;
-  --orange-dark: #ff9a52;
-  --hover-border: #ff9a52;
-  --surface: #20221e;
-  --surface-page: #161714;
-  --surface-sidebar: #1b1c19;
-  --surface-hover: #2a2c27;
-  --accent-soft: #4a2c14;
-  --accent-hover: #2c241c;
-  --nav-ink: #d4d0c8;
-  --sidebar-ink: #e3dfd7;
-  --sidebar-muted: #a5a198;
-  --field-bg: #232b1e;
-  --field-line: #3a4732;
-  --field-ink: #e6efdd;
-  --field-muted: #b7c6aa;
-  --field-eyebrow: #a9c495;
-  --meter-track: rgba(255, 255, 255, 0.16);
-  --chart-contrast: #f2efea;
 }
 
 /* index.css sets a light body, and this wins regardless of stylesheet order. */
@@ -90,8 +43,8 @@ html, body, #root {
   top: 0;
   z-index: 1200;
   min-height: var(--header-height);
-  background: #20221e;
-  border-bottom: 2px solid #f76902;
+  background: var(--topbar-bg);
+  border-bottom: 2px solid var(--brand-orange);
   padding-top: env(safe-area-inset-top);
 }
 
@@ -101,7 +54,7 @@ html, body, #root {
   display: flex;
   align-items: center;
   gap: 4px;
-  color: #fff;
+  color: var(--topbar-ink);
   text-decoration: none;
   font-size: 14px;
   font-weight: 700;
@@ -122,8 +75,8 @@ html, body, #root {
 }
 
 .brand-mark {
-  background: #f76902;
-  color: #20221e;
+  background: var(--brand-orange);
+  color: var(--topbar-bg);
   width: 36px;
   height: 40px;
   border-radius: 12px;
@@ -134,7 +87,7 @@ html, body, #root {
 
 .brand-caption {
   display: none;
-  color: #c3c6bc;
+  color: var(--topbar-muted);
   font-size: 9px;
   letter-spacing: 1.5px;
   font-weight: 500;
@@ -150,8 +103,8 @@ html, body, #root {
 
 .demo-badge {
   font-size: 10px;
-  color: #fbd8bb;
-  border: 1px solid #76634d;
+  color: var(--badge-ink);
+  border: 1px solid var(--badge-line);
   border-radius: 6px;
   padding: 3px 5px;
 }
@@ -234,7 +187,7 @@ html, body, #root {
 
 .page-main {
   background: var(--surface);
-  color: #000;
+  color: var(--ink);
 }
 
 .app-sidebar {
@@ -252,7 +205,7 @@ html, body, #root {
   background: var(--surface);
   border-top: 1px solid var(--line);
   padding: 6px max(6px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
-  box-shadow: 0 -4px 24px #24241f08;
+  box-shadow: 0 -4px 24px var(--nav-shadow);
 }
 
 .mobile-nav > a, .mobile-nav > button {
@@ -398,7 +351,7 @@ a:focus-visible, button:focus-visible {
 }
 
 .app-topbar a:focus-visible, .app-topbar button:focus-visible {
-  outline-color: #ffae71;
+  outline-color: var(--topbar-focus);
 }
 
 .skip-link {
@@ -658,7 +611,6 @@ a:focus-visible, button:focus-visible {
 
 /* Recharts and Leaflet paint light colors of their own, some of them inline. */
 :root[data-color-mode="dark"] .recharts-cartesian-axis-tick-value { fill: var(--muted); }
-:root[data-color-mode="dark"] .recharts-cartesian-grid line { stroke: var(--line); }
 :root[data-color-mode="dark"] .recharts-default-tooltip {
   background: var(--surface) !important;
   border-color: var(--line) !important;

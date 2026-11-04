@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useTheme } from '@mui/material/styles';
 import { ColorModeProvider } from '../src/theme/ColorModeProvider';
 import { useColorMode, useColorModeInShell } from '../src/theme/colorMode';
+import { cssTokens } from '../src/theme/tokens';
 
 function Toggle() {
   const { mode, toggleMode } = useColorMode();
@@ -58,6 +59,15 @@ describe('color mode', () => {
     render(<ColorModeProvider><Toggle /></ColorModeProvider>);
     expect(button().textContent).toBe('light/light');
     expect(htmlMode()).toBe('light');
+  });
+
+  it('writes the active mode\'s color variables to the page', () => {
+    const pageStyles = () => [...document.querySelectorAll('style')].map((tag) => tag.textContent).join('');
+    render(<ColorModeProvider><Shell /></ColorModeProvider>);
+    expect(pageStyles()).toContain(`--surface-page:${cssTokens.light['--surface-page']}`);
+
+    fireEvent.click(button());
+    expect(pageStyles()).toContain(`--surface-page:${cssTokens.dark['--surface-page']}`);
   });
 
   it('goes back to light when the app shell unmounts', () => {

@@ -54,7 +54,7 @@ export function TopBar() {
         gap: { xs: 0, sm: 1 },
         px: { xs: 1, sm: 2, md: 3 },
         '& > .MuiIconButton-root': { width: 40, height: 44, flexShrink: 0 },
-        color: "#fff",
+        color: "var(--topbar-ink)",
       }}
     >
       <Link className="app-brand" to={landingRouteFor(role)}>
@@ -63,17 +63,17 @@ export function TopBar() {
       </Link>
       {apiMode === 'mock' ? <span className="demo-badge">Demo</span> : null}
       <Tooltip title="Take the tour">
-        <IconButton aria-label="Take the tour" onClick={tour.start} disabled={tour.active} sx={{ color: '#fff', '&.Mui-disabled': { color: 'rgba(255, 255, 255, 0.45)' } }}>
+        <IconButton aria-label="Take the tour" onClick={tour.start} disabled={tour.active} sx={{ color: 'var(--topbar-ink)', '&.Mui-disabled': { color: 'var(--topbar-ink-disabled)' } }}>
           <ExploreOutlinedIcon />
         </IconButton>
       </Tooltip>
       <Tooltip title={modeLabel}>
-        <IconButton aria-label={modeLabel} onClick={toggleMode} sx={{ color: '#fff' }}>
+        <IconButton aria-label={modeLabel} onClick={toggleMode} sx={{ color: 'var(--topbar-ink)' }}>
           {mode === 'dark' ? <LightModeOutlinedIcon /> : <DarkModeOutlinedIcon />}
         </IconButton>
       </Tooltip>
       {canViewAlerts ? (
-        <IconButton aria-label={`Notifications${openCount ? `, ${openCount} open` : ''}`} onClick={() => navigate('/notifications')} sx={{ color: '#fff' }}>
+        <IconButton aria-label={`Notifications${openCount ? `, ${openCount} open` : ''}`} onClick={() => navigate('/notifications')} sx={{ color: 'var(--topbar-ink)' }}>
           <Badge badgeContent={openCount} color="error" invisible={openCount === 0} sx={{ '& .MuiBadge-badge': { minWidth: 28, px: 0.75, right: 3, letterSpacing: '0.04em', fontVariantNumeric: 'tabular-nums' } }}>
             <NotificationsIcon />
           </Badge>
