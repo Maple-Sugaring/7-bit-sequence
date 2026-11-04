@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import GridViewRoundedIcon from '@mui/icons-material/GridViewRounded';
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
+import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
 import NotificationsOutlinedIcon from '@mui/icons-material/NotificationsOutlined';
 import { Capability, ROLE_LABELS } from '../../business/permissions';
 import { useAuth } from '../../context/auth';
@@ -20,12 +21,18 @@ export function AppNavigation() {
 
 function Navigation() {
   const location = useLocation();
-  const { role, can } = useAuth();
+  const navigate = useNavigate();
+  const { role, can, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const desktop = useMediaQuery('(min-width:1200px)');
   const items = mobileNavItemsFor(role);
   const secondarySelected = !items.some((item) => isNavItemActive(location.pathname, item.to));
   const close = () => setOpen(false);
+  const handleSignOut = async () => {
+    close();
+    await signOut();
+    navigate('/login', { replace: true });
+  };
   const utilityLinks = (
     <>
       {can(Capability.VIEW_ALERTS) ? (
@@ -36,6 +43,9 @@ function Navigation() {
       <Link className="page-link" to="/profile" onClick={close} aria-current={location.pathname === '/profile' ? 'page' : undefined}>
         <SettingsRoundedIcon /><span>Profile & settings</span>
       </Link>
+      <button type="button" className="page-link page-link-button" onClick={handleSignOut}>
+        <LogoutRoundedIcon /><span>Log out</span>
+      </button>
     </>
   );
 
