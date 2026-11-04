@@ -1,4 +1,5 @@
 import dayjs from 'dayjs';
+import { AccessibilityChartWrapper } from './AccessibilityChartWrapper';
 import {
   Bar,
   BarChart,
@@ -13,12 +14,11 @@ import {
   YAxis,
 } from 'recharts';
 import { 
-  ritOrange, 
-  accent, 
+  ritOrange,  
   accessibleBlue, 
   accessibleGreen,
   accessibleOrange, 
-  neutral 
+  neutral, 
 } from '../../theme/ritColors';
 
 //ACCESSIBILITY 1.4.3 fix
@@ -167,6 +167,50 @@ export function SiteForecastChart({ rows }) {
   );
 }
 
+// UPDATE: AccessibilityChartWrapper added 
+const fmtDate = (value) => dayjs(value).format('ddd, MMM D');
+const fmtNum = (value, digits = 0) =>
+  value == null || Number.isNaN(Number(value)) ? null : Number(value).toFixed(digits);
+ 
+const FORECAST_COLUMNS = [
+  { key: 'Date', label: 'Date', format: fmtDate },
+  { key: 'Temp_Max_F', label: 'Afternoon high (°F)', format: (v) => fmtNum(v) },
+  { key: 'Flow_Gal', label: 'Sap (gal)', format: (v) => fmtNum(v, 1) },
+  { key: 'Sap_Run', label: 'Sap run', format: (v) => (v == null ? null : v ? 'Yes' : 'No') },
+];
+ 
+/** One- or two-sentence description of what the forecast chart shows. */
+export function forecastSummary(rows = []) {
+  if (!rows.length) return 'No forecast data yet.';
+  const first = dayjs(rows[0].Date).format('MMM D');
+  const last = dayjs(rows[rows.length - 1].Date).format('MMM D');
+  const highs = rows.map((r) => Number(r.Temp_Max_F)).filter(Number.isFinite);
+  const totalSap = rows.reduce((sum, r) => sum + (Number(r.Flow_Gal) || 0), 0);
+  const runDays = rows.filter((r) => r.Sap_Run).map((r) => dayjs(r.Date).format('MMM D'));
+ 
+  const temp = highs.length
+    ? `Afternoon highs range from ${Math.round(Math.min(...highs))}°F to ${Math.round(Math.max(...highs))}°F`
+    : 'No temperature data';
+  const sap = runDays.length
+    ? `${totalSap.toFixed(1)} gallons of sap expected, with sap runs on ${runDays.join(', ')}.`
+    : 'No sap runs expected.';
+  return `${first} to ${last}. ${temp}. ${sap}`;
+}
+ 
+export function SiteForecastFigure({ rows, height = 240 }) {
+  return (
+    <AccessibilityChartWrapper
+      title="Afternoon high and sap forecast"
+      summary={forecastSummary(rows)}
+      columns={FORECAST_COLUMNS}
+      rows={rows}
+      height={height}
+    >
+      <SiteForecastChart rows={rows} />
+    </AccessibilityChartWrapper>
+  );
+}
+
 const TREE_COLORS = [
   ritOrange, 
   accessibleBlue,
@@ -243,5 +287,108 @@ export function TreeCompareChart({ rows, series }) {
         ))}
       </LineChart>
     </ResponsiveContainer>
+  );
+}
+
+//UPDATE AccessibilityChartWrapper added
+ 
+const DATE_FORMATS = {
+  second: 'MMM D, h:mm:ss A',
+  minute: 'MMM D, h:mm A',
+  hour: 'MMM D, h A',
+  day: 'ddd, MMM D',
+};
+ 
+function rangeText(rows, unit) {
+  if (!rows.length) return '';
+  const f = DATE_FORMATS[unit] ?? DATE_FORMATS.day;
+  return `${dayjs(rows[0].Date).format(f)} to ${dayjs(rows[rows.length - 1].Date).format(f)}`;
+}
+ 
+/** Latest non-empty value for each series, e.g. "Tree 1: 4.2 gal". */
+function latestPerSeries(rows, series, digits, suffix) {
+  return series
+    .map(({ key, name }) => {
+      const last = [...rows].reverse().find((r) => r[key] != null && r[key] !== '');
+      return last ? `${name}: ${Number(last[key]).toFixed(digits)}${suffix}` : null;
+    })
+    .filter(Boolean);
+}
+ 
+function seriesSummary({ rows, series, unit = 'day', what, digits = 1, suffix = '' }) {
+  if (!rows?.length || !series?.length) return `No ${what} data yet.`;
+  const latest = latestPerSeries(rows, series, digits, suffix);
+  const count = `${series.length} ${series.length === 1 ? 'tree' : 'trees'}`;
+  return `${what} for ${count}, ${rangeText(rows, unit)}.${
+    latest.length ? ` Latest readings: ${latest.join('; ')}.` : ''
+  }`;
+}
+ 
+/** Sap weight per tree (WeightChart), with gallons and pounds in the table. */
+export function WeightFigure({
+  rows = [],
+  series = [],
+  unit = 'day',
+  height = 280,
+  title = 'Sap in each bucket over time',
+}) {
+  const columns = [
+    { key: 'Date', label: 'Time', format: (v) => dayjs(v).format(DATE_FORMATS[unit] ?? DATE_FORMATS.day) },
+    ...series.map(({ key, name }) => ({
+      key,
+      label: `${name} (gal)`,
+      format: (v, row) => {
+        const gal = fmtNum(v, 1);
+        if (gal == null) return null;
+        const lb = fmtNum(row[`${key}-lb`], 1);
+        return lb == null ? gal : `${gal} (${lb} lb)`;
+      },
+    })),
+  ];
+  return (
+    <AccessibilityChartWrapper
+      title={title}
+      summary={seriesSummary({ rows, series, unit, what: 'Sap weight', suffix: ' gal' })}
+      columns={columns}
+      rows={rows}
+      height={height}
+    >
+      <WeightChart rows={rows} series={series} unit={unit} />
+    </AccessibilityChartWrapper>
+  );
+}
+ 
+/**
+ * Tree-by-tree comparison (TreeCompareChart). `series` is a list of names
+ * here, matching TreeCompareChart. Pass `metric` / `digits` / `suffix` so the
+ * summary and headers say what is being compared.
+ */
+export function TreeCompareFigure({
+  rows = [],
+  series = [],
+  metric = 'Reading',
+  digits = 1,
+  suffix = '',
+  height = 280,
+}) {
+  const named = series.map((name) => ({ key: name, name }));
+  const columns = [
+    { key: 'Date', label: 'Date', format: fmtDate },
+    ...named.map(({ key, name }) => ({
+      key,
+      label: suffix ? `${name} (${suffix.trim()})` : name,
+      format: (v) => fmtNum(v, digits),
+    })),
+  ];
+  return (
+    <AccessibilityChartWrapper
+      title={`${metric} by tree`}
+      summary={seriesSummary({ rows, series: named, what: metric, digits, suffix })}
+      columns={columns}
+      rows={rows}
+      height={height}
+    >
+      <TreeCompareChart rows={rows} series={series} />
+    </AccessibilityChartWrapper>
   );
 }
