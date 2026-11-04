@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+  import { lazy, Suspense, useLayoutEffect } from 'react';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
