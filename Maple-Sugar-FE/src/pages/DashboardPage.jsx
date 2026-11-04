@@ -11,13 +11,14 @@ import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { visuallyHidden } from '@mui/utils';
 import { batchesByNode, shelfLifeSummary } from '../business/shelfLife';
 import { weekForecastRows, weekLabel, weekStart } from '../business/weekWindows';
 import { bushAverageSugar, syrupEstimate } from '../business/sugarContent';
 import { MapStatus, STATUS_META } from '../business/nodeMapStatus';
 import { isFull } from '../business/yieldMetrics';
 import { LIVE_FROM, LIVE_NODE_IDS, LIVE_TO, bucketGallons, bucketPercent, recordedSugar } from '../business/liveWeight';
-import { SiteForecastChart } from '../components/charts/SeriesChart';
+import { SiteForecastFigure } from '../components/charts/SeriesChart';
 import { FleetMapCard } from '../components/map/FleetMapCard';
 import { NodeStatusChip } from '../components/common/NodeStatusChip';
 import { MeterBar } from '../components/common/MeterBar';
@@ -27,7 +28,7 @@ import { useAuth } from '../context/auth';
 import { Capability } from '../business/permissions';
 import { dateOnly, dateTime } from '../components/common/format';
 import { useAutoRefresh, useBucketShelfLife, useFleetMap, useLiveWeather, useReadings } from '../services/hooks';
-
+ 
 function Meter({ label, value, percent, detail, color }) {
   return (
     <Box sx={{ mt: 1.5 }}>
@@ -44,9 +45,9 @@ function Meter({ label, value, percent, detail, color }) {
     </Box>
   );
 }
-
+ 
 const NO_BATCHES = [];
-
+ 
 export function DashboardPage() {
   const navigate = useNavigate();
   const { can } = useAuth();
@@ -78,26 +79,26 @@ export function DashboardPage() {
     const measured = bushNodes.some((node) => node.Sugar_Percent != null);
     return { readings: weights.length, sugar, syrup, measured };
   }, [readings.data, bushNodes]);
-
+ 
   // Shelf life belongs to the sap in a bucket, so each tree shows whichever
   // bucket is sitting on it now, and a tree with an empty bucket shows none.
   const batches = useBucketShelfLife(weather?.Temperature_F ?? null).data ?? NO_BATCHES;
   const batchByNode = useMemo(() => batchesByNode(batches), [batches]);
-
+ 
   const offlineNodes = bushNodes.filter((node) => node.mapStatus === MapStatus.OFFLINE);
   const { shortest: shortestShelf, holdingSap } = useMemo(() => shelfLifeSummary(batches), [batches]);
-
+ 
   return (
     <>
       <PageHeader
         title="The Bush"
         subtitle="Your field day starts here. Check the trees, then head into the woods."
       />
-
+ 
       <FieldOverview fleet={fleet} />
-
+ 
       <FleetMapCard fleet={fleet} />
-
+ 
       <div className="section-heading"><h2>Your Trees</h2><span>Tap a tree for readings & details.</span></div>
       <Grid container spacing={2}>
         {bushNodes.map((node, index) => {
@@ -116,11 +117,13 @@ export function DashboardPage() {
           ]
             .filter(Boolean)
             .join(' · ');
-
+ 
           return (
             <Grid key={node.NodeID} size={{ xs: 12, sm: 6, xl: 4 }}>
-              <Tooltip title={tip} placement="top" arrow>
-                <Card sx={{ height: '100%' }}>
+              <Card sx={{ height: '100%' }}>
+                {/* WCAG 1.4.13 / 4.1.2: tooltip sits on the focusable button and
+                    describes it, so keyboard and screen-reader users get it too. */}
+                <Tooltip title={tip} placement="top" arrow describeChild>
                   <CardActionArea
                     data-tour={index === 0 ? 'tree-card' : undefined}
                     onClick={() => navigate(`/nodes/${node.NodeID}`)}
@@ -128,7 +131,7 @@ export function DashboardPage() {
                   >
                     <CardContent>
                       <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Typography variant="h6">{node.Stand}</Typography>
+                        <Typography variant="h6" component="h3">{node.Stand}</Typography>
                         <NodeStatusChip status={status} />
                       </Stack>
                       <Typography variant="body2" color="text.secondary">
@@ -178,19 +181,19 @@ export function DashboardPage() {
                       ) : null}
                     </CardContent>
                   </CardActionArea>
-                </Card>
-              </Tooltip>
+                </Tooltip>
+              </Card>
             </Grid>
           );
         })}
       </Grid>
-
+ 
       <div className="section-heading"><h2>Conditions & Yield</h2><span>Take a closer look at the season.</span></div>
       <Box sx={{ mb: 3 }}>
         <Card>
           <CardContent>
             <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline', justifyContent: 'space-between' }}>
-              <Typography variant="h6" component="h2">
+              <Typography variant="h6" component="h3">
                 RIT Weather
               </Typography>
               <Typography variant="body2" color="text.secondary">
@@ -202,7 +205,11 @@ export function DashboardPage() {
             {weather ? (
               <>
                 <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', mt: 1 }}>
-                  <Typography variant="h3">{weather.Temperature_F}°F</Typography>
+                  {/* WCAG 1.3.1 / 2.4.6: a value, not a heading — same look */}
+                  <Typography variant="h3" component="p">
+                    <Box component="span" sx={visuallyHidden}>Current temperature </Box>
+                    {weather.Temperature_F}°F
+                  </Typography>
                   <Chip label={weather.Description ?? weather.Conditions} size="small" variant="outlined" />
                 </Stack>
                 <Typography color="text.secondary">
@@ -212,20 +219,18 @@ export function DashboardPage() {
                 <Typography variant="overline" color="text.secondary">
                   Week of {weekLabel(weekStart(new Date()))}
                 </Typography>
-                <Box sx={{ height: 240 }}>
-                  <SiteForecastChart rows={weekForecastRows(weather.Forecast)} />
-                </Box>
+                <SiteForecastFigure rows={weekForecastRows(weather.Forecast)} height={240} />
               </>
             ) : null}
           </CardContent>
         </Card>
       </Box>
-
+ 
       <Card sx={{ mb: 3 }}>
         <CardContent>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ justifyContent: 'space-between' }}>
             <Box>
-              <Typography variant="h6" component="h2">
+              <Typography variant="h6" component="h3">
                 2026 Weight
               </Typography>
               <Typography variant="body2" color="text.secondary">
@@ -236,9 +241,11 @@ export function DashboardPage() {
               Open Sugar Woods
             </Button>
           </Stack>
-          <Grid container spacing={2} sx={{ mt: 1 }}>
+          {/* WCAG 1.3.1 / 2.4.6: label/value pairs as a description list, values not headings */}
+          <Grid container spacing={2} component="dl" sx={{ mt: 1, mb: 0 }}>
             <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-              <Typography variant="overline">In the buckets now</Typography>
+              <Typography variant="overline" component="dt">In the buckets now</Typography>
+              <Box component="dd" sx={{ m: 0 }}>
               {bushNodes.map((node) => {
                 const gallons = bucketGallons(node.Weight, node.Tare_Weight ?? 0);
                 const full = isFull(node.Weight, node.Tare_Weight ?? 0);
@@ -252,25 +259,26 @@ export function DashboardPage() {
                   </Stack>
                 );
               })}
+              </Box>
             </Grid>
             <Grid size={{ xs: 6, sm: 3, md: 2 }}>
-              <Typography variant="overline">Weight readings</Typography>
-              <Typography variant="h4">{totals.readings}</Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="overline" component="dt">Weight readings</Typography>
+              <Typography variant="h4" component="dd" sx={{ m: 0 }}>{totals.readings}</Typography>
+              <Typography variant="body2" color="text.secondary" component="dd" sx={{ m: 0 }}>
                 Nodes 001 and 002 in 2026
               </Typography>
             </Grid>
             <Grid size={{ xs: 6, sm: 3, md: 2 }}>
-              <Typography variant="overline">Sugar content</Typography>
-              <Typography variant="h4">{totals.sugar == null ? '—' : `${totals.sugar.toFixed(1)}%`}</Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="overline" component="dt">Sugar content</Typography>
+              <Typography variant="h4" component="dd" sx={{ m: 0 }}>{totals.sugar == null ? '—' : `${totals.sugar.toFixed(1)}%`}</Typography>
+              <Typography variant="body2" color="text.secondary" component="dd" sx={{ m: 0 }}>
                 {totals.sugar == null ? 'Brix is recorded at collection' : 'Average Brix from recorded readings'}
               </Typography>
             </Grid>
             <Grid size={{ xs: 6, sm: 3, md: 2 }}>
-              <Typography variant="overline">Shelf life</Typography>
-              <Typography variant="h4">{shortestShelf?.label ?? '—'}</Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="overline" component="dt">Shelf life</Typography>
+              <Typography variant="h4" component="dd" sx={{ m: 0 }}>{shortestShelf?.label ?? '—'}</Typography>
+              <Typography variant="body2" color="text.secondary" component="dd" sx={{ m: 0 }}>
                 {shortestShelf
                   ? `Bucket ${shortestShelf.barcode ?? shortestShelf.bucketId} is closest, from ${shortestShelf.source}`
                   : holdingSap
@@ -279,9 +287,9 @@ export function DashboardPage() {
               </Typography>
             </Grid>
             <Grid size={{ xs: 6, sm: 3, md: 2 }}>
-              <Typography variant="overline">Estimated syrup</Typography>
-              <Typography variant="h4">{totals.syrup.toFixed(2)} gal</Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="overline" component="dt">Estimated syrup</Typography>
+              <Typography variant="h4" component="dd" sx={{ m: 0 }}>{totals.syrup.toFixed(2)} gal</Typography>
+              <Typography variant="body2" color="text.secondary" component="dd" sx={{ m: 0 }}>
                 {totals.measured
                   ? 'Rule of 86 where a tree was tested, the bush average elsewhere'
                   : '43 gallons of sap per gallon of syrup until a tree is tested'}
@@ -300,7 +308,7 @@ export function DashboardPage() {
           ) : null}
         </CardContent>
       </Card>
-
+ 
     </>
   );
 }
