@@ -265,6 +265,17 @@ html, body, #root {
   font-weight: 600;
 }
 
+.page-link-button {
+  width: 100%;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
 .page-link:hover {
   background: var(--surface-hover);
 }
