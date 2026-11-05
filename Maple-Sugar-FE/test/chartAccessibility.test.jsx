@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('recharts', async (importOriginal) => {
@@ -19,6 +19,16 @@ const series = [{ key: 'tree', name: 'Tree 1' }];
 afterEach(cleanup);
 
 describe('chart alternatives', () => {
+  it('paints keyboard tooltips with the same adaptive surface as their text', async () => {
+    const { container } = render(<WeightChart rows={rows} series={series} />);
+    fireEvent.keyDown(screen.getByRole('application'), { key: 'ArrowRight' });
+    await waitFor(() => expect(container.querySelector('.recharts-default-tooltip')).toBeTruthy());
+    const tooltip = container.querySelector('.recharts-default-tooltip');
+    expect(tooltip.style.backgroundColor).toBe('var(--surface)');
+    expect(tooltip.querySelector('.recharts-tooltip-label').style.color).toBe('var(--chart-text)');
+    expect(tooltip.querySelector('.recharts-tooltip-item').style.color).toBe('var(--chart-text)');
+  });
+
   it('keeps the standalone weight chart keyboard focusable', () => {
     render(<WeightChart rows={rows} series={series} />);
     expect(screen.getByRole('application').getAttribute('tabindex')).toBe('0');

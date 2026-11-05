@@ -1,12 +1,18 @@
 import { createTheme } from '@mui/material/styles';
-import { accent, accessibleOrange, ritOrange, ritSansStack, white } from './ritColors';
-import { componentBorders, cssTokens, muiPalettes, primaryLight } from './tokens';
+import { accent, accessibleBlue, accessibleGreen, accessibleOrange, neutral, ritOrange, ritSansStack, white } from './ritColors';
+import { componentBorders, cssTokens, muiPalettes } from './tokens';
+
+export const isLargeText = (fontSizePx, fontWeight = 400) =>
+  fontSizePx >= 24 || (fontSizePx >= 18.67 && Number(fontWeight) >= 700);
+
+export const orangeText = (fontSizePx, fontWeight = 400, surface = 'white') =>
+  surface === 'white' && isLargeText(fontSizePx, fontWeight) ? ritOrange : accessibleOrange;
 
 const semantic = {
   error: { main: accent.red },
   warning: { main: accent.amber },
-  success: { main: accent.green },
-  info: { main: accent.blue },
+  success: { main: accessibleGreen, light: accent.green, contrastText: white },
+  info: { main: accessibleBlue, light: accent.blue, contrastText: white },
 };
 
 function buildTheme(mode) {
@@ -15,12 +21,7 @@ function buildTheme(mode) {
   return createTheme({
     palette: {
       mode,
-      primary: {
-        main: ritOrange,
-        dark: accessibleOrange,
-        light: primaryLight,
-        contrastText: white,
-      },
+      brand: { main: ritOrange, contrastText: neutral.black },
       ...palette,
     },
     shape: { borderRadius: 12 },
@@ -42,12 +43,14 @@ function buildTheme(mode) {
           // paragraph margins and a different font to popup content.
           '.leaflet-popup-content p': { margin: 0 },
           '.leaflet-container': { fontFamily: 'inherit' },
+          '.leaflet-control-attribution a': { color: accessibleOrange },
         },
       },
       MuiButton: {
         defaultProps: { disableElevation: true },
         styleOverrides: {
           root: { minHeight: 44, borderRadius: 12 },
+          outlinedPrimary: { borderColor: palette.primary.main },
         },
       },
       MuiPaper: {

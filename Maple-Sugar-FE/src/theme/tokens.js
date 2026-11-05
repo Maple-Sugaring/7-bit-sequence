@@ -1,4 +1,4 @@
-import { inputBorder, neutral, ritOrange, white } from './ritColors';
+import { accent, accessibleOrange, inputBorder, neutral, ritOrange, white } from './ritColors';
 
 // The one place app colors are defined. Brand values come from ritColors.js.
 // test/colorTokens.test.js fails on a raw color anywhere else in the signed-in app.
@@ -6,7 +6,6 @@ import { inputBorder, neutral, ritOrange, white } from './ritColors';
 /** The same in both modes: the top bar stays dark, and the rest sits on it or on the map. */
 const fixedCssTokens = {
   '--brand-orange': ritOrange,
-  '--on-primary': white,
   '--topbar-bg': '#20221e',
   '--topbar-ink': white,
   '--topbar-ink-disabled': 'rgba(255, 255, 255, 0.45)',
@@ -24,6 +23,7 @@ const fixedCssTokens = {
 export const cssTokens = {
   light: {
     ...fixedCssTokens,
+    '--on-primary': white,
     '--ink': '#24241f',
     '--muted': '#69675f',
     '--line': '#e2ddd7',
@@ -47,9 +47,18 @@ export const cssTokens = {
     '--meter-track': 'rgba(0, 0, 0, 0.12)',
     '--chart-contrast': neutral.black,
     '--chart-grid': neutral.gray427,
+    '--chart-text': neutral.black,
+    '--chart-tick': '#4A4A4A',
+    '--chart-blue': '#007A94',
+    '--chart-green': '#4D6B00',
+    '--chart-purple': accent.purple,
+    '--chart-red': accent.red,
+    '--chart-orange': accessibleOrange,
+    '--chart-gray': '#6B7378',
   },
   dark: {
     ...fixedCssTokens,
+    '--on-primary': neutral.black,
     '--ink': '#f2efea',
     '--muted': '#bdb9b0',
     '--line': '#3d3f39',
@@ -73,17 +82,24 @@ export const cssTokens = {
     '--meter-track': 'rgba(255, 255, 255, 0.16)',
     '--chart-contrast': '#f2efea',
     '--chart-grid': '#3d3f39',
+    '--chart-text': '#f2efea',
+    '--chart-tick': '#bdb9b0',
+    '--chart-blue': accent.blue,
+    '--chart-green': accent.green,
+    '--chart-purple': '#B39AE0',
+    '--chart-red': '#F2665A',
+    '--chart-orange': '#ff9a52',
+    '--chart-gray': '#A2AAAD',
   },
 };
 
 const light = cssTokens.light;
 const dark = cssTokens.dark;
 
-export const primaryLight = '#FF8C3A';
-
 /** MUI palette values for each mode. Surfaces and text reuse the tokens above. */
 export const muiPalettes = {
   light: {
+    primary: { main: accessibleOrange, dark: '#8A3900', light: ritOrange, contrastText: white },
     secondary: {
       main: neutral.black,
       dark: '#333333',
@@ -91,10 +107,13 @@ export const muiPalettes = {
       contrastText: white,
     },
     background: { default: light['--surface-page'], paper: light['--surface'] },
-    text: { primary: neutral.black, secondary: '#4A4A4A' },
+    text: { primary: neutral.black, secondary: '#4A4A4A', disabled: '#707070' },
     divider: inputBorder,
   },
   dark: {
+    primary: { main: ritOrange, dark: '#C75300', light: '#FF8C3A', contrastText: neutral.black },
+    success: { main: accent.green, contrastText: neutral.black },
+    info: { main: accent.blue, contrastText: neutral.black },
     secondary: {
       main: '#E6E2DC',
       dark: '#CFCAC2',

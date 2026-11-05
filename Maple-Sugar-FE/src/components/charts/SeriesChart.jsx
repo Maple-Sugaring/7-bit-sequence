@@ -13,13 +13,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import {
-  accessibleBlue,
-  accessibleGreen,
-  accessibleOrange,
-  neutral,
-  ritOrange,
-} from '../../theme/ritColors';
+import { ritOrange } from '../../theme/ritColors';
 
 /*
  * Accessibility (WCAG 2.2):
@@ -30,8 +24,8 @@ import {
  * - Bare charts retain Recharts keyboard navigation. Figure wrappers provide
  *   a named image, summary and data table, and disable the redundant keyboard layer.
  */
-const CHART_TEXT = neutral.black;
-const TICK = { fontSize: 12, fill: '#4A4A4A' }; // 8.86:1 on white
+const CHART_TEXT = 'var(--chart-text)';
+const TICK = { fontSize: 12, fill: 'var(--chart-tick)' }; // 8.86:1 on white
 
 // Legend: keep the colored swatch, render the label in dark text.
 const legendText = (value) => <span style={{ color: CHART_TEXT }}>{value}</span>;
@@ -40,7 +34,7 @@ const legendText = (value) => <span style={{ color: CHART_TEXT }}>{value}</span>
 const tooltipProps = {
   labelStyle: { color: CHART_TEXT, fontWeight: 600 },
   itemStyle: { color: CHART_TEXT },
-  contentStyle: { border: '1px solid #E2DDD7', borderRadius: 8 },
+  contentStyle: { backgroundColor: 'var(--surface)', color: CHART_TEXT, border: '1px solid var(--line)', borderRadius: 8 },
 };
 
 function dateTick(value) {
@@ -60,13 +54,13 @@ export function DailyTemperatureChart({ rows }) {
   return (
     <ResponsiveContainer width="100%" height="100%">
       <LineChart data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-        <CartesianGrid stroke="#D0D3D4" vertical={false} />
+        <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
         <XAxis dataKey="Date" tickFormatter={dateTick} minTickGap={28} tick={TICK} />
         <YAxis width={48} unit="°" tick={TICK} />
         <Tooltip labelFormatter={tipLabel} {...tooltipProps} />
         <Legend formatter={legendText} />
         <Line type="monotone" dataKey="Temp_Max_F" name="High °F" stroke={ritOrange} dot={false} strokeWidth={2} />
-        <Line type="monotone" dataKey="Temp_Min_F" name="Low °F" stroke={accessibleBlue} dot={false} strokeWidth={2} />
+        <Line type="monotone" dataKey="Temp_Min_F" name="Low °F" stroke="var(--chart-blue)" dot={false} strokeWidth={2} />
       </LineChart>
     </ResponsiveContainer>
   );
@@ -85,7 +79,7 @@ export function WeightChart({ rows, series, unit = 'day', accessibilityLayer = t
   return (
     <ResponsiveContainer width="100%" height="100%">
       <LineChart accessibilityLayer={accessibilityLayer} data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-        <CartesianGrid stroke="#D0D3D4" vertical={false} />
+        <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
         <XAxis dataKey="Date" tickFormatter={tick} minTickGap={28} tick={TICK} />
         <YAxis
           width={56}
@@ -130,7 +124,7 @@ export function DailyFlowChart({ rows }) {
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-        <CartesianGrid stroke="#D0D3D4" vertical={false} />
+        <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
         <XAxis dataKey="Date" tickFormatter={dateTick} minTickGap={28} tick={TICK} />
         <YAxis width={48} unit=" gal" tick={TICK} />
         <Tooltip labelFormatter={tipLabel} {...tooltipProps} />
@@ -144,7 +138,7 @@ export function DailySugarChart({ rows }) {
   return (
     <ResponsiveContainer width="100%" height="100%">
       <LineChart data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-        <CartesianGrid stroke="#D0D3D4" vertical={false} />
+        <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
         <XAxis dataKey="Date" tickFormatter={dateTick} minTickGap={28} tick={TICK} />
         <YAxis width={48} unit="%" domain={[0, 4]} tick={TICK} />
         <Tooltip labelFormatter={tipLabel} {...tooltipProps} />
@@ -152,7 +146,7 @@ export function DailySugarChart({ rows }) {
           type="monotone"
           dataKey="Sugar_Percent"
           name="Sugar %"
-          stroke={accessibleGreen} // was accent.green #84BD00 (2.27:1, fails 1.4.11)
+          stroke="var(--chart-green)"
           connectNulls
           dot={false}
           strokeWidth={2}
@@ -166,14 +160,14 @@ export function SiteForecastChart({ rows, accessibilityLayer = true }) {
   return (
     <ResponsiveContainer width="100%" height="100%">
       <ComposedChart accessibilityLayer={accessibilityLayer} data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-        <CartesianGrid stroke="#D0D3D4" vertical={false} />
+        <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
         <XAxis dataKey="Date" tickFormatter={dateTick} tick={TICK} />
         <YAxis yAxisId="temp" width={40} unit="°" tick={TICK} />
         <YAxis yAxisId="flow" orientation="right" width={36} tick={TICK} />
         <Tooltip labelFormatter={tipLabel} {...tooltipProps} />
         <Legend formatter={legendText} />
         <Bar yAxisId="flow" dataKey="Flow_Gal" name="Sap gal" fill={ritOrange} radius={[3, 3, 0, 0]} />
-        <Line yAxisId="temp" type="monotone" dataKey="Temp_Max_F" name="Afternoon high" stroke={accessibleBlue} dot={false} strokeWidth={2} />
+        <Line yAxisId="temp" type="monotone" dataKey="Temp_Max_F" name="Afternoon high" stroke="var(--chart-blue)" dot={false} strokeWidth={2} />
       </ComposedChart>
     </ResponsiveContainer>
   );
@@ -224,25 +218,22 @@ export function SiteForecastFigure({ rows, height = 240 }) {
   );
 }
 
-// Every color is >= 3:1 on white (WCAG 1.4.11). Lime #84BD00 (2.27:1) replaced
-// with accessibleGreen; #C75300 (4.5:1) swapped for accessibleOrange; grey
-// #7C878E (3.68:1) darkened to #6B7378 for margin.
 const TREE_COLORS = [
-  ritOrange,        // #F76902  3.01:1
-  accessibleBlue,   // #007A94  4.99:1
-  accessibleGreen,  // #4D6B00  6.14:1
-  '#000000',        // 21:1
-  '#7D55C7',        // 5.26:1
-  '#DA291C',        // 4.87:1
-  accessibleOrange, // #A34300  6.25:1
-  '#6B7378',        // 4.83:1
+  ritOrange,
+  'var(--chart-blue)',
+  'var(--chart-green)',
+  'var(--chart-contrast)',
+  'var(--chart-purple)',
+  'var(--chart-red)',
+  'var(--chart-orange)',
+  'var(--chart-gray)',
 ];
 
 export function OverlayChart({ rows, flowSeries, tempSeries }) {
   return (
     <ResponsiveContainer width="100%" height="100%">
       <ComposedChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-        <CartesianGrid stroke="#D0D3D4" vertical={false} />
+        <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
         <XAxis dataKey="Date" tickFormatter={dateTick} minTickGap={24} tick={TICK} />
         <YAxis yAxisId="flow" width={48} unit=" gal" tick={TICK} />
         <YAxis yAxisId="temp" orientation="right" width={44} unit="°" tick={TICK} />
@@ -284,7 +275,7 @@ export function TreeCompareChart({ rows, series, accessibilityLayer = true }) {
   return (
     <ResponsiveContainer width="100%" height="100%">
       <LineChart accessibilityLayer={accessibilityLayer} data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-        <CartesianGrid stroke="#D0D3D4" vertical={false} />
+        <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
         <XAxis dataKey="Date" tickFormatter={dateTick} minTickGap={28} tick={TICK} />
         <YAxis width={48} tick={TICK} />
         <Tooltip labelFormatter={tipLabel} {...tooltipProps} />
