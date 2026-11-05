@@ -42,6 +42,9 @@ const FleetMapPage = lazy(() =>
 const DeployPage = lazy(() =>
   import('../pages/DeployPage').then((module) => ({ default: module.DeployPage })),
 );
+const TutorialsPage = lazy(() =>
+  import('../pages/TutorialsPage').then((module) => ({ default: module.TutorialsPage })),
+);
 const FeedbackPage = lazy(() =>
   import('../pages/FeedbackPage').then((module) => ({ default: module.FeedbackPage })),
 );
@@ -66,6 +69,7 @@ const PROTECTED = [
   { path: '/schedule', title: 'Schedule', element: <SchedulePage /> },
   { path: '/admin', title: 'Admin', element: <AdminPage /> },
   { path: '/profile', title: 'Your profile', element: <ProfilePage /> },
+  { path: '/tutorials', title: 'Tutorials', element: <TutorialsPage /> },
   ...(apiMode === 'mock' ? [{ path: '/feedback', element: <FeedbackPage /> }] : []),
 ];
 
@@ -103,7 +107,7 @@ export function AppRoutes() {
       <Route path="/alerts" element={<Navigate to="/notifications" replace />} />
       <Route path="/schedule/manage" element={<RedirectKeepingSearch to="/schedule" />} />
       <Route path="/schedule-admin" element={<RedirectKeepingSearch to="/schedule" />} />
-      <Route path="/guides" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/guides" element={<Navigate to="/tutorials" replace />} />
       <Route path="/nodes" element={<Navigate to="/deploy" replace />} />
       <Route path="/deployed" element={<Navigate to="/deploy" replace />} />
  

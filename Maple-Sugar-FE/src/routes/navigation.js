@@ -103,6 +103,8 @@ export const ROUTE_CAPABILITIES = {
   '/admin': Capability.MANAGE_USERS,
   // Every signed-in role has a profile, so there is no capability gate.
   '/profile': null,
+  // Every role has guides; the page shows each person only their role's steps.
+  '/tutorials': Capability.VIEW_GUIDES,
   ...(apiMode === 'mock' ? { '/feedback': null } : {}),
 };
 
