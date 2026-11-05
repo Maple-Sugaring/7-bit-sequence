@@ -7,8 +7,16 @@ import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import { ROLE_LABELS } from '../../business/permissions';
 import { entriesInWeek, weekLabel, weekStart } from '../../business/weekWindows';
 import { dateTime } from '../common/format';
+
+/** Each role's tag colour on a collection, so a glance tells who filed it. */
+const ROLE_CHIP_COLORS = {
+  Admin: 'warning',
+  Student: 'success',
+  MSS: 'secondary',
+};
 
 /**
  * What has been collected, one Sunday to Saturday week at a time, newest
@@ -50,6 +58,9 @@ export function CollectionHistory({ entries, loading, error }) {
                 <Typography variant="h6" component="h3" sx={{ flexGrow: 1 }}>
                   {entry.Title}
                 </Typography>
+                {ROLE_LABELS[entry.Submitted_Role] ? (
+                  <Chip label={ROLE_LABELS[entry.Submitted_Role]} size="small" color={ROLE_CHIP_COLORS[entry.Submitted_Role] ?? 'default'} />
+                ) : null}
                 {entry.Round_Label ? <Chip label={entry.Round_Label} size="small" variant="outlined" /> : null}
                 {entry.Ice_Present ? <Chip label="Ice" size="small" color="info" /> : null}
               </Stack>

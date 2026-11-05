@@ -11,6 +11,7 @@
 import { invalid, notFound } from '../lib/ApiError.js';
 import { logger } from '../lib/logger.js';
 import { COLLECTION_ALERT_TYPES, collectionTitle, collectionVolumeGallons, validateCollection } from '../business/collections.js';
+import { roleFromId } from '../business/permissions.js';
 import { transaction } from '../db/pool.js';
 import { cacheNamespaces } from '../cache/cacheKeys.js';
 import { invalidateNamespaces } from '../cache/redisCache.js';
@@ -96,6 +97,8 @@ export async function recordCollection(body, user) {
           Ice_Present: input.Ice_Present,
           Round_Label: blankToNull(input.Round_Label),
           Client_Ref: input.Client_Ref ?? null,
+          // The submitter's role at the time, shown as a tag on the collection.
+          Submitted_Role: roleFromId(user.RoleID),
         },
         client,
       );

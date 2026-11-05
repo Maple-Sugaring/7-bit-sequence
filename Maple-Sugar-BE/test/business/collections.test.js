@@ -140,6 +140,7 @@ function journalRow(entry) {
     sugar_percent: entry.sugar_percent,
     ice_present: entry.ice_present,
     round_label: entry.round_label,
+    submitted_role: entry.submitted_role,
     author_name: 'Sam Student',
     node_name: 'Alumni House - Tree 1',
   };
@@ -216,6 +217,7 @@ function handle(text, params = []) {
       ice_present: params[8],
       round_label: params[9],
       client_ref: params[10],
+      submitted_role: params[11],
     };
     db.journal.push(entry);
     return rows([{ id: entry.id }]);
@@ -311,6 +313,8 @@ describe('POST /collections', () => {
     assert.equal(db.journal[0].round_label, 'Morning round');
     assert.equal(db.journal[0].client_ref, REF);
     assert.equal(response.json.Entry.Round_Label, 'Morning round');
+    assert.equal(db.journal[0].submitted_role, 'Student', 'the entry keeps the role its author submitted as');
+    assert.equal(response.json.Entry.Submitted_Role, 'Student');
     assert.equal(response.json.Log.Volume_Collected, 4);
   });
 

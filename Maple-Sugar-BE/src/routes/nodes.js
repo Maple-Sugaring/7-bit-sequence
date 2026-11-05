@@ -91,6 +91,7 @@ nodesRouter.post('/:id/actions', requireAuth, async (req, res) => {
     Process_Notes: Notes?.trim() || 'Bucket emptied from the bush dashboard.',
     Weight: tare,
     Ice_Present: false,
+    Submitted_Role: req.role,
   });
   await query(
     `update alerts

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { Capability, can } from '../business/permissions.js';
+import { Capability, can, roleFromId } from '../business/permissions.js';
 import { requireCapability } from '../middleware/authenticate.js';
 import * as journalRepository from '../repositories/journalRepository.js';
 import { createJournalBody } from './schemas.js';
@@ -16,6 +16,7 @@ journalRouter.post('/', requireCapability(Capability.RECORD_DATA), async (req, r
   const entry = await journalRepository.createEntry({
     ...body,
     UserID: req.user.UserID,
+    Submitted_Role: roleFromId(req.user.RoleID),
   });
   res.status(201).json(entry);
 });
