@@ -7,6 +7,7 @@ import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import GridViewRoundedIcon from '@mui/icons-material/GridViewRounded';
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
+import SchoolRoundedIcon from '@mui/icons-material/SchoolRounded';
 import NotificationsOutlinedIcon from '@mui/icons-material/NotificationsOutlined';
 import { Capability, ROLE_LABELS } from '../../business/permissions';
 import { useAuth } from '../../context/auth';
@@ -43,6 +44,11 @@ function Navigation() {
       <Link className="page-link" to="/profile" onClick={close} aria-current={location.pathname === '/profile' ? 'page' : undefined}>
         <SettingsRoundedIcon /><span>Profile & settings</span>
       </Link>
+      {can(Capability.VIEW_GUIDES) ? (
+        <Link className="page-link" to="/tutorials" onClick={close} aria-current={location.pathname === '/tutorials' ? 'page' : undefined}>
+          <SchoolRoundedIcon /><span>Tutorials</span>
+        </Link>
+      ) : null}
       <button type="button" className="page-link page-link-button" onClick={handleSignOut}>
         <LogoutRoundedIcon /><span>Log out</span>
       </button>
