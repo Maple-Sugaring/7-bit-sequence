@@ -94,11 +94,43 @@ A calibration command has `CommandID`, `Action`, `Pounds`, `Status` (`pending` â
 
 | Method | Path | Auth | |
 | --- | --- | --- | --- |
-| GET | `/metrics` | Dashboard or data table | Query: `nodeId`, `season`, `from`, `to`. |
+| GET | `/metrics` | Dashboard or data table | Query: `nodeId`, `season`, `from`, `to`, `aggregates` (default `true`). |
+| GET | `/metrics/rollup` | Dashboard or data table | Weighted averages per local period. Query: `nodeId`, `season`, `from`, `to`, `interval` (`hour`, `day` (default), `week`, `month`), `timeZone` (IANA, default `America/New_York`). |
+| GET | `/metrics/retention` | Edit (admin) | Retention policy, raw and aggregate row counts, table sizes, estimated bytes saved, the last 10 runs. |
+| POST | `/metrics/retention/run` | Edit (admin) | Runs the retention job now. Body `{ "dryRun": true }` reports `Rows_Eligible` and `Periods_Affected` and changes nothing. 409 `RETENTION_BUSY` while another run holds the lock, 409 `RETENTION_DISABLED` when retention is off. |
 | POST | `/metrics` | Record | Manual reading. `Recorded_By` is the session, not the body. |
-| PATCH | `/metrics/:id` | Edit (admin) | Cannot change `NodeID`. |
+| PATCH | `/metrics/:id` | Edit (admin) | Cannot change `NodeID`. Stamps `Corrected_At` and `Corrected_By_UserID`. |
 
 Body fields: `NodeID`, `BucketID`, `Recorded_At`, `Weight`, `Temperature`, `Sugar_Percent`, `Weather_Conditions`, `Ice_Present`.
+
+Every row also has `Corrected_At`, `Corrected_By_UserID` and `Aggregated`.
+
+### Compacted periods (BRU-007)
+
+After `METRICS_RAW_RETENTION_DAYS` (400 by default), sensor readings are folded into hourly aggregates. `GET /metrics` still returns those periods, so season comparisons and exports keep working. Each one comes back as one row per node, bucket and UTC hour:
+
+```json
+{
+  "MetricID": null, "NodeID": 1, "BucketID": 1,
+  "Recorded_At": "2025-03-20T13:00:00.000Z",
+  "Weight": 20, "Temperature": null, "Sugar_Percent": 2, "Ice_Present": false,
+  "Aggregated": true,
+  "Aggregate": {
+    "AggregateID": 77, "Period_Start": "2025-03-20T13:00:00.000Z", "Period_End": "2025-03-20T14:00:00.000Z",
+    "Period_Seconds": 3600, "Sample_Count": 3,
+    "First_Recorded_At": "...", "Last_Recorded_At": "...", "Ice_Present_Count": 0,
+    "Counts": { "Weight": 3, "Temperature": 0, "Sugar_Percent": 1, "Sap_Flow_Rate_Lph": 0 },
+    "Min": { "Weight": 10, "...": null }, "Max": { "Weight": 30, "...": null },
+    "Averaging": "arithmetic mean of the readings in the period", "Compacted_At": "...", "Run_ID": 4
+  }
+}
+```
+
+The field values are the means of the readings in that hour. A field no reading in the hour had is `null` and its count is 0. The value is never 0. `from`, `to` and `season` match an aggregate on its `Period_Start`, the same way a raw row matches on `Recorded_At`. An hour that starts before `from` is left out, even if it ends after `from`. An aggregate has no `MetricID`, so it cannot be PATCHed.
+
+When you average rows from `GET /metrics` yourself, weight each row by `Aggregate.Counts[field]`, or by 1 for a raw row. A plain mean of the rows gives an hour of 3 readings the same weight as an hour of 60. `/metrics/rollup` already does this weighting. Each rollup period returns `Reading_Count`, `Raw_Count`, `Aggregated_Count`, and per-field `Counts`, `Average`, `Min` and `Max`. Periods with no readings are left out, not returned as zeros. `Period_Start` and `Period_End` are UTC instants for the local period boundaries, so a 23-hour DST day stays 23 hours.
+
+The ingest endpoint rejects a sample older than the raw window: `Rejected` gets a message, and `details.Recorded_At` names the cutoff. That hour may already be compacted, and a resend could not be recognised as a duplicate there.
 
 ## Sensor ingest
 

@@ -10,6 +10,8 @@ import { ApiError, forbidden, invalid, notFound } from '../lib/ApiError.js';
 import { validateReading } from '../business/validation.js';
 import { alertForFault, clearedAlertTypes } from '../business/alerting.js';
 import { ackOutcome, downlinkFor } from '../business/calibration.js';
+import { isBeforeCutoff, rawCutoff } from '../business/retention.js';
+import { config } from '../config.js';
 import { cacheNamespaces } from '../cache/cacheKeys.js';
 import { invalidateNamespaces } from '../cache/redisCache.js';
 import * as nodesRepository from '../repositories/nodesRepository.js';
@@ -99,6 +101,15 @@ async function acceptReading(gateway, reading) {
       Description: `${node.Node_Name} sent a reading that was rejected: ${message}`,
     });
     throw invalid(message, errors);
+  }
+
+  // The retry check below only sees raw rows. A sample older than the raw
+  // retention window may already sit inside an hourly aggregate, where a
+  // resend could not be recognised and would be counted twice (BRU-007).
+  const cutoff = rawCutoff(new Date(), config.metricsRawRetentionDays);
+  if (isBeforeCutoff(reading.Recorded_At, cutoff)) {
+    const message = `Readings before ${cutoff.toISOString()} are past the raw retention window and are not accepted.`;
+    throw invalid(message, { Recorded_At: message });
   }
 
   const existing = await metricsRepository.findMetricByNodeAndTime(node.NodeID, reading.Recorded_At);

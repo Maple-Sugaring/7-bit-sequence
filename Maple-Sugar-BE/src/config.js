@@ -67,6 +67,12 @@ const googleClientSecret = required('GOOGLE_CLIENT_SECRET');
 if (!googleClientId) problems.push('GOOGLE_CLIENT_ID is required.');
 if (!googleClientSecret) problems.push('GOOGLE_CLIENT_SECRET is required.');
 
+
+const metricsRawRetentionDays = integer('METRICS_RAW_RETENTION_DAYS', 400);
+if (metricsRawRetentionDays > 0 && metricsRawRetentionDays < 30) {
+  problems.push('METRICS_RAW_RETENTION_DAYS must be 0 (off) or at least 30.');
+}
+
 const publicApiUrl = trimTrailingSlash(optional('PUBLIC_API_URL', 'http://localhost:5173/api'));
 const publicWebUrl = trimTrailingSlash(optional('PUBLIC_WEB_URL', 'http://localhost:5173'));
 
@@ -165,6 +171,7 @@ export const config = {
   alertEscalationMinutes: integer('ALERT_ESCALATION_MINUTES', 30),
   // How far ahead of a shift the reminder email goes out.
   shiftReminderHours: integer('SHIFT_REMINDER_HOURS', 12),
+  metricsRawRetentionDays,
 };
 
 export const accessTokenTtlSeconds = config.accessTokenTtlMinutes * 60;

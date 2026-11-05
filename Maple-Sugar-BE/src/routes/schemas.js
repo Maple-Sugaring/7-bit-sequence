@@ -9,6 +9,7 @@
 
 import { z } from 'zod';
 import { CALIBRATION_ACTIONS, MAX_TEST_POUNDS, MIN_TEST_POUNDS } from '../business/calibration.js';
+import { DEFAULT_ROLLUP_TIMEZONE, isValidTimeZone, ROLLUP_INTERVALS } from '../business/retention.js';
 
 /** Path ids arrive as strings and must be positive integers. */
 export const idParam = z.coerce.number().int().positive();
@@ -32,7 +33,26 @@ export const metricsQuery = z.object({
   season: z.coerce.number().int().min(2000).max(2100).optional(),
   from: isoDateTime.optional(),
   to: isoDateTime.optional(),
+  // false returns raw rows only, leaving out hourly averages for compacted periods.
+  aggregates: booleanish.optional(),
 });
+
+/** GET /metrics/rollup: weighted averages per local calendar period. */
+export const rollupQuery = z.object({
+  nodeId: z.coerce.number().int().positive().optional(),
+  season: z.coerce.number().int().min(2000).max(2100).optional(),
+  from: isoDateTime.optional(),
+  to: isoDateTime.optional(),
+  interval: z.enum(ROLLUP_INTERVALS).default('day'),
+  timeZone: z
+    .string()
+    .default(DEFAULT_ROLLUP_TIMEZONE)
+    .refine(isValidTimeZone, { message: 'Must be an IANA time zone such as America/New_York.' }),
+});
+
+export const retentionRunBody = z
+  .object({ dryRun: z.boolean().optional().default(false) })
+  .default({ dryRun: false });
 
 export const createMetricBody = z.object({
   NodeID: z.coerce.number().int().positive({ message: 'A tree must be selected.' }),

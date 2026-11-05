@@ -9,7 +9,7 @@
  */
 
 /** Timestamps go out as ISO 8601, which is what dayjs parses on the client. */
-function iso(value) {
+export function iso(value) {
   if (value == null) return null;
   return value instanceof Date ? value.toISOString() : String(value);
 }
@@ -25,7 +25,7 @@ function dateOnly(value) {
   return String(value).slice(0, 10);
 }
 
-function num(value) {
+export function num(value) {
   if (value == null) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
@@ -131,6 +131,12 @@ export function mapMetric(row) {
     Weather_Conditions: row.weather_conditions ?? null,
     Ice_Present: Boolean(row.ice_present),
     Sap_Flow_Rate_Lph: num(row.sap_flow_rate_lph),
+    // Who last corrected the reading through PATCH /metrics/:id, and when.
+    Corrected_At: iso(row.corrected_at),
+    Corrected_By_UserID: row.corrected_by_user_id ?? null,
+    // A raw row is one reading. Rows built from metric_aggregates set this
+    // true and carry an `Aggregate` block (see metricAggregatesRepository).
+    Aggregated: false,
   };
 }
 

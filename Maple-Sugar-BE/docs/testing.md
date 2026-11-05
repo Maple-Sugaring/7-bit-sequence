@@ -103,6 +103,38 @@ Windows are built in `America/New_York`, including the daylight-saving shift.
 | A two-hour window tomorrow with nothing busy | Accepted |
 | Unknown stand name | Temperature offset 0. Known stands are Alumni House, Chabad House, and Red Barn (Red Barn is −0.8°F) |
 
+## Retention and hourly aggregates (BRU-007)
+
+The pure rules are in `test/business/retention.test.js`. Routes and access control are in `test/security/retentionRoutes.test.js`. The ingest guard is in `test/security/ingest.test.js`. The job's SQL runs against a real Postgres in `test/integration/retention.pg.test.js`. That suite is skipped unless you point it at a throwaway database, because it deletes rows:
+
+```
+podman run -d --rm --name bru007-pg -e POSTGRES_USER=maple -e POSTGRES_PASSWORD=pw \
+  -e POSTGRES_DB=maple_test -p 55499:5432 docker.io/library/postgres:17-alpine
+MAPLE_TEST_DATABASE_URL=postgresql://maple:pw@127.0.0.1:55499/maple_test \
+  node --test test/integration/retention.pg.test.js
+```
+
+| Input | Result |
+| --- | --- |
+| Now `2026-11-05T14:37Z`, 400 days | Cutoff `2025-10-01T14:00Z` (floored to the hour) |
+| Sensor row at `09:59:59.999`, cutoff `10:00` | Moved into the `09:00` aggregate |
+| Sensor row exactly at the cutoff | Stays raw |
+| Manual row, or a row PATCHed by an admin | Stays raw. The corrected row has `Corrected_At` and `Corrected_By_UserID` |
+| Second run with nothing new | 0 rows, 0 buckets |
+| Late row for an hour already compacted | Merged in: counts and sums added, min and max widened |
+| One hour with weight only, another with sugar only | Each field's count matches its readings. The missing field is `null`, not 0 |
+| `GET /metrics` across the cutoff | Raw rows after it and hourly rows before it. No hour appears twice |
+| Rows at `2026-06-30T23:30Z` and `2026-07-01T00:30Z` | Seasons 2026 and 2027, the same as raw rows |
+| Hour of 10/20/30, hour of 100, raw 40, one day | Day average 40 (weighted), not 53.3 |
+| New York day rollup over 2026-03-08 (DST) | `05:00Z` to `04:00Z` the next day (23 h) |
+| A run row left `running` | Marked `interrupted`. The new run compacts the remainder |
+| Advisory lock held elsewhere | `skipped`, and the route returns 409 `RETENTION_BUSY` |
+| `dryRun: true` | Eligible rows and periods reported. Nothing deleted |
+| 30 days of 1-minute samples (43,200 rows) | 720 aggregates, 60:1. The month average equals the raw average. The aggregate table is under 1/5 of the raw table's size |
+| Student or MSS calls `/metrics/retention` or `/run` | 403. The job never runs |
+| `timeZone=UTC'; drop table…` or `interval=minute` | 422 before any query. Zone and interval are bound parameters |
+| Pi sample from 2020 | Rejected, and `details.Recorded_At` names the cutoff |
+
 ## Roles and the screens they see
 
 Role ids are 1 Admin, 2 Student, 3 MSS. Any other id is no role and has no capabilities. The client and the API are checked against each other for every role and every capability.
