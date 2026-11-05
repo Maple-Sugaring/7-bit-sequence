@@ -12,6 +12,7 @@ import { Capability, can, Role, ROLE_LABELS } from '../../business/permissions';
 const DEPLOY = Capability.DEPLOY_NODES;
 const RECORD = Capability.RECORD_DATA;
 const SCHEDULE = Capability.VIEW_SCHEDULE;
+const CLAIM = Capability.CLAIM_SHIFT;
 const MANAGE_SCHEDULE = Capability.MANAGE_SCHEDULE;
 
 export const TUTORIAL_SECTIONS = [
@@ -150,22 +151,22 @@ export const TUTORIAL_SECTIONS = [
           },
           {
             title: 'Pick a time',
-            body: 'On a shift that needs a time, choose Pick a time.',
-            capability: SCHEDULE,
+            body: 'On a shift that needs a time, choose Pick a time. If Google Calendar is disconnected, sign in again and grant calendar access first.',
+            capability: CLAIM,
             screen: 'schedule',
             target: 'pick-time',
           },
           {
             title: 'Choose a free window',
-            body: 'The open windows come from your Google Calendar, so they skip times you are busy. Choosing one claims the shift.',
-            capability: SCHEDULE,
+            body: 'The open windows come from your connected Google Calendar, so they skip times you are busy. Choosing one claims the shift.',
+            capability: CLAIM,
             screen: 'pick-time',
             target: 'window',
           },
           {
             title: 'Check your calendar',
-            body: 'The shift shows a “You” badge and is added to your Google Calendar.',
-            capability: SCHEDULE,
+            body: 'The shift shows a “You” badge once it is claimed. Check your Google Calendar for the event.',
+            capability: CLAIM,
             screen: 'shift-claimed',
             target: null,
           },
@@ -212,7 +213,7 @@ export const TUTORIAL_SECTIONS = [
           },
           {
             title: 'Speed up the steps',
-            body: 'Each step reaches the node on its next packet. On Deploy, set the tree to 10 seconds between packets while you calibrate, and set it back to 900 when you are done.',
+            body: 'Each step reaches the node on its next packet. On Deploy, note the tree’s current packet interval and set it to 10 seconds while you calibrate. Restore the previous interval when you are done.',
             capability: DEPLOY,
             screen: 'interval',
             target: 'interval',
@@ -281,7 +282,7 @@ export const TUTORIAL_SECTIONS = [
           },
           {
             title: 'Check the panel and pack',
-            body: 'Clear snow, leaves, or shade from the 5 W panel. Below 3.15 V the node sends nothing and sleeps an hour at a time; below 3.30 V it reports only every 30 minutes. It recovers on its own once the pack charges 100 mV past those levels, or swap in a charged 18650.',
+            body: 'Clear snow, leaves, or shade from the 5 W panel. Below 3.15 V the node sends nothing and sleeps an hour at a time; below 3.30 V it sleeps at least 30 minutes between reports, or longer if its configured interval is longer. It recovers on its own once the pack charges 100 mV past those levels, or swap in a charged 18650.',
             capability: DEPLOY,
             screen: 'solar-kit',
             target: 'kit',
@@ -295,7 +296,7 @@ export const TUTORIAL_SECTIONS = [
           },
           {
             title: 'Correct a wrong battery reading',
-            body: 'If the percentage disagrees with a multimeter, measure the pack, connect a laptop at 115200 baud, and send `BATCAL` with the voltage in millivolts. Future readings are scaled to match.',
+            body: 'If the percentage disagrees with a multimeter, measure the pack, press PRG to wake the node, connect a laptop at 115200 baud, and send `BATCAL` with the voltage in millivolts. Future readings are scaled to match.',
             capability: DEPLOY,
             screen: 'battery-calibrate',
             target: 'terminal',

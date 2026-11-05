@@ -45,6 +45,17 @@ describe('tutorials by role', () => {
 });
 
 describe('practice screens', () => {
+  it('shows schedule management controls only to administrators', () => {
+    const { rerender } = render(<PracticeScreen screen="schedule" role={Role.STUDENT} />);
+    expect(screen.queryByText('Manage shifts')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'New shift' })).toBeNull();
+    expect(screen.queryByTestId('DeleteOutlinedIcon')).toBeNull();
+
+    rerender(<PracticeScreen screen="schedule" role={Role.ADMIN} />);
+    expect(screen.getByRole('button', { name: 'New shift' })).toBeTruthy();
+    expect(screen.getAllByTestId('DeleteOutlinedIcon')).toHaveLength(2);
+  });
+
   const steps = TUTORIAL_SECTIONS.flatMap((section) => section.tasks.flatMap((task) => task.steps));
 
   it('has a screen for every step and draws the spot each step points at', () => {

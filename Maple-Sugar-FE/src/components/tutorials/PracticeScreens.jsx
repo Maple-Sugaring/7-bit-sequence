@@ -25,7 +25,7 @@ import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import RouterOutlinedIcon from '@mui/icons-material/RouterOutlined';
 import UsbIcon from '@mui/icons-material/Usb';
 import tigerLogo from '../../assets/RITTigerTransparent.png';
-import { ROLE_LABELS } from '../../business/permissions';
+import { can, Capability, ROLE_LABELS } from '../../business/permissions';
 import { navItemsFor } from '../../routes/navigation';
 import { gatewayAccents } from '../../theme/tokens';
 import { NodeStatusChip } from '../common/NodeStatusChip';
@@ -358,7 +358,7 @@ function CollectionSavedScreen() {
 
 // ---- UI: Schedule ------------------------------------------------------------
 
-function ShiftCard({ title, where, pick = false, mine = false }) {
+function ShiftCard({ title, where, pick = false, mine = false, canManage }) {
   return (
     <Card variant="outlined" sx={{ flex: 1, minWidth: 0 }}>
       <CardContent sx={{ '&:last-child': { pb: 2 } }}>
@@ -366,7 +366,7 @@ function ShiftCard({ title, where, pick = false, mine = false }) {
           <Typography sx={{ fontWeight: 600 }}>{title}</Typography>
           <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
             {mine ? <Chip label="You" size="small" color="primary" /> : null}
-            <DeleteOutlineIcon fontSize="small" color="action" />
+            {canManage ? <DeleteOutlineIcon fontSize="small" color="action" /> : null}
           </Stack>
         </Stack>
         <Typography variant="body2" sx={{ my: 0.5 }}>{where}</Typography>
@@ -381,14 +381,27 @@ function ShiftCard({ title, where, pick = false, mine = false }) {
   );
 }
 
-function ScheduleScreen() {
+function ScheduleTitle({ canManage }) {
+  return (
+    <PageTitle
+      title="Schedule"
+      subtitle={canManage
+        ? 'Post, assign, complete, or delete shifts. Students claim open shifts from here too.'
+        : 'Claim a collection shift, or connect Google Calendar so claimed times land on your calendar.'}
+    />
+  );
+}
+
+function ScheduleScreen({ canManage }) {
   return (
     <>
-      <PageTitle title="Schedule" subtitle="Post, assign, complete, or delete shifts. Students claim open shifts from here too." />
-      <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
-        <Typography variant="h6" component="p">Manage shifts</Typography>
-        <Spot id="new-shift"><Button variant="contained" size="small" tabIndex={-1}>New shift</Button></Spot>
-      </Stack>
+      <ScheduleTitle canManage={canManage} />
+      {canManage ? (
+        <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+          <Typography variant="h6" component="p">Manage shifts</Typography>
+          <Spot id="new-shift"><Button variant="contained" size="small" tabIndex={-1}>New shift</Button></Spot>
+        </Stack>
+      ) : null}
       <Spot id="filters" sx={{ mb: 2 }}>
         <Card variant="outlined">
           <CardContent sx={{ '&:last-child': { pb: 2 } }}>
@@ -407,8 +420,8 @@ function ScheduleScreen() {
       </Spot>
       <Typography variant="h6" component="p" sx={{ mb: 1 }}>Needs a time</Typography>
       <Stack direction="row" spacing={1.5}>
-        <ShiftCard title="Sensor Check" where="Chabad House · waiting for a time" pick />
-        <ShiftCard title="Battery Swap" where="Red Barn · waiting for a time" />
+        <ShiftCard title="Sensor Check" where="Chabad House · waiting for a time" pick canManage={canManage} />
+        <ShiftCard title="Battery Swap" where="Red Barn · waiting for a time" canManage={canManage} />
       </Stack>
     </>
   );
@@ -420,7 +433,7 @@ function PickTimeScreen() {
       <CardContent>
         <Typography variant="h6" component="p">Pick a free time</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Sensor Check at Chabad House. Open windows come from your Google Calendar in Eastern time. Choosing one adds the collection to your calendar.
+          Sensor Check at Chabad House. These windows come from your connected Google Calendar and are shown in Eastern time. Choosing one claims the shift.
         </Typography>
         <Stack spacing={1}>
           <Button variant="outlined" tabIndex={-1} sx={{ justifyContent: 'flex-start' }}>Fri, Nov 6 · 8:00 – 10:00 AM</Button>
@@ -434,13 +447,13 @@ function PickTimeScreen() {
   );
 }
 
-function ShiftClaimedScreen() {
+function ShiftClaimedScreen({ canManage }) {
   return (
     <>
-      <PageTitle title="Schedule" subtitle="Post, assign, complete, or delete shifts. Students claim open shifts from here too." />
-      <Alert severity="success" sx={{ mb: 2 }}>Added to your Google Calendar.</Alert>
+      <ScheduleTitle canManage={canManage} />
+      <Alert severity="success" sx={{ mb: 2 }}>Shift claimed.</Alert>
       <Stack direction="row" spacing={1.5}>
-        <ShiftCard title="Sensor Check" where="Chabad House · Fri 10:00 AM – 12:00 PM" mine />
+        <ShiftCard title="Sensor Check" where="Chabad House · Fri 10:00 AM – 12:00 PM" mine canManage={canManage} />
       </Stack>
     </>
   );
@@ -558,7 +571,7 @@ function IntervalScreen() {
             <ReadOnlyField
               label="Seconds between packets"
               defaultValue="10"
-              helperText="10 for a live demo, 900 (15 min) in the field. Set it back when you finish calibrating."
+              helperText="Note the current interval first and restore it after calibration."
             />
           </Spot>
           <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
@@ -631,9 +644,9 @@ const SCREENS = {
   'node-online': { current: 'Deploy', render: () => <NodeOnlineScreen /> },
   collection: { current: 'Collection', render: () => <CollectionScreen /> },
   'collection-saved': { current: 'Collection', render: () => <CollectionSavedScreen /> },
-  schedule: { current: 'Schedule', render: () => <ScheduleScreen /> },
+  schedule: { current: 'Schedule', render: (role) => <ScheduleScreen canManage={can(role, Capability.MANAGE_SCHEDULE)} /> },
   'pick-time': { current: 'Schedule', render: () => <PickTimeScreen /> },
-  'shift-claimed': { current: 'Schedule', render: () => <ShiftClaimedScreen /> },
+  'shift-claimed': { current: 'Schedule', render: (role) => <ShiftClaimedScreen canManage={can(role, Capability.MANAGE_SCHEDULE)} /> },
   'new-shift': { current: 'Schedule', render: () => <NewShiftScreen /> },
   calibration: { current: 'The Bush', render: () => <CalibrationScreen state="idle" /> },
   'calibration-fault': { current: 'The Bush', render: () => <CalibrationScreen state="fault" /> },
@@ -681,7 +694,7 @@ const SCREENS = {
   },
   'battery-calibrate': {
     render: () => (
-      <Bench title="Correct the battery reading" subtitle="Measure the pack with a multimeter, then send that voltage in millivolts.">
+      <Bench title="Correct the battery reading" subtitle="Measure the pack with a multimeter. Wake the node with PRG, then send that voltage in millivolts.">
         <Terminal
           lines={[
             ['in', 'BATCAL 3712'], ['out', 'BATCAL ok factor=1.052'],
@@ -700,9 +713,9 @@ export function PracticeScreen({ screen, target, role }) {
   return (
     <SpotContext.Provider value={target}>
       {entry.current ? (
-        <AppChrome role={role} current={entry.current}>{entry.render()}</AppChrome>
+        <AppChrome role={role} current={entry.current}>{entry.render(role)}</AppChrome>
       ) : (
-        entry.render()
+        entry.render(role)
       )}
     </SpotContext.Provider>
   );
