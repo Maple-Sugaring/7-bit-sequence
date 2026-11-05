@@ -9,13 +9,14 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { ROLE_LABELS } from '../../business/permissions';
 import { entriesInWeek, weekLabel, weekStart } from '../../business/weekWindows';
+import { accent, neutral, ritOrange, white } from '../../theme/ritColors';
 import { dateTime } from '../common/format';
 
 /** Each role's tag colour on a collection, so a glance tells who filed it. */
 const ROLE_CHIP_COLORS = {
-  Admin: 'warning',
-  Student: 'success',
-  MSS: 'secondary',
+  Admin: { backgroundColor: ritOrange, color: neutral.black },
+  Student: { backgroundColor: accent.green, color: neutral.black },
+  MSS: { backgroundColor: accent.purple, color: white },
 };
 
 /**
@@ -59,7 +60,7 @@ export function CollectionHistory({ entries, loading, error }) {
                   {entry.Title}
                 </Typography>
                 {ROLE_LABELS[entry.Submitted_Role] ? (
-                  <Chip label={ROLE_LABELS[entry.Submitted_Role]} size="small" color={ROLE_CHIP_COLORS[entry.Submitted_Role] ?? 'default'} />
+                  <Chip label={ROLE_LABELS[entry.Submitted_Role]} size="small" sx={ROLE_CHIP_COLORS[entry.Submitted_Role]} />
                 ) : null}
                 {entry.Round_Label ? <Chip label={entry.Round_Label} size="small" variant="outlined" /> : null}
                 {entry.Ice_Present ? <Chip label="Ice" size="small" color="info" /> : null}

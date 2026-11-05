@@ -2,8 +2,10 @@
 import { cleanup, render, screen, within } from '@testing-library/react';
 import dayjs from 'dayjs';
 import { afterEach, describe, expect, it } from 'vitest';
+import { ThemeProvider } from '@mui/material/styles';
 import { CollectionHistory } from '../src/components/collection/CollectionHistory';
 import { request } from '../src/data/transports/mockTransport';
+import * as appThemes from '../src/theme/ritTheme';
 
 afterEach(cleanup);
 
@@ -40,6 +42,23 @@ describe('collection role tags', () => {
     render(<CollectionHistory entries={[entry(4, null, 'Someone')]} loading={false} />);
     const card = within(screen.getByRole('heading', { name: 'Collected Tree 4' }).closest('.MuiCard-root'));
     for (const label of ['Student', 'Administrator', 'MSS Member']) expect(card.queryByText(label)).toBeNull();
+  });
+
+  it.each(Object.values(appThemes).filter((theme) => theme?.palette).map((theme) => [theme.palette.mode, theme]))('uses orange, green, and purple role identifiers in %s mode', (_mode, theme) => {
+    render(
+      <ThemeProvider theme={theme}>
+        <CollectionHistory entries={[entry(1, 'Admin', 'Tom'), entry(2, 'Student', 'Maya'), entry(3, 'MSS', 'Sofia')]} loading={false} />
+      </ThemeProvider>,
+    );
+    for (const [label, background, foreground] of [
+      ['Administrator', 'rgb(247, 105, 2)', 'rgb(0, 0, 0)'],
+      ['Student', 'rgb(132, 189, 0)', 'rgb(0, 0, 0)'],
+      ['MSS Member', 'rgb(125, 85, 199)', 'rgb(255, 255, 255)'],
+    ]) {
+      const style = getComputedStyle(screen.getByText(label).closest('.MuiChip-root'));
+      expect(style.backgroundColor).toBe(background);
+      expect(style.color).toBe(foreground);
+    }
   });
 
   it('stamps a submitted collection with the submitter\'s role in the mock API', async () => {
