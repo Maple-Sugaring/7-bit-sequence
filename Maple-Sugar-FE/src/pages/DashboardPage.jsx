@@ -22,6 +22,7 @@ import { SiteForecastFigure } from '../components/charts/SeriesChart';
 import { FleetMapCard } from '../components/map/FleetMapCard';
 import { NodeStatusChip } from '../components/common/NodeStatusChip';
 import { MeterBar } from '../components/common/MeterBar';
+import { batteryMeterColor, bucketMeterColor } from '../components/common/meterColors';
 import { PageHeader } from '../components/common/PageHeader';
 import { FieldOverview } from '../components/layout/FieldOverview';
 import { useAuth } from '../context/auth';
@@ -142,7 +143,7 @@ export function DashboardPage() {
                         value={node.Battery_Percent == null ? '—' : `${Math.round(node.Battery_Percent)}%`}
                         percent={node.Battery_Percent ?? 0}
                         detail={node.Battery_Percent == null ? 'No report' : 'Charge on the node pack'}
-                        color={node.Battery_Percent < 20 ? '#c62828' : '#2e7d32'}
+                        color={batteryMeterColor(node.Battery_Percent)}
                       />
                       <Meter
                         label="Bucket"
@@ -155,7 +156,7 @@ export function DashboardPage() {
                               ? `${gallons.toFixed(1)} gal · past 10 gal because the sap froze`
                               : `${gallons.toFixed(1)} of 10 gal`
                         }
-                        color={(fill ?? 0) >= 90 ? '#ed6c02' : '#F76902'}
+                        color={bucketMeterColor(fill)}
                       />
                       <Typography variant="body2" sx={{ mt: 1.5 }}>
                         Sugar {node.Sugar_Percent == null ? '— not recorded' : `${node.Sugar_Percent}% Brix`}

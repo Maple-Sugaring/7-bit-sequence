@@ -5,9 +5,11 @@ import { TopBar } from './TopBar';
 import { AppNavigation } from './AppNavigation';
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import { useColorModeInShell } from '../../theme/colorMode';
 import '../../css/App.css';
 
 export function AppShell() {
+  useColorModeInShell();
   const { pathname } = useLocation();
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });

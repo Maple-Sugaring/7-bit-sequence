@@ -69,7 +69,7 @@ function DetailsCard({ profile, onSaved }) {
     <Card component="form" onSubmit={submit} noValidate>
       <CardContent>
         <Stack direction="row" spacing={2} sx={{ alignItems: 'center', mb: 3 }}>
-          <Avatar sx={{ bgcolor: '#F76902', width: 56, height: 56, fontWeight: 700 }}>
+          <Avatar sx={{ bgcolor: 'primary.main', width: 56, height: 56, fontWeight: 700 }}>
             {initials(profile)}
           </Avatar>
           <Box sx={{ minWidth: 0 }}>

@@ -1,5 +1,17 @@
 /* Mobile is the base layout. Wide screens use a sidebar. */
 [data-tour-active="true"] .mobile-nav { display: none; }
+
+/* Color variables come from src/theme/tokens.js, through the MUI theme. */
+:root[data-color-mode="dark"] {
+  color-scheme: dark;
+}
+
+/* index.css sets a light body, and this wins regardless of stylesheet order. */
+:root[data-color-mode="dark"] body {
+  background: var(--surface-page);
+  color: var(--ink);
+}
+
 html {
   /* UPDATED to helvetica neue to match closer to RIT branding guidelines */
   font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -23,10 +35,6 @@ html, body, #root {
 .layout {
   --header-height: 56px;
   --sidebar-width: 224px;
-  --ink: #24241f;
-  --muted: #69675f;
-  --line: #e2ddd7;
-  --orange-dark: #a34300;
   flex: 1;
 }
 
@@ -35,8 +43,8 @@ html, body, #root {
   top: 0;
   z-index: 1200;
   min-height: var(--header-height);
-  background: #20221e;
-  border-bottom: 2px solid #f76902;
+  background: var(--topbar-bg);
+  border-bottom: 2px solid var(--brand-orange);
   padding-top: env(safe-area-inset-top);
 }
 
@@ -46,7 +54,7 @@ html, body, #root {
   display: flex;
   align-items: center;
   gap: 4px;
-  color: #fff;
+  color: var(--topbar-ink);
   text-decoration: none;
   font-size: 14px;
   font-weight: 700;
@@ -67,8 +75,8 @@ html, body, #root {
 }
 
 .brand-mark {
-  background: #f76902;
-  color: #20221e;
+  background: var(--brand-orange);
+  color: var(--topbar-bg);
   width: 36px;
   height: 40px;
   border-radius: 12px;
@@ -79,7 +87,7 @@ html, body, #root {
 
 .brand-caption {
   display: none;
-  color: #c3c6bc;
+  color: var(--topbar-muted);
   font-size: 9px;
   letter-spacing: 1.5px;
   font-weight: 500;
@@ -95,8 +103,8 @@ html, body, #root {
 
 .demo-badge {
   font-size: 10px;
-  color: #fbd8bb;
-  border: 1px solid #76634d;
+  color: var(--badge-ink);
+  border: 1px solid var(--badge-line);
   border-radius: 6px;
   padding: 3px 5px;
 }
@@ -104,7 +112,7 @@ html, body, #root {
 .main-content {
   flex: 1;
   min-width: 0;
-  background: #f6f3f0;
+  background: var(--surface-page);
   padding: 24px 16px 32px;
 }
 
@@ -138,7 +146,7 @@ html, body, #root {
 }
 
 .page-header-subtitle {
-  color: #69675f;
+  color: var(--muted);
   font-size: 14px;
   line-height: 1.6;
   margin: 0;
@@ -178,8 +186,8 @@ html, body, #root {
 }
 
 .page-main {
-  background: #fff;
-  color: #000;
+  background: var(--surface);
+  color: var(--ink);
 }
 
 .app-sidebar {
@@ -194,10 +202,10 @@ html, body, #root {
   right: 0;
   display: flex;
   justify-content: space-around;
-  background: #fff;
+  background: var(--surface);
   border-top: 1px solid var(--line);
   padding: 6px max(6px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
-  box-shadow: 0 -4px 24px #24241f08;
+  box-shadow: 0 -4px 24px var(--nav-shadow);
 }
 
 .mobile-nav > a, .mobile-nav > button {
@@ -209,7 +217,7 @@ html, body, #root {
   justify-content: center;
   flex-direction: column;
   gap: 3px;
-  color: #69675f;
+  color: var(--muted);
   background: none;
   border: 0;
   font: inherit;
@@ -237,18 +245,18 @@ html, body, #root {
 }
 
 .mobile-nav [aria-current="page"] .mobile-nav-icon, .mobile-nav .is-active .mobile-nav-icon {
-  background: #fff0e3;
+  background: var(--accent-soft);
 }
 
 .mobile-nav > :hover .mobile-nav-icon {
-  background: #f6f3f0;
+  background: var(--surface-page);
 }
 
 .page-link {
   display: flex;
   align-items: center;
   gap: 12px;
-  color: #57594f;
+  color: var(--nav-ink);
   text-decoration: none;
   border-radius: 12px;
   padding: 12px;
@@ -258,12 +266,12 @@ html, body, #root {
 }
 
 .page-link:hover {
-  background: #f2eee8;
+  background: var(--surface-hover);
 }
 
 .page-link[aria-current="page"] {
-  color: #a34300;
-  background: #fff0e3;
+  color: var(--orange-dark);
+  background: var(--accent-soft);
 }
 
 .nav-icon {
@@ -286,16 +294,16 @@ html, body, #root {
   flex-direction: column;
   gap: 10px;
   padding: 16px;
-  border: 1px solid #e2ddd7;
+  border: 1px solid var(--line);
 }
 
 .page-tiles .nav-icon {
-  color: #a34300;
+  color: var(--orange-dark);
 }
 
 .nav-description {
   display: block;
-  color: #69675f;
+  color: var(--muted);
   font-size: 12px;
   font-weight: 400;
   line-height: 1.4;
@@ -305,7 +313,7 @@ html, body, #root {
 .sheet-handle {
   width: 36px;
   height: 4px;
-  background: #d6d4cd;
+  background: var(--handle);
   border-radius: 4px;
   margin: 0 auto 12px;
 }
@@ -327,23 +335,23 @@ html, body, #root {
 
 .sheet-heading p {
   margin: 4px 0 0;
-  color: #69675f;
+  color: var(--muted);
   font-size: 14px;
 }
 
 .sheet-utilities {
   margin-top: 16px;
-  border-top: 1px solid #e2ddd7;
+  border-top: 1px solid var(--line);
   padding-top: 12px;
 }
 
 a:focus-visible, button:focus-visible {
-  outline: 3px solid #a34300;
+  outline: 3px solid var(--orange-dark);
   outline-offset: 3px;
 }
 
 .app-topbar a:focus-visible, .app-topbar button:focus-visible {
-  outline-color: #ffae71;
+  outline-color: var(--topbar-focus);
 }
 
 .skip-link {
@@ -351,8 +359,8 @@ a:focus-visible, button:focus-visible {
   left: 16px;
   top: -100px;
   z-index: 1500;
-  background: #fff;
-  color: #24241f;
+  background: var(--surface);
+  color: var(--ink);
   padding: 12px 20px;
   border-radius: 8px;
 }
@@ -366,17 +374,17 @@ a:focus-visible, button:focus-visible {
 }
 
 .field-summary {
-  border: 1px solid #d5ddce;
+  border: 1px solid var(--field-line);
   border-radius: 20px;
   padding: 20px;
-  background: #eaf0e3;
+  background: var(--field-bg);
 }
 
 .field-eyebrow {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #4e6341;
+  color: var(--field-eyebrow);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 1.3px;
@@ -384,7 +392,7 @@ a:focus-visible, button:focus-visible {
 }
 
 .field-summary h2 {
-  color: #263520;
+  color: var(--field-ink);
   font-size: 24px;
   line-height: 1.2;
   letter-spacing: -0.7px;
@@ -393,7 +401,7 @@ a:focus-visible, button:focus-visible {
 }
 
 .field-summary p {
-  color: #506247;
+  color: var(--field-muted);
   font-size: 14px;
   line-height: 1.5;
   margin: 0;
@@ -408,13 +416,13 @@ a:focus-visible, button:focus-visible {
 
 .field-stat strong {
   display: block;
-  color: #263520;
+  color: var(--field-ink);
   font-size: 28px;
   letter-spacing: -1px;
 }
 
 .field-stat span {
-  color: #506247;
+  color: var(--field-muted);
   font-size: 11px;
 }
 
@@ -430,29 +438,29 @@ a:focus-visible, button:focus-visible {
   align-items: center;
   gap: 10px;
   min-height: 70px;
-  border: 1px solid #e2ddd7;
+  border: 1px solid var(--line);
   border-radius: 16px;
-  background: #fff;
+  background: var(--surface);
   padding: 12px;
-  color: #24241f;
+  color: var(--ink);
   text-decoration: none;
   font-size: 13px;
   font-weight: 600;
 }
 
 .quick-action:hover {
-  border-color: #b04b00;
-  background: #fff8f2;
+  border-color: var(--hover-border);
+  background: var(--accent-hover);
 }
 
 .quick-action svg {
   flex-shrink: 0;
-  color: #a34300;
+  color: var(--orange-dark);
 }
 
 .quick-action small {
   display: block;
-  color: #69675f;
+  color: var(--muted);
   font-size: 11px;
   font-weight: 400;
   margin-top: 3px;
@@ -476,7 +484,7 @@ a:focus-visible, button:focus-visible {
 
 .section-heading span {
   font-size: 12px;
-  color: #69675f;
+  color: var(--muted);
 }
 
 .main-content:focus {
@@ -522,12 +530,12 @@ a:focus-visible, button:focus-visible {
     display: flex;
     flex-direction: column;
     padding: 28px 16px 24px;
-    background: #fffdf9;
+    background: var(--surface-sidebar);
     border-right: 1px solid var(--line);
     overflow-y: auto;
   }
   .sidebar-heading {
-    color: #77776f;
+    color: var(--sidebar-muted);
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 1.3px;
@@ -535,7 +543,7 @@ a:focus-visible, button:focus-visible {
   }
   .sidebar-heading span {
     display: block;
-    color: #33392e;
+    color: var(--sidebar-ink);
     font-size: 14px;
     letter-spacing: 0;
     margin-top: 6px;
@@ -553,13 +561,13 @@ a:focus-visible, button:focus-visible {
   .sidebar-note {
     margin-top: auto;
     padding: 32px 12px 0;
-    color: #77776f;
+    color: var(--sidebar-muted);
     font-size: 12px;
     line-height: 1.7;
   }
   .sidebar-note strong {
     font-weight: 500;
-    color: #33392e;
+    color: var(--sidebar-ink);
   }
   .main-content, .layout > footer {
     margin-left: var(--sidebar-width);
@@ -600,3 +608,16 @@ a:focus-visible, button:focus-visible {
 }
 
 [data-tour-active] { overflow-anchor: none; }
+
+/* Recharts and Leaflet paint light colors of their own, some of them inline. */
+:root[data-color-mode="dark"] .recharts-cartesian-axis-tick-value { fill: var(--muted); }
+:root[data-color-mode="dark"] .recharts-default-tooltip {
+  background: var(--surface) !important;
+  border-color: var(--line) !important;
+}
+:root[data-color-mode="dark"] .leaflet-popup-content-wrapper,
+:root[data-color-mode="dark"] .leaflet-popup-tip {
+  background: var(--surface);
+  color: var(--ink);
+}
+:root[data-color-mode="dark"] .footer-logo { filter: brightness(0) invert(1); }
