@@ -204,6 +204,11 @@ function authorName(user) {
   return user ? `${user.First_Name} ${user.Last_Name}`.trim() : null;
 }
 
+/** The author's role when they submitted, matching the backend's stored tag. */
+function submittedRole(user) {
+  return user ? roleFromId(user.RoleID) : null;
+}
+
 const routes = [
   // ---- Auth -------------------------------------------------------------
   {
@@ -381,6 +386,7 @@ const routes = [
         EntryID: nextId.journal++,
         UserID: user?.UserID ?? null,
         Author: authorName(user),
+        Submitted_Role: submittedRole(user),
         NodeID: node.NodeID,
         Node_Name: node.Node_Name,
         BucketID: bucket?.BucketID ?? null,
@@ -736,6 +742,7 @@ const routes = [
         EntryID: nextId.journal++,
         UserID: user.UserID,
         Author: authorName(user),
+        Submitted_Role: submittedRole(user),
         NodeID: node.NodeID,
         Node_Name: node.Node_Name,
         BucketID: bucket?.BucketID ?? null,
@@ -1008,6 +1015,7 @@ const routes = [
         EntryID: nextId.journal++,
         UserID: user?.UserID ?? null,
         Author: authorName(user),
+        Submitted_Role: submittedRole(user),
         NodeID: node?.NodeID ?? null,
         Node_Name: node?.Node_Name ?? null,
         BucketID: body?.BucketID ? Number(body.BucketID) : null,

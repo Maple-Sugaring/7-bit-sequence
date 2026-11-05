@@ -26,13 +26,14 @@ function mapEntry(row) {
     Sugar_Percent: num(row.sugar_percent),
     Ice_Present: Boolean(row.ice_present),
     Round_Label: row.round_label ?? null,
+    Submitted_Role: row.submitted_role ?? null,
   };
 }
 
 const SELECT = `
   select j.id, j.user_id, j.node_id, j.bucket_id, j.collected_at, j.title,
          j.process_notes, j.weight_lb, j.sugar_percent, j.ice_present,
-         j.round_label,
+         j.round_label, j.submitted_role,
          u.full_name as author_name,
          n.node_name
     from collection_journal j
@@ -63,8 +64,8 @@ export async function createEntry(entry, client = null) {
     client,
     `insert into collection_journal
        (user_id, node_id, bucket_id, collected_at, title, process_notes,
-        weight_lb, sugar_percent, ice_present, round_label, client_ref)
-     values ($1, $2, $3, coalesce($4, CURRENT_TIMESTAMP), $5, $6, $7, $8, $9, $10, $11)
+        weight_lb, sugar_percent, ice_present, round_label, client_ref, submitted_role)
+     values ($1, $2, $3, coalesce($4, CURRENT_TIMESTAMP), $5, $6, $7, $8, $9, $10, $11, $12)
      returning id`,
     [
       entry.UserID,
@@ -78,6 +79,7 @@ export async function createEntry(entry, client = null) {
       Boolean(entry.Ice_Present),
       entry.Round_Label ?? null,
       entry.Client_Ref ?? null,
+      entry.Submitted_Role ?? null,
     ],
   );
   const saved = await queryOneOn(client, `${SELECT} where j.id = $1`, [row.id]);
