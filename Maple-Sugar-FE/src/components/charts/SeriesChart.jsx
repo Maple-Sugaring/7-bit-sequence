@@ -27,9 +27,8 @@ import {
  *   default. Series colors only need 3:1 as graphics, but text needs 4.5:1,
  *   so all chart text is drawn in dark neutral and the swatch carries the color.
  * - 1.4.11: every line/bar color below is >= 3:1 against the white card.
- * - 1.1.1 / 4.1.2: accessibilityLayer={false} stops Recharts adding
- *   role="application" + tabindex to the SVG. Wrap charts in <AccessibilityChartWrapper>
- *   (see SiteForecastFigure) for the accessible name, summary and table.
+ * - Bare charts retain Recharts keyboard navigation. Figure wrappers provide
+ *   a named image, summary and data table, and disable the redundant keyboard layer.
  */
 const CHART_TEXT = neutral.black;
 const TICK = { fontSize: 12, fill: '#4A4A4A' }; // 8.86:1 on white
@@ -60,7 +59,7 @@ function tipLabel(value) {
 export function DailyTemperatureChart({ rows }) {
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <LineChart accessibilityLayer={false} data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+      <LineChart data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
         <CartesianGrid stroke="#D0D3D4" vertical={false} />
         <XAxis dataKey="Date" tickFormatter={dateTick} minTickGap={28} tick={TICK} />
         <YAxis width={48} unit="°" tick={TICK} />
@@ -80,12 +79,12 @@ function weightTick(unit) {
   return 'MMM D';
 }
 
-export function WeightChart({ rows, series, unit = 'day' }) {
+export function WeightChart({ rows, series, unit = 'day', accessibilityLayer = true }) {
   const format = weightTick(unit);
   const tick = (value) => dayjs(value).format(format);
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <LineChart accessibilityLayer={false} data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+      <LineChart accessibilityLayer={accessibilityLayer} data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
         <CartesianGrid stroke="#D0D3D4" vertical={false} />
         <XAxis dataKey="Date" tickFormatter={tick} minTickGap={28} tick={TICK} />
         <YAxis
@@ -130,7 +129,7 @@ export function WeightChart({ rows, series, unit = 'day' }) {
 export function DailyFlowChart({ rows }) {
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <BarChart accessibilityLayer={false} data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+      <BarChart data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
         <CartesianGrid stroke="#D0D3D4" vertical={false} />
         <XAxis dataKey="Date" tickFormatter={dateTick} minTickGap={28} tick={TICK} />
         <YAxis width={48} unit=" gal" tick={TICK} />
@@ -144,7 +143,7 @@ export function DailyFlowChart({ rows }) {
 export function DailySugarChart({ rows }) {
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <LineChart accessibilityLayer={false} data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+      <LineChart data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
         <CartesianGrid stroke="#D0D3D4" vertical={false} />
         <XAxis dataKey="Date" tickFormatter={dateTick} minTickGap={28} tick={TICK} />
         <YAxis width={48} unit="%" domain={[0, 4]} tick={TICK} />
@@ -163,10 +162,10 @@ export function DailySugarChart({ rows }) {
   );
 }
 
-export function SiteForecastChart({ rows }) {
+export function SiteForecastChart({ rows, accessibilityLayer = true }) {
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <ComposedChart accessibilityLayer={false} data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+      <ComposedChart accessibilityLayer={accessibilityLayer} data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
         <CartesianGrid stroke="#D0D3D4" vertical={false} />
         <XAxis dataKey="Date" tickFormatter={dateTick} tick={TICK} />
         <YAxis yAxisId="temp" width={40} unit="°" tick={TICK} />
@@ -220,7 +219,7 @@ export function SiteForecastFigure({ rows, height = 240 }) {
       rows={rows}
       height={height}
     >
-      <SiteForecastChart rows={rows} />
+      <SiteForecastChart rows={rows} accessibilityLayer={false} />
     </AccessibilityChartWrapper>
   );
 }
@@ -242,7 +241,7 @@ const TREE_COLORS = [
 export function OverlayChart({ rows, flowSeries, tempSeries }) {
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <ComposedChart accessibilityLayer={false} data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+      <ComposedChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
         <CartesianGrid stroke="#D0D3D4" vertical={false} />
         <XAxis dataKey="Date" tickFormatter={dateTick} minTickGap={24} tick={TICK} />
         <YAxis yAxisId="flow" width={48} unit=" gal" tick={TICK} />
@@ -281,10 +280,10 @@ export function OverlayChart({ rows, flowSeries, tempSeries }) {
   );
 }
 
-export function TreeCompareChart({ rows, series }) {
+export function TreeCompareChart({ rows, series, accessibilityLayer = true }) {
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <LineChart accessibilityLayer={false} data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+      <LineChart accessibilityLayer={accessibilityLayer} data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
         <CartesianGrid stroke="#D0D3D4" vertical={false} />
         <XAxis dataKey="Date" tickFormatter={dateTick} minTickGap={28} tick={TICK} />
         <YAxis width={48} tick={TICK} />
@@ -374,7 +373,7 @@ export function WeightFigure({
       rows={rows}
       height={height}
     >
-      <WeightChart rows={rows} series={series} unit={unit} />
+      <WeightChart rows={rows} series={series} unit={unit} accessibilityLayer={false} />
     </AccessibilityChartWrapper>
   );
 }
@@ -409,7 +408,7 @@ export function TreeCompareFigure({
       rows={rows}
       height={height}
     >
-      <TreeCompareChart rows={rows} series={series} />
+      <TreeCompareChart rows={rows} series={series} accessibilityLayer={false} />
     </AccessibilityChartWrapper>
   );
 }
