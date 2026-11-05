@@ -371,6 +371,7 @@ export async function deleteNode(id) {
     await client.query('delete from collection_journal where node_id = $1', [id]);
     await client.query('delete from collection_logs where node_id = $1', [id]);
     await client.query('delete from alerts where node_id = $1', [id]);
+    await client.query('delete from metric_aggregates where node_id = $1', [id]);
     await client.query('delete from metrics where node_id = $1', [id]);
     await client.query('delete from buckets where node_id = $1', [id]);
     await client.query('delete from node where id = $1', [id]);

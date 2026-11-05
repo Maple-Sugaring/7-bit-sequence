@@ -371,6 +371,19 @@ describe('POST /ingest', () => {
     assert.equal(state.touches.length, 1);
   });
 
+  test('rejects a sample older than the raw retention window so a compacted reading is not counted twice', async () => {
+    reset();
+    const response = await send({
+      Gateway_Code: 'GW-ALUMNI',
+      Readings: [{ ...reading, Recorded_At: '2020-01-01T00:00:00.000Z' }],
+    });
+
+    assert.equal(response.status, 422);
+    assert.match(response.json.details.Rejected[0].message, /raw retention window/);
+    assert.ok(response.json.details.Rejected[0].details.Recorded_At);
+    assert.equal(state.created.length, 0);
+  });
+
   test('hands a waiting calibration to the Pi and marks it sent', async () => {
     reset();
     state.command = { id: 31, node_id: 1, action: 'calibrate', pounds: '10.000', status: 'pending' };

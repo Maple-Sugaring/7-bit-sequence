@@ -1,5 +1,6 @@
-import { queryAll, queryOne, queryOneOn } from '../db/pool.js';
+import { queryAll, queryOne, queryOneOn, transaction } from '../db/pool.js';
 import { mapMetric } from './mappers.js';
+import { listAggregates } from './metricAggregatesRepository.js';
 
 const METRIC_COLUMNS = `
   id,
@@ -12,7 +13,9 @@ const METRIC_COLUMNS = `
   sugar_percent,
   weather_conditions,
   ice_present,
-  sap_flow_rate_lph
+  sap_flow_rate_lph,
+  corrected_at,
+  corrected_by_user_id
 `;
 
 /**
@@ -22,8 +25,28 @@ const METRIC_COLUMNS = `
  * `season` goes through the indexed sap_season() expression from migration 002
  * rather than a range on recorded_at, so the season boundary rule lives in
  * exactly one place.
+ *
+ * Periods the retention job compacted (BRU-007) come back as one averaged row
+ * per node, bucket and hour (`Aggregated: true`), so season comparisons and
+ * exports still see older years. Pass `aggregates: false` for raw rows only.
  */
-export async function listMetrics({ nodeId, season, from, to } = {}) {
+export async function listMetrics({ nodeId, season, from, to, aggregates = true } = {}) {
+  const filters = { nodeId, season, from, to };
+  if (!aggregates) return listRawMetrics(filters);
+
+  // Both tables must use one snapshot: compaction between these reads would
+  // otherwise return the same samples once raw and again as an aggregate.
+  return transaction(async (client) => {
+    await client.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const raw = await listRawMetrics(filters, client);
+    const compacted = await listAggregates(filters, client);
+    return [...raw, ...compacted].sort(
+      (a, b) => new Date(b.Recorded_At) - new Date(a.Recorded_At) || (b.MetricID ?? 0) - (a.MetricID ?? 0),
+    );
+  });
+}
+
+async function listRawMetrics({ nodeId, season, from, to }, client = null) {
   const conditions = [];
   const values = [];
 
@@ -46,10 +69,8 @@ export async function listMetrics({ nodeId, season, from, to } = {}) {
 
   const where = conditions.length ? `where ${conditions.join(' and ')}` : '';
 
-  const rows = await queryAll(
-    `select ${METRIC_COLUMNS} from metrics ${where} order by recorded_at desc, id desc`,
-    values,
-  );
+  const sql = `select ${METRIC_COLUMNS} from metrics ${where} order by recorded_at desc, id desc`;
+  const rows = client ? (await client.query(sql, values)).rows : await queryAll(sql, values);
   return rows.map(mapMetric);
 }
 
@@ -130,7 +151,12 @@ const WRITABLE_METRIC_COLUMNS = {
   Ice_Present: 'ice_present',
 };
 
-export async function updateMetric(id, changes) {
+/**
+ * Stamps who corrected the reading and when. The retention job never folds a
+ * corrected row into an aggregate, so the correction stays visible as its own
+ * row with its provenance.
+ */
+export async function updateMetric(id, changes, correctedByUserId = null) {
   const assignments = [];
   const values = [id];
 
@@ -142,6 +168,9 @@ export async function updateMetric(id, changes) {
   }
 
   if (!assignments.length) return findMetricById(id);
+
+  values.push(correctedByUserId);
+  assignments.push('corrected_at = CURRENT_TIMESTAMP', `corrected_by_user_id = $${values.length}`);
 
   const row = await queryOne(
     `update metrics set ${assignments.join(', ')} where id = $1 returning ${METRIC_COLUMNS}`,

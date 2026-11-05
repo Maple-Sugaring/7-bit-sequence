@@ -20,11 +20,25 @@
 
 `createMetric` validates with `business/validation.js`, confirms the node exists, inserts the row with the session user id, then `deriveAlerts`. Alert failures are logged and do not roll back the reading.
 
-`updateMetric` re-validates the merged row. `NodeID` is not writable.
+`updateMetric` re-validates the merged row. `NodeID` is not writable. It stamps `corrected_at` and `corrected_by_user_id`.
+
+`listMetrics` returns raw rows and hourly aggregates merged newest first, read in one repeatable-read snapshot so concurrent compaction cannot duplicate samples. `rollupMetrics` returns weighted averages per local period over both, keeping the two occurrences of a fall-back hour separate.
+
+## `metricRetention` (BRU-007)
+
+`runRetention({ trigger, userId, dryRun, now })` folds eligible sensor readings older than the cutoff into `metric_aggregates`. Housekeeping runs it 5 minutes after boot and then every 6 hours. Admins can also start it with `POST /metrics/retention/run`.
+
+- **One run at a time.** The job takes the `pg_try_advisory_lock` on a dedicated connection. A second replica or request gets `skipped` (HTTP 409) and does not wait.
+- **Atomic per day.** Each UTC day is one statement, `with moved as (delete … returning …) insert … on conflict do update`, so the delete and the aggregate write commit together or not at all. Run progress is updated in the same transaction.
+- **Idempotent.** A re-run finds nothing eligible and does nothing. Late rows for an hour that is already compacted are added into that hour's counts, sums, minimums and maximums.
+- **Recovers from interruption.** A run still marked `running` when the lock is free was cut off. The next run marks it `interrupted` and continues from the first day that was not committed.
+- **Cache.** The `metrics:` and `dashboard:` namespaces are cleared when any rows moved.
+
+`storageReport()` returns the policy, row counts (raw, manual, corrected, eligible, aggregated, readings represented), `pg_total_relation_size` of both tables, `Estimated_Bytes_Saved` and `Compression_Ratio`. The saving is an estimate: (readings compacted × current raw bytes per row) − aggregate bytes. It is `null` when the raw table is empty, because there is no row to measure.
 
 ## `ingestService`
 
-`ingestReadings` is the Raspberry Pi path. It resolves `Gateway_Code`, stamps `gateway.last_ping`, then stores each sample through `createMetric` with a null user id. The node's bucket is filled in from `buckets`. The same node and `Recorded_At` returns the existing metric instead of inserting. Battery, RSSI, and `last_seen` update on the node; status becomes online unless the node is in maintenance. A sample for an unknown node, or a node on another gateway, is listed in `Rejected` and does not fail the rest of the batch. Domain checks are the same `validateReading` rules as a manual entry, except temperature is forced null. Air temperature comes from OpenWeather, not the node.
+`ingestReadings` is the Raspberry Pi path. It resolves `Gateway_Code`, stamps `gateway.last_ping`, then stores each sample through `createMetric` with a null user id. The node's bucket is filled in from `buckets`. The same node and `Recorded_At` returns the existing metric instead of inserting. Battery, RSSI, and `last_seen` update on the node; status becomes online unless the node is in maintenance. A sample for an unknown node, or a node on another gateway, is listed in `Rejected` and does not fail the rest of the batch. Domain checks are the same `validateReading` rules as a manual entry, except temperature is forced null. Air temperature comes from OpenWeather, not the node. A sample older than the raw retention cutoff is rejected, because its hour may already be compacted.
 
 ## `weatherService`
 

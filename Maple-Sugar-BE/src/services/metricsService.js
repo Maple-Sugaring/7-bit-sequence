@@ -8,6 +8,7 @@ import { logger } from '../lib/logger.js';
 import { validateReading } from '../business/validation.js';
 import { deriveAlerts } from '../business/alerting.js';
 import * as metricsRepository from '../repositories/metricsRepository.js';
+import * as metricAggregatesRepository from '../repositories/metricAggregatesRepository.js';
 import * as nodesRepository from '../repositories/nodesRepository.js';
 import * as alertsRepository from '../repositories/alertsRepository.js';
 import { cacheKeys, cacheNamespaces, hashFilters, TTL } from '../cache/cacheKeys.js';
@@ -18,6 +19,13 @@ export async function listMetrics(filters) {
   // same query under the same name.
   return readThrough(cacheKeys.metricsList(hashFilters(filters)), TTL.METRICS, () =>
     metricsRepository.listMetrics(filters),
+  );
+}
+
+/** Weighted per-period averages across raw and compacted readings (BRU-007). */
+export async function rollupMetrics(filters) {
+  return readThrough(cacheKeys.metricsList(`rollup:${hashFilters(filters)}`), TTL.METRICS, () =>
+    metricAggregatesRepository.rollup(filters),
   );
 }
 
@@ -94,7 +102,7 @@ export async function createMetric(input, recordedByUserId) {
   return reading;
 }
 
-export async function updateMetric(id, changes) {
+export async function updateMetric(id, changes, correctedByUserId = null) {
   const existing = await metricsRepository.findMetricById(id);
   if (!existing) throw notFound('Reading');
 
@@ -102,7 +110,7 @@ export async function updateMetric(id, changes) {
   const { errors, isValid } = validateReading(merged);
   if (!isValid) throw invalid('Some fields need attention.', errors);
 
-  const updated = await metricsRepository.updateMetric(id, changes);
+  const updated = await metricsRepository.updateMetric(id, changes, correctedByUserId);
   await invalidateNamespaces([cacheNamespaces.METRICS, cacheNamespaces.DASHBOARD]);
 
   return updated;

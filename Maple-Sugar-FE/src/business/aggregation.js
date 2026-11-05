@@ -43,8 +43,33 @@ function numeric(rows, field) {
   return rows.map((row) => row[field]).filter((value) => value != null && Number.isFinite(value));
 }
 
+const SOURCE_FIELD = { netWeight: 'Weight', gallons: 'Weight', fillPercent: 'Weight' };
+
+export function samplesIn(row, field) {
+  const aggregate = row?.Aggregate;
+  if (!aggregate) return 1;
+  const counts = aggregate.Counts ?? {};
+  const source = SOURCE_FIELD[field] ?? field;
+  return counts[source] ?? aggregate.Sample_Count ?? 1;
+}
+
+/** Total readings behind a set of rows, raw and aggregated. */
+export function readingCount(rows) {
+  return rows.reduce((total, row) => total + (row?.Aggregate?.Sample_Count ?? 1), 0);
+}
+
+/** Mean weighted by readings per row, so hourly averages and raw rows combine correctly. */
 export function average(rows, field) {
-  return mean(numeric(rows, field));
+  let weight = 0;
+  let total = 0;
+  for (const row of rows) {
+    const value = row[field];
+    if (value == null || !Number.isFinite(value)) continue;
+    const samples = samplesIn(row, field);
+    weight += samples;
+    total += value * samples;
+  }
+  return weight ? total / weight : null;
 }
 
 export function maximum(rows, field) {
@@ -79,8 +104,10 @@ export function dailySeries(rows, field, { dateField = 'Recorded_At', reducer = 
     .map(([day, group]) => ({
       date: day,
       timestamp: dayjs(day).valueOf(),
-      value: reducer(numeric(group, field)),
-      count: group.length,
+      // The default mean is weighted so a day mixing raw readings and hourly
+      // aggregates still averages every underlying reading equally.
+      value: reducer === mean ? average(group, field) : reducer(numeric(group, field)),
+      count: readingCount(group),
     }))
     .filter((point) => point.value != null)
     .sort((a, b) => a.timestamp - b.timestamp);
