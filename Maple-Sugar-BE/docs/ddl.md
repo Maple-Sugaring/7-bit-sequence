@@ -79,6 +79,7 @@ A sensor or manual reading.
 | `ice_present` | Frozen sap may weigh more than 10 gallons. |
 | `fill_level_percent`, `sap_flow_rate_lph` | Legacy hardware columns. The app computes fill from weight. |
 | `corrected_at`, `corrected_by_user_id` | Set by `PATCH /metrics/:id`. A corrected row is never aggregated. |
+| `recorded_manually` | Sticky manual-source flag, retained when deleting an author detaches `recorded_by_user_id`. |
 
 Indexed on `(node_id, recorded_at desc)`, `recorded_at`, `sap_season(recorded_at)`, `bucket_id`. The partial index `metrics_retention_eligible_idx` covers the rows the retention job may compact.
 
@@ -86,7 +87,7 @@ Indexed on `(node_id, recorded_at desc)`, `recorded_at`, `sap_season(recorded_at
 
 `METRICS_RAW_RETENTION_DAYS` (default 400, so last season stays raw for comparisons) sets the raw window. `0` turns aggregation off. Any other value below 30 is refused at boot. The cutoff is `now − days`, floored to a UTC hour. An eligible row strictly before the cutoff is moved into `metric_aggregates`, and a row at or after the cutoff stays raw.
 
-Eligible means a sensor reading (`recorded_by_user_id is null`) that was never corrected (`corrected_at is null`). Manual and corrected readings stay raw forever so their provenance stays visible. Aggregates are kept indefinitely.
+Eligible means a sensor reading (`recorded_manually = false` and `recorded_by_user_id is null`) that was never corrected (`corrected_at is null`). Manual and corrected readings stay raw forever so their provenance stays visible, including after an author is deleted. The migration marks existing attributed readings as manual; an insert/update trigger preserves that flag. Aggregates are kept indefinitely.
 
 #### `metric_aggregates`
 

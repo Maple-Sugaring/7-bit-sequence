@@ -17,6 +17,8 @@ import { runMigrations } from '../../src/db/migrate.js';
 import { config } from '../../src/config.js';
 import { runRetention, storageReport } from '../../src/services/metricRetention.js';
 import * as metricsRepository from '../../src/repositories/metricsRepository.js';
+import { createDeployedNode, deleteNode } from '../../src/repositories/nodesRepository.js';
+import { deleteUser } from '../../src/repositories/usersRepository.js';
 import { rollup } from '../../src/repositories/metricAggregatesRepository.js';
 
 const skip = testDatabaseUrl ? false : 'set MAPLE_TEST_DATABASE_URL to run';
@@ -94,6 +96,33 @@ describe('reading retention and aggregation (Postgres)', { skip }, () => {
     assert.ok(kept.Corrected_At, 'correction time is stamped');
     assert.equal(kept.Corrected_By_UserID, userId);
     assert.ok(await metricsRepository.findMetricById(manual));
+  });
+
+  test('keeps manual readings raw after their author is deleted', async () => {
+    const { rows: [user] } = await pool.query(
+      "insert into users (email, role_id) values ('retention-test@g.rit.edu', 2) returning id",
+    );
+    const manual = await insertReading({ at: '2025-03-01T12:10:00Z', sugar: 2.5, user: user.id });
+    assert.equal(await deleteUser(user.id), true);
+    assert.equal((await metricsRepository.findMetricById(manual)).Recorded_By_UserID, null);
+
+    const result = await runRetention({ now: nowForCutoff('2025-04-01T00:00:00Z') });
+    assert.equal(result.Rows_Compacted, 0);
+    assert.equal((await metricsRepository.findMetricById(manual)).Sugar_Percent, 2.5);
+    assert.equal((await storageReport()).Raw.Manual_Rows, 1);
+  });
+
+  test('a node with compacted history can still be deleted', async () => {
+    const node = await createDeployedNode({ Node_Name: 'Retention deletion test', Stand: 'Alumni House' });
+    const reading = await insertReading({ node: node.NodeID, at: '2025-03-01T12:10:00Z', weight: 20 });
+    await pool.query('update metrics set bucket_id = (select id from buckets where node_id = $1) where id = $2',
+      [node.NodeID, reading]);
+    await runRetention({ now: nowForCutoff('2025-04-01T00:00:00Z') });
+    assert.equal(await count('select count(*) from metric_aggregates where node_id = $1', [node.NodeID]), 1);
+
+    assert.equal(await deleteNode(node.NodeID), true);
+    assert.equal(await count('select count(*) from metric_aggregates where node_id = $1', [node.NodeID]), 0);
+    assert.equal(await count('select count(*) from node where id = $1', [node.NodeID]), 0);
   });
 
   test('is idempotent and merges late readings into an existing period', async () => {
@@ -175,6 +204,37 @@ describe('reading retention and aggregation (Postgres)', { skip }, () => {
     assert.deepEqual(late.map((row) => row.Aggregated), [false]);
   });
 
+  test('a list keeps one snapshot when compaction commits between its two reads', async (t) => {
+    await insertReading({ at: '2025-03-01T12:10:00Z', weight: 10 });
+    await insertReading({ at: '2025-03-01T12:20:00Z', weight: 30 });
+    const connect = pool.connect.bind(pool);
+    let intercepted = false;
+    let compacted = false;
+    t.mock.method(pool, 'connect', async () => {
+      const client = await connect();
+      if (intercepted) return client;
+      intercepted = true;
+      const query = client.query.bind(client);
+      t.mock.method(client, 'query', async (sql, params) => {
+        const result = await query(sql, params);
+        if (String(sql).includes('from metrics') && String(sql).includes('order by recorded_at')) {
+          const run = await runRetention({ now: nowForCutoff('2025-04-01T00:00:00Z') });
+          assert.equal(run.Rows_Compacted, 2);
+          compacted = true;
+        }
+        return result;
+      });
+      return client;
+    });
+
+    const listed = await metricsRepository.listMetrics({ nodeId: nodeA });
+    assert.equal(compacted, true, 'retention committed after raw rows were read');
+    assert.equal(listed.reduce((n, row) => n + (row.Aggregate?.Sample_Count ?? 1), 0), 2);
+    assert.deepEqual(listed.map((row) => row.Weight), [30, 10]);
+    t.mock.restoreAll();
+    assert.equal(await count('select count(*) from metrics'), 0);
+  });
+
   test('season filters follow the same UTC boundary for aggregates', async () => {
     await insertReading({ at: '2026-06-30T23:30:00Z', weight: 10 });
     await insertReading({ at: '2026-07-01T00:30:00Z', weight: 20 });
@@ -227,6 +287,20 @@ describe('reading retention and aggregation (Postgres)', { skip }, () => {
 
     const utcDays = await rollup({ nodeId: nodeA, interval: 'day', timeZone: 'UTC' });
     assert.deepEqual(utcDays.map((d) => d.Reading_Count), [2, 2]);
+  });
+
+  test('hour rollups keep both instances of the repeated fall-back hour', async () => {
+    await insertReading({ at: '2025-11-02T05:30:00Z', weight: 10 });
+    await insertReading({ at: '2025-11-02T06:30:00Z', weight: 30 });
+    const expected = [
+      ['2025-11-02T05:00:00.000Z', '2025-11-02T06:00:00.000Z', 1, 10],
+      ['2025-11-02T06:00:00.000Z', '2025-11-02T07:00:00.000Z', 1, 30],
+    ];
+    const hours = () => rollup({ nodeId: nodeA, interval: 'hour', timeZone: 'America/New_York' });
+    const fields = (rows) => rows.map((h) => [h.Period_Start, h.Period_End, h.Reading_Count, h.Average.Weight]);
+    assert.deepEqual(fields(await hours()), expected);
+    await runRetention({ now: nowForCutoff('2025-12-01T00:00:00Z') });
+    assert.deepEqual(fields(await hours()), expected);
   });
 
 

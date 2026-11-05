@@ -120,13 +120,17 @@ MAPLE_TEST_DATABASE_URL=postgresql://maple:pw@127.0.0.1:55499/maple_test \
 | Sensor row at `09:59:59.999`, cutoff `10:00` | Moved into the `09:00` aggregate |
 | Sensor row exactly at the cutoff | Stays raw |
 | Manual row, or a row PATCHed by an admin | Stays raw. The corrected row has `Corrected_At` and `Corrected_By_UserID` |
+| Delete the author of a manual row, then compact | The source flag keeps the reading raw after the author FK becomes null |
+| Delete a node after its history is compacted | Aggregates and the node are removed in the same transaction |
 | Second run with nothing new | 0 rows, 0 buckets |
 | Late row for an hour already compacted | Merged in: counts and sums added, min and max widened |
 | One hour with weight only, another with sugar only | Each field's count matches its readings. The missing field is `null`, not 0 |
 | `GET /metrics` across the cutoff | Raw rows after it and hourly rows before it. No hour appears twice |
+| Compaction commits between the raw and aggregate list queries | One repeatable-read snapshot returns each sample exactly once |
 | Rows at `2026-06-30T23:30Z` and `2026-07-01T00:30Z` | Seasons 2026 and 2027, the same as raw rows |
 | Hour of 10/20/30, hour of 100, raw 40, one day | Day average 40 (weighted), not 53.3 |
 | New York day rollup over 2026-03-08 (DST) | `05:00Z` to `04:00Z` the next day (23 h) |
+| New York hour rollup over 2025-11-02 (DST fall-back) | The two local 01:00 hours remain separate, both before and after compaction |
 | A run row left `running` | Marked `interrupted`. The new run compacts the remainder |
 | Advisory lock held elsewhere | `skipped`, and the route returns 409 `RETENTION_BUSY` |
 | `dryRun: true` | Eligible rows and periods reported. Nothing deleted |

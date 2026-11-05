@@ -22,7 +22,7 @@
 
 `updateMetric` re-validates the merged row. `NodeID` is not writable. It stamps `corrected_at` and `corrected_by_user_id`.
 
-`listMetrics` returns raw rows and hourly aggregates merged newest first. `rollupMetrics` returns weighted averages per local period over both.
+`listMetrics` returns raw rows and hourly aggregates merged newest first, read in one repeatable-read snapshot so concurrent compaction cannot duplicate samples. `rollupMetrics` returns weighted averages per local period over both, keeping the two occurrences of a fall-back hour separate.
 
 ## `metricRetention` (BRU-007)
 

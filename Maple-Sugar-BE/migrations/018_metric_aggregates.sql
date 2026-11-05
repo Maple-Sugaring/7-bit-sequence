@@ -9,6 +9,20 @@ alter table metrics add column if not exists corrected_at timestamp with time zo
 alter table metrics add column if not exists corrected_by_user_id integer
   references users on delete set null;
 
+-- Keep manual provenance after deleting the author (the user FK is SET NULL).
+alter table metrics add column if not exists recorded_manually boolean not null default false;
+update metrics set recorded_manually = true where recorded_by_user_id is not null;
+create or replace function preserve_manual_metric_source() returns trigger
+language plpgsql as $$
+begin
+  new.recorded_manually := new.recorded_manually or new.recorded_by_user_id is not null;
+  return new;
+end;
+$$;
+drop trigger if exists metrics_manual_source on metrics;
+create trigger metrics_manual_source before insert or update of recorded_by_user_id on metrics
+  for each row execute function preserve_manual_metric_source();
+
 create table if not exists metric_retention_runs
 (
     id                   integer generated always as identity primary key,
@@ -85,4 +99,4 @@ create index if not exists metric_aggregates_season_idx
 -- The job's scan for eligible rows: old sensor readings that were never corrected.
 create index if not exists metrics_retention_eligible_idx
   on metrics (recorded_at)
-  where recorded_by_user_id is null and corrected_at is null;
+  where not recorded_manually and recorded_by_user_id is null and corrected_at is null;

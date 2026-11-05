@@ -40,7 +40,7 @@ export function retentionPolicy(now = new Date()) {
     Fields: ['Weight', 'Temperature', 'Sugar_Percent', 'Sap_Flow_Rate_Lph'],
     Kept_Per_Field: ['count', 'sum', 'min', 'max'],
     Kept_Per_Period: ['reading_count', 'first_recorded_at', 'last_recorded_at', 'ice_present_count'],
-    Never_Aggregated: ['manual readings (Recorded_By_UserID set)', 'corrected readings (Corrected_At set)'],
+    Never_Aggregated: ['manual readings (including those whose author was deleted)', 'corrected readings (Corrected_At set)'],
     Averaging: 'Arithmetic mean of the readings in the period; rollups weight each period by its reading count.',
   };
 }

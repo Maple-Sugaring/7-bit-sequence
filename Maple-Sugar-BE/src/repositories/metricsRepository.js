@@ -1,4 +1,4 @@
-import { queryAll, queryOne, queryOneOn } from '../db/pool.js';
+import { queryAll, queryOne, queryOneOn, transaction } from '../db/pool.js';
 import { mapMetric } from './mappers.js';
 import { listAggregates } from './metricAggregatesRepository.js';
 
@@ -31,17 +31,22 @@ const METRIC_COLUMNS = `
  * exports still see older years. Pass `aggregates: false` for raw rows only.
  */
 export async function listMetrics({ nodeId, season, from, to, aggregates = true } = {}) {
-  const raw = await listRawMetrics({ nodeId, season, from, to });
-  if (!aggregates) return raw;
+  const filters = { nodeId, season, from, to };
+  if (!aggregates) return listRawMetrics(filters);
 
-  const compacted = await listAggregates({ nodeId, season, from, to });
-  if (!compacted.length) return raw;
-  return [...raw, ...compacted].sort(
-    (a, b) => new Date(b.Recorded_At) - new Date(a.Recorded_At) || (b.MetricID ?? 0) - (a.MetricID ?? 0),
-  );
+  // Both tables must use one snapshot: compaction between these reads would
+  // otherwise return the same samples once raw and again as an aggregate.
+  return transaction(async (client) => {
+    await client.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const raw = await listRawMetrics(filters, client);
+    const compacted = await listAggregates(filters, client);
+    return [...raw, ...compacted].sort(
+      (a, b) => new Date(b.Recorded_At) - new Date(a.Recorded_At) || (b.MetricID ?? 0) - (a.MetricID ?? 0),
+    );
+  });
 }
 
-async function listRawMetrics({ nodeId, season, from, to }) {
+async function listRawMetrics({ nodeId, season, from, to }, client = null) {
   const conditions = [];
   const values = [];
 
@@ -64,10 +69,8 @@ async function listRawMetrics({ nodeId, season, from, to }) {
 
   const where = conditions.length ? `where ${conditions.join(' and ')}` : '';
 
-  const rows = await queryAll(
-    `select ${METRIC_COLUMNS} from metrics ${where} order by recorded_at desc, id desc`,
-    values,
-  );
+  const sql = `select ${METRIC_COLUMNS} from metrics ${where} order by recorded_at desc, id desc`;
+  const rows = client ? (await client.query(sql, values)).rows : await queryAll(sql, values);
   return rows.map(mapMetric);
 }
 

@@ -16,7 +16,7 @@ const PREFIXES = Object.values(AGGREGATED_FIELDS);
  * A raw row the retention job may compact: a sensor sample (no user) that no
  * one corrected. Manual and corrected readings stay raw for provenance.
  */
-export const ELIGIBLE_RAW = 'recorded_by_user_id is null and corrected_at is null and node_id is not null';
+export const ELIGIBLE_RAW = 'not recorded_manually and recorded_by_user_id is null and corrected_at is null and node_id is not null';
 
 const AGGREGATE_COLUMNS = `
   id, node_id, bucket_id, period_start, period_seconds, reading_count,
@@ -92,7 +92,7 @@ export function mapAggregateAsMetric(row) {
 }
 
 
-export async function listAggregates({ nodeId, season, from, to } = {}) {
+export async function listAggregates({ nodeId, season, from, to } = {}, client = null) {
   const conditions = [];
   const values = [];
   if (nodeId != null) {
@@ -116,10 +116,8 @@ export async function listAggregates({ nodeId, season, from, to } = {}) {
 
 
   const where = conditions.length ? `where ${conditions.join(' and ')}` : '';
-  const rows = await queryAll(
-    `select ${AGGREGATE_COLUMNS} from metric_aggregates ${where} order by period_start desc, id desc`,
-    values,
-  );
+  const sql = `select ${AGGREGATE_COLUMNS} from metric_aggregates ${where} order by period_start desc, id desc`;
+  const rows = client ? (await client.query(sql, values)).rows : await queryAll(sql, values);
   return rows.map(mapAggregateAsMetric);
 
 
@@ -306,7 +304,7 @@ export async function storageStats(cutoff) {
   const row = await queryOne(
     `select
        (select count(*) from metrics) as raw_rows,
-       (select count(*) from metrics where recorded_by_user_id is not null) as manual_rows,
+       (select count(*) from metrics where recorded_manually) as manual_rows,
        (select count(*) from metrics where corrected_at is not null) as corrected_rows,
        (select count(*) from metrics where ${ELIGIBLE_RAW} and $1::timestamptz is not null
                                       and recorded_at < $1::timestamptz) as eligible_rows,
@@ -377,7 +375,7 @@ export async function rollup({ nodeId, season, from, to, interval, timeZone }) {
      ),
      grouped as (
        select node_id,
-              date_trunc($1::text, at at time zone $2::text) as local_start,
+              date_trunc($1::text, at, $2::text) as period_start,
               sum(n) as reading_count,
               coalesce(sum(n) filter (where source = 'raw'), 0) as raw_count,
               coalesce(sum(n) filter (where source = 'aggregate'), 0) as aggregated_count,
@@ -386,13 +384,14 @@ export async function rollup({ nodeId, season, from, to, interval, timeZone }) {
               max(at) as last_at,
               ${regrouped.join(',\n              ')}
          from parts
-        group by node_id, local_start
+        group by node_id, period_start
      )
      select *,
-            (local_start at time zone $2::text) as period_start,
-            ((local_start + ('1 ' || $1::text)::interval) at time zone $2::text) as period_end
+            case when $1::text = 'hour' then period_start + interval '1 hour'
+                 else (((period_start at time zone $2::text) + ('1 ' || $1::text)::interval)
+                       at time zone $2::text) end as period_end
        from grouped
-      order by node_id, local_start`,
+      order by node_id, period_start`,
     values,
   );
 
