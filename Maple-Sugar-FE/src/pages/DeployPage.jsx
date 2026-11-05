@@ -42,9 +42,9 @@ import {
   updateGateway,
   updateNodeDetails,
 } from '../services/nodeService';
-
+ 
 const STANDS = ['Alumni House', 'Chabad House', 'Red Barn'];
-
+ 
 const emptyDraft = () => ({
   Node_Name: '',
   Stand: STANDS[0],
@@ -56,11 +56,11 @@ const emptyDraft = () => ({
   Rf_Tag: '',
   Notes: '',
 });
-
+ 
 function serialAvailable() {
   return typeof navigator !== 'undefined' && 'serial' in navigator;
 }
-
+ 
 /** The draft keeps coordinates as text; the map wants { lat, lon } or null. */
 function pointFromDraft(draft) {
   if (draft.Latitude === '' || draft.Longitude === '') return null;
@@ -68,14 +68,14 @@ function pointFromDraft(draft) {
   const lon = Number(draft.Longitude);
   return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null;
 }
-
+ 
 function gatewayLabel(gateway) {
   if (!gateway) return 'No gateway';
   return gateway.Gateway_Code
     ? `${gateway.Gateway_Name} (${gateway.Gateway_Code})`
     : gateway.Gateway_Name;
 }
-
+ 
 function draftFromNode(node) {
   return {
     Node_Name: node.Node_Name ?? '',
@@ -89,7 +89,7 @@ function draftFromNode(node) {
     Notes: node.Notes ?? '',
   };
 }
-
+ 
 export function DeployPage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
@@ -104,7 +104,7 @@ export function DeployPage() {
     () => new Map(gatewayList.map((gateway) => [gateway.GatewayID, gateway])),
     [gatewayList],
   );
-
+ 
   const [dialog, setDialog] = useState(null);
   const [draft, setDraft] = useState(emptyDraft);
   const [target, setTarget] = useState(null);
@@ -115,12 +115,12 @@ export function DeployPage() {
   const [query, setQuery] = useState('');
   const [menu, setMenu] = useState({ anchor: null, node: null });
   const [handledLink, setHandledLink] = useState('');
-
+ 
   const linkAction = params.get('action') || '';
   const linkEditId = Number(params.get('edit')) || 0;
   const linkFlashId = Number(params.get('flash')) || 0;
   const linkKey = `${linkAction}|${linkEditId}|${linkFlashId}`;
-
+ 
   // Hydrate dialogs from deep links during render (React-recommended vs effect setState).
   if (canDeploy && linkKey !== '||0|0' && linkKey !== handledLink) {
     if (linkAction === 'add' && !gateways.loading) {
@@ -158,18 +158,18 @@ export function DeployPage() {
       }
     }
   }
-
+ 
   useEffect(() => {
     if (!handledLink || handledLink === '||0|0') return;
     if (!params.get('action') && !params.get('edit') && !params.get('flash')) return;
     setParams({}, { replace: true });
   }, [handledLink, params, setParams]);
-
+ 
   const refresh = () => {
     nodes.refresh();
     gateways.refresh();
   };
-
+ 
   const closeDialog = () => {
     if (flash.active) return;
     setDialog(null);
@@ -178,7 +178,7 @@ export function DeployPage() {
     setSaved(false);
     setNotice('');
   };
-
+ 
   const openAdd = () => {
     setTarget(null);
     setDraft({
@@ -190,7 +190,7 @@ export function DeployPage() {
     setSaved(false);
     setDialog('node');
   };
-
+ 
   const openEdit = (node) => {
     setTarget(node);
     setDraft(draftFromNode(node));
@@ -199,31 +199,31 @@ export function DeployPage() {
     setNotice('');
     setDialog('node');
   };
-
+ 
   const openGatewayEdit = (gateway) => {
     setTarget(gateway);
     setNotice('');
     setDialog('gateway');
   };
-
+ 
   const openDelete = (node) => {
     setTarget(node);
     setNotice('');
     setDialog('delete');
   };
-
+ 
   const openFlash = (node) => {
     setTarget(node);
     setCreated(node);
     setNotice('');
     setDialog('flash');
   };
-
+ 
   const setField = (field) => (event) => {
     setDraft((current) => ({ ...current, [field]: event.target.value }));
     setSaved(false);
   };
-
+ 
   const nodePoint = pointFromDraft(draft);
   const setNodePoint = (point) => {
     setDraft((current) => ({
@@ -233,7 +233,7 @@ export function DeployPage() {
     }));
     setSaved(false);
   };
-
+ 
   const saveNode = useAction(async () => {
     const latitude = Number(draft.Latitude);
     const longitude = Number(draft.Longitude);
@@ -246,7 +246,7 @@ export function DeployPage() {
     if (!Number.isInteger(seconds) || seconds < 10 || seconds > 86400) {
       throw new Error('Use a packet interval from 10 seconds to 1 day (86400).');
     }
-
+ 
     if (target) {
       await updateNodeDetails(target.NodeID, {
         Node_Name: draft.Node_Name.trim(),
@@ -260,8 +260,8 @@ export function DeployPage() {
       await setReportInterval(target.NodeID, seconds);
       return target;
     }
-
-    if (!draft.GatewayID) throw new Error('Choose the gateway this tree reports through.');
+ 
+    if (!draft.GatewayID) throw new Error('Choose the gateway this tree reports to.');
     const createdNode = await createNode({
       Node_Name: draft.Node_Name.trim(),
       Stand: draft.Stand.trim(),
@@ -275,13 +275,13 @@ export function DeployPage() {
     await setReportInterval(createdNode.NodeID, seconds);
     return createdNode;
   });
-
+ 
   const saveGateway = useAction(async (body) =>
     target && dialog === 'gateway' ? updateGateway(target.GatewayID, body) : createGateway(body),
   );
   const removeGateway = useAction(async (gatewayId) => deleteGateway(gatewayId));
   const removeNode = useAction(async (nodeId) => deleteNode(nodeId));
-
+ 
   const runSerial = async (command) => {
     if (!serialAvailable()) {
       setNotice('USB flashing needs Chrome or Edge on this computer.');
@@ -309,7 +309,7 @@ export function DeployPage() {
       setFlash({ active: false, message: '', progress: null });
     }
   };
-
+ 
   const onSaveNode = async () => {
     const result = await saveNode.execute();
     if (!result.ok) return;
@@ -323,7 +323,7 @@ export function DeployPage() {
     setSaved(true);
     setDialog('flash');
   };
-
+ 
   const filteredNodes = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return nodeList;
@@ -343,14 +343,14 @@ export function DeployPage() {
       return haystack.includes(needle);
     });
   }, [gatewayById, nodeList, query]);
-
+ 
   const loading = nodes.loading || gateways.loading;
   const error = nodes.error || gateways.error;
   const editing = Boolean(target) && dialog === 'node';
   const stands = draft.Stand && !STANDS.includes(draft.Stand) ? [draft.Stand, ...STANDS] : STANDS;
   const setupStep = gatewayList.length === 0 ? 0 : nodeList.length === 0 ? 1 : 2;
   const closeMenu = () => setMenu({ anchor: null, node: null });
-
+ 
   return (
     <>
       <PageHeader
@@ -374,19 +374,19 @@ export function DeployPage() {
           ) : null
         }
       />
-
+ 
       {notice && dialog == null ? (
         <Alert severity="info" sx={{ mb: 2 }} onClose={() => setNotice('')}>
           {notice}
         </Alert>
       ) : null}
-
+ 
       {!serialAvailable() && canDeploy ? (
         <Alert severity="warning" sx={{ mb: 2 }}>
           USB flashing needs Chrome or Edge on a computer with a cable. You can still add and edit nodes here.
         </Alert>
       ) : null}
-
+ 
       <AsyncBlock
         loading={loading && nodeList.length === 0 && gatewayList.length === 0}
         error={error}
@@ -402,7 +402,7 @@ export function DeployPage() {
                 <Stack spacing={2} sx={{ alignItems: 'center', width: '100%', maxWidth: 420 }}>
                   <SetupSteps activeStep={0} />
                   <Button variant="contained" size="large" onClick={() => setDialog('gateway')}>
-                    Register gateway
+                    Register Gateway
                   </Button>
                 </Stack>
               ) : null
@@ -412,7 +412,7 @@ export function DeployPage() {
       >
         <Stack spacing={3}>
           {canDeploy && setupStep < 2 ? <SetupSteps activeStep={setupStep} /> : null}
-
+ 
           <Box
             sx={{
               border: '1px solid',
@@ -464,7 +464,7 @@ export function DeployPage() {
               </Box>
             )}
           </Box>
-
+ 
           <Box
             sx={{
               border: '1px solid',
@@ -491,6 +491,8 @@ export function DeployPage() {
                 <TextField
                   size="small"
                   placeholder="Search nodes"
+                  // WCAG 1.3.1 / 4.1.2: placeholder disappears on typing; give it a real name
+                  slotProps={{ htmlInput: { 'aria-label': 'Search nodes' } }}
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   sx={{ flexGrow: 1, minWidth: { sm: 220 } }}
@@ -507,7 +509,7 @@ export function DeployPage() {
                 ) : null}
               </Stack>
             </Stack>
-
+ 
             {nodeList.length === 0 ? (
               <EmptyBlock
                 title="No nodes yet"
@@ -541,7 +543,7 @@ export function DeployPage() {
           </Box>
         </Stack>
       </AsyncBlock>
-
+ 
       <Menu
         anchorEl={menu.anchor}
         open={Boolean(menu.anchor)}
@@ -580,7 +582,7 @@ export function DeployPage() {
           <ListItemText sx={{ color: 'error.main' }}>Remove node</ListItemText>
         </MenuItem>
       </Menu>
-
+ 
       <Dialog open={dialog === 'gateway'} onClose={closeDialog} fullWidth maxWidth="sm">
         <DialogTitle>{target ? 'Edit gateway' : 'Register gateway'}</DialogTitle>
         {dialog === 'gateway' ? (
@@ -606,7 +608,7 @@ export function DeployPage() {
           />
         ) : null}
       </Dialog>
-
+ 
       <Dialog open={dialog === 'deleteGateway'} onClose={closeDialog} fullWidth maxWidth="sm">
         <DialogTitle>Remove {target?.Gateway_Name}?</DialogTitle>
         <DialogContent>
@@ -637,7 +639,7 @@ export function DeployPage() {
           </Button>
         </DialogActions>
       </Dialog>
-
+ 
       <Dialog open={dialog === 'node'} onClose={closeDialog} fullWidth maxWidth="sm">
         <DialogTitle>{editing ? 'Edit node' : 'Add a node'}</DialogTitle>
         <DialogContent>
@@ -711,7 +713,7 @@ export function DeployPage() {
           </Button>
         </DialogActions>
       </Dialog>
-
+ 
       <Dialog open={dialog === 'flash'} onClose={closeDialog} fullWidth maxWidth="sm">
         <DialogTitle>Flash {(created || target)?.Node_Code}</DialogTitle>
         <DialogContent>
@@ -728,9 +730,13 @@ export function DeployPage() {
                 <LinearProgress
                   variant={flash.progress == null ? 'indeterminate' : 'determinate'}
                   value={flash.progress ?? 0}
+                  aria-label="Flashing progress"
                   sx={{ height: 10, borderRadius: 999 }}
                 />
-                <Typography variant="body2">{flash.message || 'Flashing…'}</Typography>
+                {/* WCAG 4.1.3: announce each flashing step */}
+                <Typography variant="body2" role="status" aria-live="polite">
+                  {flash.message || 'Flashing…'}
+                </Typography>
               </>
             ) : null}
             {notice ? <Alert severity={notice.includes('is on the board') ? 'success' : 'info'}>{notice}</Alert> : null}
@@ -751,7 +757,7 @@ export function DeployPage() {
           </Button>
         </DialogActions>
       </Dialog>
-
+ 
       <Dialog open={dialog === 'delete'} onClose={closeDialog} fullWidth maxWidth="sm">
         <DialogTitle>Remove {target?.Node_Name}?</DialogTitle>
         <DialogContent>
@@ -766,9 +772,12 @@ export function DeployPage() {
                 <LinearProgress
                   variant={flash.progress == null ? 'indeterminate' : 'determinate'}
                   value={flash.progress ?? 0}
+                  aria-label="Clearing progress"
                   sx={{ height: 10, borderRadius: 999 }}
                 />
-                <Typography variant="body2">{flash.message || 'Clearing…'}</Typography>
+                <Typography variant="body2" role="status" aria-live="polite">
+                  {flash.message || 'Clearing…'}
+                </Typography>
               </>
             ) : null}
           </Stack>
@@ -797,7 +806,7 @@ export function DeployPage() {
     </>
   );
 }
-
+ 
 function SetupSteps({ activeStep }) {
   return (
     <Box sx={{ width: '100%', maxWidth: 560, mx: 'auto', alignSelf: 'center', mb: 1 }}>
@@ -815,7 +824,7 @@ function SetupSteps({ activeStep }) {
     </Box>
   );
 }
-
+ 
 function GatewayForm({ gateway, error, pending, onCancel, onRemove, onSave }) {
   const [code, setCode] = useState(gateway?.Gateway_Code ?? '');
   const [name, setName] = useState(gateway?.Gateway_Name ?? '');
@@ -823,7 +832,7 @@ function GatewayForm({ gateway, error, pending, onCancel, onRemove, onSave }) {
   const [point, setPoint] = useState(gateway?.Location ?? null);
   const [localError, setLocalError] = useState('');
   const codeChanged = Boolean(gateway) && code.trim() !== gateway.Gateway_Code;
-
+ 
   const submit = () => {
     const nextCode = code.trim();
     const nextName = name.trim();
@@ -854,7 +863,7 @@ function GatewayForm({ gateway, error, pending, onCancel, onRemove, onSave }) {
       Longitude: point ? point.lon : null,
     });
   };
-
+ 
   return (
     <>
       <DialogContent>

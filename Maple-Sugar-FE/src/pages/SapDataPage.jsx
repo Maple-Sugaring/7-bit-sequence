@@ -332,7 +332,7 @@ export function SapDataPage() {
           </Box>
           <Box data-tour="sugar-woods-chart" sx={{ flex: 1, minWidth: 0 }}>
             <ChartCard
-              title="2026 weight"
+              title="2026 Weight"
               description={chartDescription}
               action={exportActions}
               height={phone ? 300 : 420}

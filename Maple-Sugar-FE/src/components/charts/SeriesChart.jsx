@@ -1,4 +1,5 @@
 import dayjs from 'dayjs';
+import { AccessibilityChartWrapper } from './AccessibilityChartWrapper';
 import {
   Bar,
   BarChart,
@@ -12,7 +13,35 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { ritOrange, accent } from '../../theme/ritColors';
+import {
+  accessibleBlue,
+  accessibleGreen,
+  accessibleOrange,
+  neutral,
+  ritOrange,
+} from '../../theme/ritColors';
+
+/*
+ * Accessibility (WCAG 2.2):
+ * - 1.4.3: Recharts colors legend and tooltip TEXT with each series color by
+ *   default. Series colors only need 3:1 as graphics, but text needs 4.5:1,
+ *   so all chart text is drawn in dark neutral and the swatch carries the color.
+ * - 1.4.11: every line/bar color below is >= 3:1 against the white card.
+ * - Bare charts retain Recharts keyboard navigation. Figure wrappers provide
+ *   a named image, summary and data table, and disable the redundant keyboard layer.
+ */
+const CHART_TEXT = neutral.black;
+const TICK = { fontSize: 12, fill: '#4A4A4A' }; // 8.86:1 on white
+
+// Legend: keep the colored swatch, render the label in dark text.
+const legendText = (value) => <span style={{ color: CHART_TEXT }}>{value}</span>;
+
+// Tooltip: dark label and item text; series identified by name.
+const tooltipProps = {
+  labelStyle: { color: CHART_TEXT, fontWeight: 600 },
+  itemStyle: { color: CHART_TEXT },
+  contentStyle: { border: '1px solid #E2DDD7', borderRadius: 8 },
+};
 
 function dateTick(value) {
   return dayjs(value).format('MMM D');
@@ -32,12 +61,12 @@ export function DailyTemperatureChart({ rows }) {
     <ResponsiveContainer width="100%" height="100%">
       <LineChart data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
         <CartesianGrid stroke="#D0D3D4" vertical={false} />
-        <XAxis dataKey="Date" tickFormatter={dateTick} minTickGap={28} tick={{ fontSize: 12 }} />
-        <YAxis width={48} unit="°" tick={{ fontSize: 12 }} />
-        <Tooltip labelFormatter={tipLabel} />
-        <Legend />
+        <XAxis dataKey="Date" tickFormatter={dateTick} minTickGap={28} tick={TICK} />
+        <YAxis width={48} unit="°" tick={TICK} />
+        <Tooltip labelFormatter={tipLabel} {...tooltipProps} />
+        <Legend formatter={legendText} />
         <Line type="monotone" dataKey="Temp_Max_F" name="High °F" stroke={ritOrange} dot={false} strokeWidth={2} />
-        <Line type="monotone" dataKey="Temp_Min_F" name="Low °F" stroke={accent.blue} dot={false} strokeWidth={2} />
+        <Line type="monotone" dataKey="Temp_Min_F" name="Low °F" stroke={accessibleBlue} dot={false} strokeWidth={2} />
       </LineChart>
     </ResponsiveContainer>
   );
@@ -50,19 +79,19 @@ function weightTick(unit) {
   return 'MMM D';
 }
 
-export function WeightChart({ rows, series, unit = 'day' }) {
+export function WeightChart({ rows, series, unit = 'day', accessibilityLayer = true }) {
   const format = weightTick(unit);
   const tick = (value) => dayjs(value).format(format);
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+      <LineChart accessibilityLayer={accessibilityLayer} data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
         <CartesianGrid stroke="#D0D3D4" vertical={false} />
-        <XAxis dataKey="Date" tickFormatter={tick} minTickGap={28} tick={{ fontSize: 12 }} />
+        <XAxis dataKey="Date" tickFormatter={tick} minTickGap={28} tick={TICK} />
         <YAxis
           width={56}
           unit=" gal"
           domain={[0, (max) => Math.max(10, Math.ceil(max))]}
-          tick={{ fontSize: 12 }}
+          tick={TICK}
         />
         <Tooltip
           labelFormatter={tick}
@@ -72,8 +101,14 @@ export function WeightChart({ rows, series, unit = 'day' }) {
             const scale = pounds == null ? `${gallons} gal` : `${gallons} gal · ${Number(pounds).toFixed(1)} lb`;
             return [scale, name];
           }}
+          {...tooltipProps}
         />
-        <Legend height={36} wrapperStyle={{ maxHeight: 36, overflowY: 'auto', fontSize: 11 }} />
+        <Legend
+          height={36}
+          // 11px was below the 12px used elsewhere; keep legend text readable
+          wrapperStyle={{ maxHeight: 36, overflowY: 'auto', fontSize: 12 }}
+          formatter={legendText}
+        />
         {series.map((item, index) => (
           <Line
             key={item.key}
@@ -96,9 +131,9 @@ export function DailyFlowChart({ rows }) {
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
         <CartesianGrid stroke="#D0D3D4" vertical={false} />
-        <XAxis dataKey="Date" tickFormatter={dateTick} minTickGap={28} tick={{ fontSize: 12 }} />
-        <YAxis width={48} unit=" gal" tick={{ fontSize: 12 }} />
-        <Tooltip labelFormatter={tipLabel} />
+        <XAxis dataKey="Date" tickFormatter={dateTick} minTickGap={28} tick={TICK} />
+        <YAxis width={48} unit=" gal" tick={TICK} />
+        <Tooltip labelFormatter={tipLabel} {...tooltipProps} />
         <Bar dataKey="Flow_Gal" name="Sap flow (gal)" fill={ritOrange} radius={[3, 3, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
@@ -110,14 +145,14 @@ export function DailySugarChart({ rows }) {
     <ResponsiveContainer width="100%" height="100%">
       <LineChart data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
         <CartesianGrid stroke="#D0D3D4" vertical={false} />
-        <XAxis dataKey="Date" tickFormatter={dateTick} minTickGap={28} tick={{ fontSize: 12 }} />
-        <YAxis width={48} unit="%" domain={[0, 4]} tick={{ fontSize: 12 }} />
-        <Tooltip labelFormatter={tipLabel} />
+        <XAxis dataKey="Date" tickFormatter={dateTick} minTickGap={28} tick={TICK} />
+        <YAxis width={48} unit="%" domain={[0, 4]} tick={TICK} />
+        <Tooltip labelFormatter={tipLabel} {...tooltipProps} />
         <Line
           type="monotone"
           dataKey="Sugar_Percent"
           name="Sugar %"
-          stroke={accent.green}
+          stroke={accessibleGreen} // was accent.green #84BD00 (2.27:1, fails 1.4.11)
           connectNulls
           dot={false}
           strokeWidth={2}
@@ -127,35 +162,92 @@ export function DailySugarChart({ rows }) {
   );
 }
 
-export function SiteForecastChart({ rows }) {
+export function SiteForecastChart({ rows, accessibilityLayer = true }) {
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <ComposedChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+      <ComposedChart accessibilityLayer={accessibilityLayer} data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
         <CartesianGrid stroke="#D0D3D4" vertical={false} />
-        <XAxis dataKey="Date" tickFormatter={dateTick} tick={{ fontSize: 12 }} />
-        <YAxis yAxisId="temp" width={40} unit="°" tick={{ fontSize: 12 }} />
-        <YAxis yAxisId="flow" orientation="right" width={36} tick={{ fontSize: 12 }} />
-        <Tooltip labelFormatter={tipLabel} />
-        <Legend />
+        <XAxis dataKey="Date" tickFormatter={dateTick} tick={TICK} />
+        <YAxis yAxisId="temp" width={40} unit="°" tick={TICK} />
+        <YAxis yAxisId="flow" orientation="right" width={36} tick={TICK} />
+        <Tooltip labelFormatter={tipLabel} {...tooltipProps} />
+        <Legend formatter={legendText} />
         <Bar yAxisId="flow" dataKey="Flow_Gal" name="Sap gal" fill={ritOrange} radius={[3, 3, 0, 0]} />
-        <Line yAxisId="temp" type="monotone" dataKey="Temp_Max_F" name="Afternoon high" stroke="#009CBD" dot={false} strokeWidth={2} />
+        <Line yAxisId="temp" type="monotone" dataKey="Temp_Max_F" name="Afternoon high" stroke={accessibleBlue} dot={false} strokeWidth={2} />
       </ComposedChart>
     </ResponsiveContainer>
   );
 }
 
-const TREE_COLORS = ['#F76902', '#009CBD', '#84BD00', '#000000', '#7D55C7', '#DA291C', '#C75300', '#7C878E'];
+/* ---------- Dashboard forecast: chart + text alternative + table ---------- */
+
+const fmtDate = (value) => dayjs(value).format('ddd, MMM D');
+const fmtNum = (value, digits = 0) =>
+  value == null || Number.isNaN(Number(value)) ? null : Number(value).toFixed(digits);
+
+const FORECAST_COLUMNS = [
+  { key: 'Date', label: 'Date', format: fmtDate },
+  { key: 'Temp_Max_F', label: 'Afternoon high (°F)', format: (v) => fmtNum(v) },
+  { key: 'Flow_Gal', label: 'Sap (gal)', format: (v) => fmtNum(v, 1) },
+  { key: 'Sap_Run', label: 'Sap run', format: (v) => (v == null ? null : v ? 'Yes' : 'No') },
+];
+
+/** One- or two-sentence description of what the forecast chart shows (not exported: react-refresh/only-export-components). */
+function forecastSummary(rows = []) {
+  if (!rows.length) return 'No forecast data yet.';
+  const first = dayjs(rows[0].Date).format('MMM D');
+  const last = dayjs(rows[rows.length - 1].Date).format('MMM D');
+  const highs = rows.map((r) => Number(r.Temp_Max_F)).filter(Number.isFinite);
+  const totalSap = rows.reduce((sum, r) => sum + (Number(r.Flow_Gal) || 0), 0);
+  const runDays = rows.filter((r) => r.Sap_Run).map((r) => dayjs(r.Date).format('MMM D'));
+
+  const temp = highs.length
+    ? `Afternoon highs range from ${Math.round(Math.min(...highs))}°F to ${Math.round(Math.max(...highs))}°F`
+    : 'No temperature data';
+  const sap = runDays.length
+    ? `${totalSap.toFixed(1)} gallons of sap expected, with sap runs on ${runDays.join(', ')}.`
+    : 'No sap runs expected.';
+  return `${first} to ${last}. ${temp}. ${sap}`;
+}
+
+export function SiteForecastFigure({ rows, height = 240 }) {
+  return (
+    <AccessibilityChartWrapper
+      title="Afternoon high and sap forecast"
+      summary={forecastSummary(rows)}
+      columns={FORECAST_COLUMNS}
+      rows={rows}
+      height={height}
+    >
+      <SiteForecastChart rows={rows} accessibilityLayer={false} />
+    </AccessibilityChartWrapper>
+  );
+}
+
+// Every color is >= 3:1 on white (WCAG 1.4.11). Lime #84BD00 (2.27:1) replaced
+// with accessibleGreen; #C75300 (4.5:1) swapped for accessibleOrange; grey
+// #7C878E (3.68:1) darkened to #6B7378 for margin.
+const TREE_COLORS = [
+  ritOrange,        // #F76902  3.01:1
+  accessibleBlue,   // #007A94  4.99:1
+  accessibleGreen,  // #4D6B00  6.14:1
+  '#000000',        // 21:1
+  '#7D55C7',        // 5.26:1
+  '#DA291C',        // 4.87:1
+  accessibleOrange, // #A34300  6.25:1
+  '#6B7378',        // 4.83:1
+];
 
 export function OverlayChart({ rows, flowSeries, tempSeries }) {
   return (
     <ResponsiveContainer width="100%" height="100%">
       <ComposedChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
         <CartesianGrid stroke="#D0D3D4" vertical={false} />
-        <XAxis dataKey="Date" tickFormatter={dateTick} minTickGap={24} tick={{ fontSize: 12 }} />
-        <YAxis yAxisId="flow" width={48} unit=" gal" tick={{ fontSize: 12 }} />
-        <YAxis yAxisId="temp" orientation="right" width={44} unit="°" tick={{ fontSize: 12 }} />
-        <Tooltip labelFormatter={tipLabel} />
-        <Legend />
+        <XAxis dataKey="Date" tickFormatter={dateTick} minTickGap={24} tick={TICK} />
+        <YAxis yAxisId="flow" width={48} unit=" gal" tick={TICK} />
+        <YAxis yAxisId="temp" orientation="right" width={44} unit="°" tick={TICK} />
+        <Tooltip labelFormatter={tipLabel} {...tooltipProps} />
+        <Legend formatter={legendText} />
         {flowSeries.map((series) => (
           <Line
             key={series.key}
@@ -163,7 +255,7 @@ export function OverlayChart({ rows, flowSeries, tempSeries }) {
             type="monotone"
             dataKey={series.key}
             name={series.name}
-            stroke={series.color}
+            stroke={series.color} // caller-supplied: must be >= 3:1 on white
             dot={false}
             strokeWidth={2}
             connectNulls
@@ -176,7 +268,7 @@ export function OverlayChart({ rows, flowSeries, tempSeries }) {
             type="monotone"
             dataKey={series.key}
             name={series.name}
-            stroke={series.color}
+            stroke={series.color} // caller-supplied: must be >= 3:1 on white
             strokeDasharray="5 4"
             dot={false}
             strokeWidth={2}
@@ -188,15 +280,15 @@ export function OverlayChart({ rows, flowSeries, tempSeries }) {
   );
 }
 
-export function TreeCompareChart({ rows, series }) {
+export function TreeCompareChart({ rows, series, accessibilityLayer = true }) {
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+      <LineChart accessibilityLayer={accessibilityLayer} data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
         <CartesianGrid stroke="#D0D3D4" vertical={false} />
-        <XAxis dataKey="Date" tickFormatter={dateTick} minTickGap={28} tick={{ fontSize: 12 }} />
-        <YAxis width={48} tick={{ fontSize: 12 }} />
-        <Tooltip labelFormatter={tipLabel} />
-        <Legend />
+        <XAxis dataKey="Date" tickFormatter={dateTick} minTickGap={28} tick={TICK} />
+        <YAxis width={48} tick={TICK} />
+        <Tooltip labelFormatter={tipLabel} {...tooltipProps} />
+        <Legend formatter={legendText} />
         {series.map((name, index) => (
           <Line
             key={name}
@@ -211,5 +303,112 @@ export function TreeCompareChart({ rows, series }) {
         ))}
       </LineChart>
     </ResponsiveContainer>
+  );
+}
+
+/* ---------- Sugar Woods: tree data over time ---------- */
+/*
+ * Same AccessibilityChartWrapper wrapper; the only difference is that the columns and the
+ * summary are built from `series`, because the number of trees varies.
+ */
+
+const DATE_FORMATS = {
+  second: 'MMM D, h:mm:ss A',
+  minute: 'MMM D, h:mm A',
+  hour: 'MMM D, h A',
+  day: 'ddd, MMM D',
+};
+
+function rangeText(rows, unit) {
+  if (!rows.length) return '';
+  const f = DATE_FORMATS[unit] ?? DATE_FORMATS.day;
+  return `${dayjs(rows[0].Date).format(f)} to ${dayjs(rows[rows.length - 1].Date).format(f)}`;
+}
+
+/** Latest non-empty value for each series, e.g. "Tree 1: 4.2 gal". */
+function latestPerSeries(rows, series, digits, suffix) {
+  return series
+    .map(({ key, name }) => {
+      const last = [...rows].reverse().find((r) => r[key] != null && r[key] !== '');
+      return last ? `${name}: ${Number(last[key]).toFixed(digits)}${suffix}` : null;
+    })
+    .filter(Boolean);
+}
+
+function seriesSummary({ rows, series, unit = 'day', what, digits = 1, suffix = '' }) {
+  if (!rows?.length || !series?.length) return `No ${what} data yet.`;
+  const latest = latestPerSeries(rows, series, digits, suffix);
+  const count = `${series.length} ${series.length === 1 ? 'tree' : 'trees'}`;
+  return `${what} for ${count}, ${rangeText(rows, unit)}.${
+    latest.length ? ` Latest readings: ${latest.join('; ')}.` : ''
+  }`;
+}
+
+/** Sap weight per tree (WeightChart), with gallons and pounds in the table. */
+export function WeightFigure({
+  rows = [],
+  series = [],
+  unit = 'day',
+  height = 280,
+  title = 'Sap in each bucket over time',
+}) {
+  const columns = [
+    { key: 'Date', label: 'Time', format: (v) => dayjs(v).format(DATE_FORMATS[unit] ?? DATE_FORMATS.day) },
+    ...series.map(({ key, name }) => ({
+      key,
+      label: `${name} (gal)`,
+      format: (v, row) => {
+        const gal = fmtNum(v, 1);
+        if (gal == null) return null;
+        const lb = fmtNum(row[`${key}-lb`], 1);
+        return lb == null ? gal : `${gal} (${lb} lb)`;
+      },
+    })),
+  ];
+  return (
+    <AccessibilityChartWrapper
+      title={title}
+      summary={seriesSummary({ rows, series, unit, what: 'Sap weight', suffix: ' gal' })}
+      columns={columns}
+      rows={rows}
+      height={height}
+    >
+      <WeightChart rows={rows} series={series} unit={unit} accessibilityLayer={false} />
+    </AccessibilityChartWrapper>
+  );
+}
+
+/**
+ * Tree-by-tree comparison (TreeCompareChart). `series` is a list of names
+ * here, matching TreeCompareChart. Pass `metric` / `digits` / `suffix` so the
+ * summary and headers say what is being compared.
+ */
+export function TreeCompareFigure({
+  rows = [],
+  series = [],
+  metric = 'Reading',
+  digits = 1,
+  suffix = '',
+  height = 280,
+}) {
+  const named = series.map((name) => ({ key: name, name }));
+  const columns = [
+    { key: 'Date', label: 'Date', format: fmtDate },
+    ...named.map(({ key, name }) => ({
+      key,
+      label: suffix ? `${name} (${suffix.trim()})` : name,
+      format: (v) => fmtNum(v, digits),
+    })),
+  ];
+  return (
+    <AccessibilityChartWrapper
+      title={`${metric} by tree`}
+      summary={seriesSummary({ rows, series: named, what: metric, digits, suffix })}
+      columns={columns}
+      rows={rows}
+      height={height}
+    >
+      <TreeCompareChart rows={rows} series={series} accessibilityLayer={false} />
+    </AccessibilityChartWrapper>
   );
 }
