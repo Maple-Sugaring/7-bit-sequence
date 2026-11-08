@@ -15,6 +15,7 @@ import { visuallyHidden } from '@mui/utils';
 import { batchesByNode, shelfLifeSummary } from '../business/shelfLife';
 import { weekForecastRows, weekLabel, weekStart } from '../business/weekWindows';
 import { bushAverageSugar, syrupEstimate } from '../business/sugarContent';
+import { healthReading } from '../business/sensorLifecycle';
 import { MapStatus, STATUS_META } from '../business/nodeMapStatus';
 import { isFull } from '../business/yieldMetrics';
 import { LIVE_FROM, LIVE_NODE_IDS, LIVE_TO, bucketGallons, bucketPercent, recordedSugar } from '../business/liveWeight';
@@ -110,7 +111,8 @@ export function DashboardPage() {
           const tip = [
             node.Node_Name,
             `Status ${STATUS_META[status].label}`,
-            node.Signal_Rssi != null ? `Signal ${node.Signal_Rssi} dBm` : null,
+            `Signal ${healthReading(node.Signal_Rssi, ' dBm', node.Signal_Reported_At,
+              node.Report_Interval_Seconds, node.Signal_Rssi != null && node.Signal_Rssi < -110 && 'weak signal')}`,
             node.Sugar_Percent != null ? `Sugar ${node.Sugar_Percent}%` : null,
             node.Ice_Present ? 'Ice in the bucket' : null,
             node.Recorded_At ? `Last reading ${dateTime(node.Recorded_At)}` : 'No reading yet',
@@ -142,7 +144,8 @@ export function DashboardPage() {
                         label="Battery"
                         value={node.Battery_Percent == null ? '—' : `${Math.round(node.Battery_Percent)}%`}
                         percent={node.Battery_Percent ?? 0}
-                        detail={node.Battery_Percent == null ? 'No report' : 'Charge on the node pack'}
+                        detail={healthReading(node.Battery_Percent, '%', node.Battery_Reported_At,
+                          node.Report_Interval_Seconds, node.Battery_Percent != null && node.Battery_Percent < 20 && 'low battery')}
                         color={batteryMeterColor(node.Battery_Percent)}
                       />
                       <Meter

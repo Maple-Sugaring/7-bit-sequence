@@ -25,6 +25,7 @@ import { PageHeader } from '../components/common/PageHeader';
 import { dateTime } from '../components/common/format';
 import { LocationWidget } from '../components/map/LocationWidget';
 import { CalibrationCard } from '../components/deploy/CalibrationCard';
+import { healthReading } from '../business/sensorLifecycle';
 import { packetIntervalLabel } from '../business/calibration';
 import { useAuth } from '../context/auth';
 import { useAutoRefresh, useBush, useNodeStatuses, useReadings } from '../services/hooks';
@@ -152,10 +153,14 @@ export function NodePage() {
           <Card>
             <CardContent>
               <Typography variant="overline">Battery</Typography>
-              <Typography variant="h4">{node?.Battery_Percent == null ? '—' : `${Math.round(node.Battery_Percent)}%`}</Typography>
+              <Typography variant="h4">{node?.Battery_Percent == null ? 'Unknown' : `${Math.round(node.Battery_Percent)}%`}</Typography>
               <MeterBar percent={node?.Battery_Percent ?? 0} color={batteryMeterColor(node?.Battery_Percent)} />
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                Signal {node?.Signal_Rssi ?? '—'} dBm · last seen {dateTime(node?.Last_Seen)}
+                Battery {healthReading(node?.Battery_Percent, '%', node?.Battery_Reported_At,
+                  node?.Report_Interval_Seconds, node?.Battery_Percent != null && node.Battery_Percent < 20 && 'low battery')}
+                {' · '}Signal {healthReading(node?.Signal_Rssi, ' dBm', node?.Signal_Reported_At,
+                  node?.Report_Interval_Seconds, node?.Signal_Rssi != null && node.Signal_Rssi < -110 && 'weak signal')}
+                {' · '}Last seen {dateTime(node?.Last_Seen)}
               </Typography>
             </CardContent>
           </Card>

@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { z } from 'zod';
+import { listSensorLifecycle, recordSensorEvent } from '../repositories/sensorLifecycleRepository.js';
 import { forbidden, notFound } from '../lib/ApiError.js';
 import { can, Capability } from '../business/permissions.js';
 import { requireAnyCapability, requireAuth, requireCapability } from '../middleware/authenticate.js';
@@ -33,6 +35,30 @@ nodesRouter.get(
     res.json(await nodesRepository.listBoard());
   },
 );
+
+const sensorEventBody = z.object({
+  type: z.enum(['installation', 'replacement', 'maintenance']),
+  date: z.iso.date().refine(
+    (date) => date <= new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date()),
+    'The event date cannot be in the future.',
+  ),
+  sensorType: z.string().trim().min(1).max(120).optional(),
+  notes: z.string().trim().max(1000).optional(),
+}).refine((event) => event.type === 'maintenance' ? Boolean(event.notes) : Boolean(event.sensorType), {
+  message: 'Provide a sensor type for installation or replacement, or notes for maintenance.',
+});
+
+nodesRouter.get('/lifecycle', requireCapability(Capability.MANAGE_USERS), async (req, res) => {
+  res.json(await listSensorLifecycle());
+});
+
+nodesRouter.post('/:id/lifecycle', requireCapability(Capability.MANAGE_USERS), async (req, res) => {
+  const id = idParam.parse(req.params.id);
+  const event = sensorEventBody.parse(req.body);
+  const result = await recordSensorEvent(id, event, req.user.UserID);
+  if (!result) throw notFound('Node');
+  res.status(201).json(result);
+});
 
 nodesRouter.post('/', requireCapability(Capability.DEPLOY_NODES), async (req, res) => {
   const body = createNodeBody.parse(req.body);

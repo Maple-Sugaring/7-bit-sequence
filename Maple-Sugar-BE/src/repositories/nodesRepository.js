@@ -9,6 +9,8 @@ const NODE_COLUMNS = `
   node_name,
   status_code,
   battery_level,
+  battery_reported_at,
+  signal_reported_at,
   signal_rssi,
   latitude,
   longitude,
@@ -246,6 +248,8 @@ export async function recordNodeHeartbeat(id, { batteryPercent = null, signalRss
     `update node
         set last_seen = CURRENT_TIMESTAMP,
             battery_level = coalesce($2, battery_level),
+            battery_reported_at = case when $2::numeric is not null then CURRENT_TIMESTAMP else battery_reported_at end,
+            signal_reported_at = case when $3::integer is not null then CURRENT_TIMESTAMP else signal_reported_at end,
             signal_rssi = coalesce($3, signal_rssi),
             status_code = case when status_code = 3 then status_code else 1 end
       where id = $1`,
@@ -294,6 +298,9 @@ export async function updateNode(id, changes) {
       assignments.push(`${column} = $${values.length}`);
     }
   }
+
+  if ('Battery_Percent' in changes) assignments.push('battery_reported_at = null');
+  if ('Signal_Rssi' in changes) assignments.push('signal_reported_at = null');
 
   // Location arrives nested from the client but is stored as two columns.
   if (changes.Location) {

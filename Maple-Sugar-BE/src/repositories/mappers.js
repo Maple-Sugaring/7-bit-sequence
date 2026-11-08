@@ -97,6 +97,8 @@ export function mapNode(row) {
     Status_Code: row.status_code,
     Battery_Percent: num(row.battery_level),
     Signal_Rssi: row.signal_rssi,
+    Battery_Reported_At: iso(row.battery_reported_at),
+    Signal_Reported_At: iso(row.signal_reported_at),
     // Nested rather than flat: the device page passes this straight to a map
     // link, and a node with no recorded siting must be distinguishable from one
     // sited at the equator.

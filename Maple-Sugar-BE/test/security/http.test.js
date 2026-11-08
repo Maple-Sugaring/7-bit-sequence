@@ -244,6 +244,8 @@ describe('authorization over HTTP', () => {
       (await send('/metrics/4', { method: 'PATCH', token: student, body: { Weight: 1 } })).status,
       403,
     );
+    assert.equal((await send('/nodes/lifecycle', { token: student })).status, 403);
+    assert.equal((await send('/nodes/1/lifecycle', { method: 'POST', token: mss, body: {} })).status, 403);
     assert.equal((await send('/users')).status, 401);
   });
 
