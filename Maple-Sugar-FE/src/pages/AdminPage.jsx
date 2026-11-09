@@ -1,3 +1,4 @@
+import { SensorLifecycleCard } from '../components/deploy/SensorLifecycleCard';
 import { Issue49Admin } from '../components/Issue49Admin';
 import { useState } from 'react';
 import Alert from '@mui/material/Alert';
@@ -389,6 +390,8 @@ export function AdminPage() {
         }
       />
  
+      <SensorLifecycleCard />
+
       {actionError ? (
         <Alert severity="error" sx={{ mb: 3 }}>
           {actionError}

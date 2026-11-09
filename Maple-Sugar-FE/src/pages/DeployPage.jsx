@@ -24,7 +24,6 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { statusFromCode } from '../business/nodeMapStatus';
 import { Capability } from '../business/permissions';
-import { SensorLifecycleCard } from '../components/deploy/SensorLifecycleCard';
 import { PageHeader } from '../components/common/PageHeader';
 import { AsyncBlock, EmptyBlock } from '../components/common/StateBlock';
 import { useAuth } from '../context/auth';
@@ -376,7 +375,6 @@ export function DeployPage() {
         }
       />
  
-      {can(Capability.MANAGE_USERS) && <SensorLifecycleCard />}
 
       {notice && dialog == null ? (
         <Alert severity="info" sx={{ mb: 2 }} onClose={() => setNotice('')}>
