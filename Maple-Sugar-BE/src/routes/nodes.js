@@ -9,9 +9,10 @@ import { invalidateNamespaces, readThrough } from '../cache/redisCache.js';
 import * as nodesRepository from '../repositories/nodesRepository.js';
 import * as alertsRepository from '../repositories/alertsRepository.js';
 import * as metricsRepository from '../repositories/metricsRepository.js';
+import * as collectionLogsRepository from '../repositories/collectionLogsRepository.js';
 import * as journalRepository from '../repositories/journalRepository.js';
 import * as calibrationRepository from '../repositories/calibrationRepository.js';
-import { query } from '../db/pool.js';
+import { transaction } from '../db/pool.js';
 import { FAULT_ALERT_TYPES } from '../business/alerting.js';
 import { liveState } from '../business/calibration.js';
 import { calibrationBody, createNodeBody, flagNodeBody, idParam, nodeActionBody, nodeDetailsBody, nodeIntervalBody, updateNodeBody } from './schemas.js';
@@ -62,7 +63,7 @@ nodesRouter.post('/:id/lifecycle', requireCapability(Capability.MANAGE_USERS), a
 
 nodesRouter.post('/', requireCapability(Capability.DEPLOY_NODES), async (req, res) => {
   const body = createNodeBody.parse(req.body);
-  const node = await nodesRepository.createDeployedNode(body);
+  const node = await nodesRepository.createDeployedNode(body, req.user.UserID);
   await invalidateNamespaces([cacheNamespaces.NODES]);
   res.status(201).json(node);
 });
@@ -72,6 +73,30 @@ nodesRouter.delete('/:id', requireCapability(Capability.DEPLOY_NODES), async (re
   const removed = await nodesRepository.deleteNode(id);
   if (!removed) throw notFound('Node');
   await invalidateNamespaces([cacheNamespaces.NODES, cacheNamespaces.METRICS, cacheNamespaces.ALERTS]);
+  res.status(204).end();
+});
+
+const tapBody = z.object({ action: z.enum(['setup', 'remove']) });
+
+nodesRouter.post('/:id/tap', requireCapability(Capability.DEPLOY_NODES), async (req, res) => {
+  const id = idParam.parse(req.params.id);
+  const { action } = tapBody.parse(req.body);
+  const removed = action === 'remove';
+  await transaction(async (client) => {
+    const { rowCount } = await client.query(
+      'update node set status_code = $2, tap_removed = $3 where id = $1 and tap_removed is distinct from $3',
+      [id, removed ? 3 : 0, removed],
+    );
+    if (rowCount) {
+      await client.query(
+        'insert into audit_events (event_type, actor_id, target_id, note) values ($1, $2, $3, $4)',
+        [removed ? 'tap_removed' : 'tap_setup', req.user.UserID, id, removed ? 'Tap pulled for the semester.' : 'Tap set up.'],
+      );
+    } else if (!(await client.query('select id from node where id = $1', [id])).rowCount) {
+      throw notFound('Node');
+    }
+  });
+  await invalidateNamespaces([cacheNamespaces.NODES]);
   res.status(204).end();
 });
 
@@ -101,32 +126,44 @@ nodesRouter.post('/:id/actions', requireAuth, async (req, res) => {
 
   const board = (await nodesRepository.listBoard()).find((item) => item.NodeID === id);
   const tare = board?.Tare_Weight ?? 2;
-  await metricsRepository.createMetric({
-    NodeID: id,
-    BucketID: board?.BucketID ?? null,
-    Recorded_By_UserID: req.user.UserID,
-    Weight: tare,
-    Weather_Conditions: 'Collected',
-    Ice_Present: false,
+  const bucketId = board?.BucketID ?? null;
+  const notes = Notes?.trim() || 'Bucket emptied from the bush dashboard.';
+  await transaction(async (client) => {
+    await metricsRepository.createMetric({
+      NodeID: id,
+      BucketID: bucketId,
+      Recorded_By_UserID: req.user.UserID,
+      Weight: tare,
+      Weather_Conditions: 'Collected',
+      Ice_Present: false,
+    }, client);
+    await journalRepository.createEntry({
+      UserID: req.user.UserID,
+      NodeID: id,
+      BucketID: bucketId,
+      Title: `Collected ${node.Node_Name}`,
+      Process_Notes: notes,
+      Weight: tare,
+      Ice_Present: false,
+      Submitted_Role: req.role,
+    }, client);
+    await collectionLogsRepository.createCollectionLog({
+      NodeID: id,
+      BucketID: bucketId,
+      UserID: req.user.UserID,
+      Volume_Collected: null,
+      Quality_Notes: notes,
+    }, client);
+    await client.query(
+      `update alerts
+          set is_resolved = true
+        where node_id = $1
+          and data_mode = active_data_mode()
+          and is_resolved = false
+          and alert_type in ('Full Bucket', 'Collection Needed')`,
+      [id],
+    );
   });
-  await journalRepository.createEntry({
-    UserID: req.user.UserID,
-    NodeID: id,
-    BucketID: board?.BucketID ?? null,
-    Title: `Collected ${node.Node_Name}`,
-    Process_Notes: Notes?.trim() || 'Bucket emptied from the bush dashboard.',
-    Weight: tare,
-    Ice_Present: false,
-    Submitted_Role: req.role,
-  });
-  await query(
-    `update alerts
-        set is_resolved = true
-      where node_id = $1
-        and is_resolved = false
-        and alert_type in ('Full Bucket', 'Collection Needed')`,
-    [id],
-  );
   await invalidateNamespaces([cacheNamespaces.NODES, cacheNamespaces.METRICS, cacheNamespaces.ALERTS]);
   res.json(await nodesRepository.findNodeById(id));
 });

@@ -15,7 +15,10 @@ const METRIC_COLUMNS = `
   ice_present,
   sap_flow_rate_lph,
   corrected_at,
-  corrected_by_user_id
+  corrected_by_user_id,
+  revision,
+  correction_note,
+  data_mode
 `;
 
 /**
@@ -47,7 +50,7 @@ export async function listMetrics({ nodeId, season, from, to, aggregates = true 
 }
 
 async function listRawMetrics({ nodeId, season, from, to }, client = null) {
-  const conditions = [];
+  const conditions = ['data_mode = active_data_mode()'];
   const values = [];
 
   if (nodeId != null) {
@@ -74,8 +77,9 @@ async function listRawMetrics({ nodeId, season, from, to }, client = null) {
   return rows.map(mapMetric);
 }
 
-export async function findMetricById(id) {
-  const row = await queryOne(`select ${METRIC_COLUMNS} from metrics where id = $1`, [id]);
+export async function findMetricById(id, client = null) {
+  const lock = client ? 'for update' : '';
+  const row = await queryOneOn(client, `select ${METRIC_COLUMNS} from metrics where id = $1 and data_mode = lock_data_mode() ${lock}`, [id]);
   return row ? mapMetric(row) : null;
 }
 
@@ -88,7 +92,7 @@ export async function listRecentForNode(nodeId, limit = 24) {
   const rows = await queryAll(
     `select ${METRIC_COLUMNS}
        from metrics
-      where node_id = $1
+      where node_id = $1 and data_mode = active_data_mode()
       order by recorded_at desc
       limit $2`,
     [nodeId, limit],
@@ -156,7 +160,7 @@ const WRITABLE_METRIC_COLUMNS = {
  * corrected row into an aggregate, so the correction stays visible as its own
  * row with its provenance.
  */
-export async function updateMetric(id, changes, correctedByUserId = null) {
+export async function updateMetric(id, changes, correctedByUserId, note = null, client = null) {
   const assignments = [];
   const values = [id];
 
@@ -172,7 +176,11 @@ export async function updateMetric(id, changes, correctedByUserId = null) {
   values.push(correctedByUserId);
   assignments.push('corrected_at = CURRENT_TIMESTAMP', `corrected_by_user_id = $${values.length}`);
 
-  const row = await queryOne(
+  values.push(note);
+  assignments.push('revision = revision + 1', `correction_note = $${values.length}`);
+
+  const row = await queryOneOn(
+    client,
     `update metrics set ${assignments.join(', ')} where id = $1 returning ${METRIC_COLUMNS}`,
     values,
   );

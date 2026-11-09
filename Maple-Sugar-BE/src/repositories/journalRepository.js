@@ -14,6 +14,7 @@ function num(value) {
 function mapEntry(row) {
   return {
     EntryID: row.id,
+    Data_Mode: row.data_mode,
     UserID: row.user_id,
     Author: row.author_name ?? '',
     NodeID: row.node_id,
@@ -33,7 +34,7 @@ function mapEntry(row) {
 const SELECT = `
   select j.id, j.user_id, j.node_id, j.bucket_id, j.collected_at, j.title,
          j.process_notes, j.weight_lb, j.sugar_percent, j.ice_present,
-         j.round_label, j.submitted_role,
+         j.round_label, j.submitted_role, j.data_mode,
          u.full_name as author_name,
          n.node_name
     from collection_journal j
@@ -43,10 +44,10 @@ const SELECT = `
 
 export async function listEntries(userId) {
   const values = [];
-  let where = '';
+  let where = 'where j.data_mode = active_data_mode()';
   if (userId != null) {
     values.push(userId);
-    where = 'where j.user_id = $1';
+    where += ' and j.user_id = $1';
   }
   const rows = await queryAll(`${SELECT} ${where} order by j.collected_at desc, j.id desc`, values);
   return rows.map(mapEntry);

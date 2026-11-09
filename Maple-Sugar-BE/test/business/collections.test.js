@@ -31,7 +31,7 @@ describe('optional numbers in request bodies', () => {
     const collection = createCollectionBody.parse({ NodeID: 1, Weight: 20, Sugar_Percent: null });
     assert.equal(collection.Sugar_Percent, null);
 
-    assert.equal(updateMetricBody.parse({ Sugar_Percent: null }).Sugar_Percent, null);
+    assert.equal(updateMetricBody.parse({ Sugar_Percent: null, Expected_Revision: 0, Correction_Reason: 'Invalid reading' }).Sugar_Percent, null);
   });
 
   test('numbers and numeric strings still parse, and an absent field stays absent', () => {

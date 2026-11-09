@@ -36,6 +36,14 @@ describe('2026 node weight', () => {
     expect(isNodeReading({ Weight: 8, Temperature: null, Recorded_By_UserID: 4 })).toBe(false);
   });
 
+  test('plots labeled Test fixtures and keeps corrected sensor readings on the chart', () => {
+    const sensor = { Weight: 7.9, Temperature: 40, Recorded_By_UserID: null };
+    const fixture = { ...sensor, Weather_Conditions: 'Test chart fixture' };
+    expect(isNodeReading({ ...fixture, Data_Mode: 'test' })).toBe(true);
+    expect(isNodeReading({ ...fixture, Data_Mode: 'production' })).toBe(false);
+    expect(isNodeReading({ ...sensor, Corrected_At: '2026-09-25T22:00:00Z' })).toBe(true);
+  });
+
   test('range presets stay inside the requested window', () => {
     const now = new Date('2026-09-25T22:00:00.000Z');
     const week = presetRange('7d', now);

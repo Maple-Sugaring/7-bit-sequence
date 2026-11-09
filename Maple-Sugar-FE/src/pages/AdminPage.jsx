@@ -1,3 +1,4 @@
+import { Issue49Admin } from '../components/Issue49Admin';
 import { useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
@@ -36,6 +37,7 @@ import {
   setAccountExpiry,
   removeUser,
   setActive,
+  setCanOverwriteMeasurements,
 } from '../services/adminService';
 import { useAction, useUsers } from '../services/hooks';
  
@@ -224,6 +226,10 @@ export function AdminPage() {
     await setActive(userId, isActive);
     await refresh();
   });
+  const toggleOverwrite = useAction(async (userId, enabled) => {
+    await setCanOverwriteMeasurements(userId, enabled);
+    await refresh();
+  });
   const saveExpiry = useAction(async (userId, accountExpiry) => {
     await setAccountExpiry(userId, accountExpiry);
     await refresh();
@@ -311,6 +317,20 @@ export function AdminPage() {
       ),
     },
     {
+      field: 'Can_Overwrite_Measurements',
+      headerName: 'Overwrite readings',
+      width: 155,
+      sortable: false,
+      renderCell: (params) => (
+        <Switch
+          checked={params.value ?? true}
+          onChange={(event) => toggleOverwrite.execute(params.row.UserID, event.target.checked)}
+          disabled={toggleOverwrite.pending}
+          slotProps={{ input: { 'aria-label': `Overwrite readings for ${params.row.fullName}` } }}
+        />
+      ),
+    },
+    {
       field: 'expiry',
       headerName: 'Account status',
       width: 160,
@@ -351,10 +371,11 @@ export function AdminPage() {
     );
   }
  
-  const actionError = updateRole.error ?? toggleActive.error ?? remove.error;
+  const actionError = updateRole.error ?? toggleActive.error ?? toggleOverwrite.error ?? remove.error;
  
   return (
     <>
+      <Issue49Admin />
       <PageHeader
         title="Admin"
         subtitle="Invite accounts, change roles, and lock or extend access."

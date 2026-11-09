@@ -3,7 +3,8 @@
  * invalidation.
  */
 
-import { invalid, notFound } from '../lib/ApiError.js';
+import { transaction } from '../db/pool.js';
+import { ApiError, invalid, notFound } from '../lib/ApiError.js';
 import { logger } from '../lib/logger.js';
 import { validateReading } from '../business/validation.js';
 import { deriveAlerts } from '../business/alerting.js';
@@ -11,22 +12,16 @@ import * as metricsRepository from '../repositories/metricsRepository.js';
 import * as metricAggregatesRepository from '../repositories/metricAggregatesRepository.js';
 import * as nodesRepository from '../repositories/nodesRepository.js';
 import * as alertsRepository from '../repositories/alertsRepository.js';
-import { cacheKeys, cacheNamespaces, hashFilters, TTL } from '../cache/cacheKeys.js';
-import { invalidateNamespaces, readThrough } from '../cache/redisCache.js';
+import { cacheNamespaces } from '../cache/cacheKeys.js';
+import { invalidateNamespaces } from '../cache/redisCache.js';
 
 export async function listMetrics(filters) {
-  // Keyed on the same filter hash the frontend uses, so both tiers cache the
-  // same query under the same name.
-  return readThrough(cacheKeys.metricsList(hashFilters(filters)), TTL.METRICS, () =>
-    metricsRepository.listMetrics(filters),
-  );
+  return metricsRepository.listMetrics(filters);
 }
 
 /** Weighted per-period averages across raw and compacted readings (BRU-007). */
 export async function rollupMetrics(filters) {
-  return readThrough(cacheKeys.metricsList(`rollup:${hashFilters(filters)}`), TTL.METRICS, () =>
-    metricAggregatesRepository.rollup(filters),
-  );
+  return metricAggregatesRepository.rollup(filters);
 }
 
 /**
@@ -102,15 +97,39 @@ export async function createMetric(input, recordedByUserId) {
   return reading;
 }
 
-export async function updateMetric(id, changes, correctedByUserId = null) {
-  const existing = await metricsRepository.findMetricById(id);
-  if (!existing) throw notFound('Reading');
+const CORRECTION_UNITS = { Weight: ' lb', Temperature: ' °F', Sugar_Percent: '%' };
 
-  const merged = { ...existing, ...changes };
-  const { errors, isValid } = validateReading(merged);
-  if (!isValid) throw invalid('Some fields need attention.', errors);
+function describeValue(field, value) {
+  return value == null ? 'unset' : `${value}${CORRECTION_UNITS[field] ?? ''}`;
+}
 
-  const updated = await metricsRepository.updateMetric(id, changes, correctedByUserId);
+export async function updateMetric(id, changes, actorId, expectedRevision, reason) {
+  const updated = await transaction(async (client) => {
+    const existing = await metricsRepository.findMetricById(id, client);
+    if (!existing) throw notFound('Reading');
+    if (existing.Revision !== expectedRevision) {
+      throw new ApiError('The reading has changed. Refresh it and try again.', {
+        status: 409,
+        code: 'STALE_MEASUREMENT',
+      });
+    }
+
+    const { errors, isValid } = validateReading({ ...existing, ...changes });
+    if (!isValid) throw invalid('Some fields need attention.', errors);
+
+    const differences = Object.entries(changes)
+      .filter(([field, value]) => existing[field] !== value)
+      .map(([field, value]) => `${field}: ${describeValue(field, existing[field])} → ${describeValue(field, value)}`);
+    if (!differences.length) throw invalid('The correction must change the reading.');
+
+    const note = `${differences.join(', ')}. Reason: ${reason}`;
+    const reading = await metricsRepository.updateMetric(id, changes, actorId, note, client);
+    await client.query(
+      "insert into audit_events (event_type, actor_id, target_id, note) values ('measurement_overwritten', $1, $2, $3)",
+      [actorId, id, note],
+    );
+    return reading;
+  });
   await invalidateNamespaces([cacheNamespaces.METRICS, cacheNamespaces.DASHBOARD]);
 
   return updated;

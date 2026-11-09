@@ -28,3 +28,6 @@ __pycache__/
 terraform/.local/
 terraform/bootstrap/backend_override.tf
 *.dump
+
+# Local machine credentials
+.localenv

@@ -1,3 +1,4 @@
+import { apiClient, apiMode } from '../../data/apiClient';
 import { useState } from 'react';
 import { Alert, Button, Card, CardContent, MenuItem, Stack, TextField, Typography } from '@mui/material';
 import { deriveMapStatus, STATUS_META } from '../../business/nodeMapStatus';
@@ -18,6 +19,10 @@ function downloadBudget(rows) {
 export function SensorLifecycleCard() {
   const lifecycle = useAsync(listSensorLifecycle);
   const save = useAction(recordSensorEvent);
+  const tap = useAction(async (id, action) => {
+    await apiClient.post(`/nodes/${id}/tap`, { action });
+    await lifecycle.refresh();
+  });
   const [nodeId, setNodeId] = useState('');
   const [type, setType] = useState('installation');
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
@@ -85,6 +90,7 @@ export function SensorLifecycleCard() {
             Known replacement costs for displayed sensors: ${budget.toFixed(2)} USD
             ({visible.filter(({ plan }) => plan.cost == null).length} unpriced).
           </Typography>
+          {tap.error && <Alert severity="error">{tap.error}</Alert>}
           {visible.map(({ node, plan, status }) => (
             <Stack key={node.NodeID} spacing={0.5} sx={{ borderTop: 1, borderColor: 'divider', pt: 1 }}>
               <Typography fontWeight={600}>
@@ -100,6 +106,9 @@ export function SensorLifecycleCard() {
                 {' · '}{plan.due ? `Replacement due ${plan.due}` : 'Replacement date unknown'}
                 {' · '}{plan.cost == null ? 'Cost unknown' : `$${plan.cost.toFixed(2)}`}
               </Typography>
+              {apiMode === 'http' && <Button disabled={tap.pending} onClick={() => tap.execute(node.NodeID, node.TapRemoved ? 'setup' : 'remove')}>
+                {node.TapRemoved ? 'Set up tap' : 'Pull tap for semester'}
+              </Button>}
               {node.History.length > 0 && (
                 <details>
                   <summary>Lifecycle history</summary>
