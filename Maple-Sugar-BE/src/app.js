@@ -29,6 +29,7 @@ import { referenceRouter } from './routes/reference.js';
 import { nodesRouter } from './routes/nodes.js';
 import { metricsRouter } from './routes/metrics.js';
 import { ingestRouter } from './routes/ingest.js';
+import { auditEventsRouter } from './routes/auditEvents.js';
 import { alertsRouter } from './routes/alerts.js';
 import { collectionLogsRouter } from './routes/collectionLogs.js';
 import { collectionsRouter } from './routes/collections.js';
@@ -105,6 +106,7 @@ export function createApp() {
   app.use('/metrics', metricsRouter);
   app.use('/ingest', ingestRouter);
   app.use('/alerts', alertsRouter);
+  app.use('/audit-events', auditEventsRouter);
   app.use('/collection-logs', collectionLogsRouter);
   app.use('/collections', collectionsRouter);
   app.use('/users', usersRouter);

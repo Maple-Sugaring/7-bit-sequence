@@ -2,8 +2,8 @@ import { Router } from 'express';
 import { notFound } from '../lib/ApiError.js';
 import { Capability } from '../business/permissions.js';
 import { requireAnyCapability, requireCapability } from '../middleware/authenticate.js';
-import { cacheKeys, cacheNamespaces, TTL } from '../cache/cacheKeys.js';
-import { invalidateNamespaces, readThrough } from '../cache/redisCache.js';
+import { cacheNamespaces } from '../cache/cacheKeys.js';
+import { invalidateNamespaces } from '../cache/redisCache.js';
 import * as alertsRepository from '../repositories/alertsRepository.js';
 import { alertsQuery, idParam, updateAlertBody } from './schemas.js';
 
@@ -15,17 +15,7 @@ alertsRouter.get(
   async (req, res) => {
   const { resolved } = alertsQuery.parse(req.query);
 
-  // Open alerts drive the notification badge and are requested far more often
-  // than the full list, so they get their own key.
-  const key =
-    resolved === undefined
-      ? cacheKeys.alertsAll()
-      : resolved
-        ? 'alerts:resolved'
-        : cacheKeys.alertsOpen();
-
-  const alerts = await readThrough(key, TTL.ALERTS, () => alertsRepository.listAlerts({ resolved }));
-  res.json(alerts);
+  res.json(await alertsRepository.listAlerts({ resolved }));
 });
 
 alertsRouter.patch('/:id', requireCapability(Capability.RESOLVE_ALERTS), async (req, res) => {

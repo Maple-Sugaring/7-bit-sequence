@@ -58,6 +58,10 @@ export function changeRole(userId, roleId) {
   return usersRepository.updateUser(userId, { RoleID: Number(roleId) });
 }
 
+export function setCanOverwriteMeasurements(userId, enabled) {
+  return usersRepository.updateUser(userId, { Can_Overwrite_Measurements: enabled });
+}
+
 export function setActive(userId, isActive) {
   return usersRepository.updateUser(userId, { Is_Active: isActive });
 }

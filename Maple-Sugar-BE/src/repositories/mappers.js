@@ -40,6 +40,7 @@ export function mapRole(row) {
 
 export function mapUser(row) {
   return {
+    Can_Overwrite_Measurements: row.can_overwrite_measurements,
     UserID: row.id,
     RoleID: row.role_id,
     First_Name: row.first_name ?? '',
@@ -134,6 +135,9 @@ export function mapMetric(row) {
     Ice_Present: Boolean(row.ice_present),
     Sap_Flow_Rate_Lph: num(row.sap_flow_rate_lph),
     // Who last corrected the reading through PATCH /metrics/:id, and when.
+    Data_Mode: row.data_mode,
+    Revision: row.revision ?? 0,
+    Correction_Note: row.correction_note ?? null,
     Corrected_At: iso(row.corrected_at),
     Corrected_By_UserID: row.corrected_by_user_id ?? null,
     // A raw row is one reading. Rows built from metric_aggregates set this
@@ -157,6 +161,7 @@ export function mapAlert(row) {
 export function mapCollectionLog(row) {
   return {
     LogID: row.id,
+    Data_Mode: row.data_mode,
     BucketID: row.bucket_id,
     UserID: row.user_id,
     NodeID: row.node_id,

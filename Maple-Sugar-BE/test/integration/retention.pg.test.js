@@ -7,6 +7,10 @@
  * aggregate and run tables.
  */
 
+import { randomUUID } from 'node:crypto';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, describe, test } from 'node:test';
 
@@ -19,6 +23,11 @@ import { runRetention, storageReport } from '../../src/services/metricRetention.
 import * as metricsRepository from '../../src/repositories/metricsRepository.js';
 import { createDeployedNode, deleteNode } from '../../src/repositories/nodesRepository.js';
 import { deleteUser } from '../../src/repositories/usersRepository.js';
+import { recordCollection } from '../../src/services/collectionsService.js';
+import { ingestReadings } from '../../src/services/ingestService.js';
+import { createReadingBuffer } from '../../src/services/readingBuffer.js';
+import { updateMetric } from '../../src/services/metricsService.js';
+import { createCollectionLog, listCollectionLogs } from '../../src/repositories/collectionLogsRepository.js';
 import { rollup } from '../../src/repositories/metricAggregatesRepository.js';
 
 const skip = testDatabaseUrl ? false : 'set MAPLE_TEST_DATABASE_URL to run';
@@ -82,6 +91,98 @@ describe('reading retention and aggregation (Postgres)', { skip }, () => {
     assert.equal(agg.reading_count, 1);
   });
 
+  test('one concurrent correction wins and writes its audit note once', async () => {
+    const id = await insertReading({ at: '2025-03-01T12:10:00Z', weight: 30 });
+    const results = await Promise.allSettled([
+      updateMetric(id, { Weight: 31 }, userId, 0, 'Tare correction'),
+      updateMetric(id, { Weight: 32 }, userId, 0, 'Scale correction'),
+    ]);
+    const saved = results.find((result) => result.status === 'fulfilled').value;
+    assert.equal(results.find((result) => result.status === 'rejected').reason.status, 409);
+    assert.equal(saved.MetricID, id);
+    assert.equal(saved.Revision, 1);
+    assert.match(saved.Correction_Note, /30 lb → 3[12] lb/);
+    assert.equal(await count("select count(*) from audit_events where target_id = $1 and event_type = 'measurement_overwritten'", [id]), 1);
+    assert.equal((await metricsRepository.findMetricById(id)).Weight, saved.Weight);
+  });
+
+  test('a rejected audit insert rolls the measurement correction back', async () => {
+    const id = await insertReading({ at: '2025-03-01T12:10:00Z', weight: 30 });
+    await pool.query(`alter table audit_events add constraint reject_rehearsal_note
+      check (note not like '%forced audit rejection%')`);
+    try {
+      await assert.rejects(
+        updateMetric(id, { Weight: 31 }, userId, 0, 'forced audit rejection'),
+        { code: '23514' },
+      );
+      const reading = await metricsRepository.findMetricById(id);
+      assert.equal(reading.Weight, 30);
+      assert.equal(reading.Revision, 0);
+      assert.equal(reading.Correction_Note, null);
+    } finally {
+      await pool.query('alter table audit_events drop constraint reject_rehearsal_note');
+    }
+  });
+
+  test('collection pages preserve equal-timestamp rows and stay in the active mode', async () => {
+    const collectedAt = '2090-03-01T12:10:00Z';
+    const entry = { NodeID: nodeA, Collected_At: collectedAt, Volume_Collected: 1 };
+    const first = await createCollectionLog(entry);
+    const second = await createCollectionLog(entry);
+    try {
+      const [newest] = await listCollectionLogs({ from: collectedAt, limit: 1 });
+      assert.equal(newest.LogID, second.LogID);
+      const [older] = await listCollectionLogs({ from: collectedAt, before: newest.LogID, limit: 1 });
+      assert.equal(older.LogID, first.LogID);
+      await pool.query("update site_data_mode set mode = 'production'");
+      assert.deepEqual(await listCollectionLogs({ from: collectedAt }), []);
+      assert.equal((await createCollectionLog(entry)).Data_Mode, 'production');
+      assert.equal((await listCollectionLogs({ from: collectedAt })).length, 1);
+    } finally {
+      await pool.query("update site_data_mode set mode = 'test'");
+      await pool.query('delete from collection_logs where collected_at = $1', [collectedAt]);
+    }
+  });
+
+  test('queued writes use the mode at first save and retries keep that classification', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'maple-mode-'));
+    const buffer = createReadingBuffer(join(dir, 'readings.jsonl'));
+    const gateway = (await pool.query("insert into gateway (gateway_code) values ('MODE-REHEARSAL') returning id")).rows[0];
+    const node = await createDeployedNode({ GatewayID: gateway.id, Node_Name: 'Mode rehearsal' }, userId);
+    const recordedAt = new Date().toISOString();
+    const collectedAt = new Date(Date.now() + 1000).toISOString();
+    const batch = { gatewayCode: 'MODE-REHEARSAL', readings: [{ NodeID: node.NodeID, Recorded_At: recordedAt, Weight: 10 }] };
+    const collection = { NodeID: node.NodeID, Client_Ref: randomUUID(), Collected_At: collectedAt, Weight: 11, Notes: 'Queued offline' };
+    const user = { UserID: userId, RoleID: 1 };
+    try {
+      await buffer.enqueue(batch);
+      await pool.query("update site_data_mode set mode = 'production'");
+      assert.deepEqual(await buffer.flush(async (queued) => {
+        const result = await ingestReadings(queued);
+        assert.equal(result.Accepted[0].Reading.Data_Mode, 'production');
+      }), { flushed: 1, remaining: 0 });
+      const saved = await recordCollection(collection, user);
+      assert.equal(saved.Entry.Data_Mode, 'production');
+      assert.equal(saved.Log.Data_Mode, 'production');
+      await pool.query("update site_data_mode set mode = 'test'");
+      const retry = await ingestReadings(batch);
+      assert.equal(retry.Accepted[0].Duplicate, true);
+      assert.equal(retry.Accepted[0].Reading.Data_Mode, 'production');
+      const repeated = await recordCollection(collection, user);
+      assert.equal(repeated.Duplicate, true);
+      assert.equal(repeated.Entry.EntryID, saved.Entry.EntryID);
+      assert.equal(repeated.Entry.Data_Mode, 'production');
+      assert.equal(await count("select count(*) from metrics where node_id = $1 and data_mode = 'production'", [node.NodeID]), 2);
+      assert.equal(await count('select count(*) from collection_logs where node_id = $1', [node.NodeID]), 1);
+    } finally {
+      await pool.query("update site_data_mode set mode = 'test'");
+      await pool.query('delete from collection_logs where node_id = $1', [node.NodeID]);
+      await deleteNode(node.NodeID);
+      await pool.query('delete from gateway where id = $1', [gateway.id]);
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   test('keeps manual and corrected readings raw for provenance', async () => {
     const manual = await insertReading({ at: '2025-03-01T12:10:00Z', sugar: 2.5, user: userId });
     const corrected = await insertReading({ at: '2025-03-01T12:20:00Z', weight: 30 });
@@ -112,7 +213,7 @@ describe('reading retention and aggregation (Postgres)', { skip }, () => {
     assert.equal((await storageReport()).Raw.Manual_Rows, 1);
   });
 
-  test('a node with compacted history can still be deleted', async () => {
+  test('deleting a node removes compacted metrics and preserves collection logs', async () => {
     const node = await createDeployedNode({ Node_Name: 'Retention deletion test', Stand: 'Alumni House' });
     const reading = await insertReading({ node: node.NodeID, at: '2025-03-01T12:10:00Z', weight: 20 });
     await pool.query('update metrics set bucket_id = (select id from buckets where node_id = $1) where id = $2',
@@ -120,7 +221,13 @@ describe('reading retention and aggregation (Postgres)', { skip }, () => {
     await runRetention({ now: nowForCutoff('2025-04-01T00:00:00Z') });
     assert.equal(await count('select count(*) from metric_aggregates where node_id = $1', [node.NodeID]), 1);
 
-    assert.equal(await deleteNode(node.NodeID), true);
+    const log = await createCollectionLog({ NodeID: node.NodeID, Volume_Collected: 1 });
+    try {
+      assert.equal(await deleteNode(node.NodeID), true);
+      assert.equal(await count('select count(*) from collection_logs where id = $1', [log.LogID]), 1);
+    } finally {
+      await pool.query('delete from collection_logs where id = $1', [log.LogID]);
+    }
     assert.equal(await count('select count(*) from metric_aggregates where node_id = $1', [node.NodeID]), 0);
     assert.equal(await count('select count(*) from node where id = $1', [node.NodeID]), 0);
   });

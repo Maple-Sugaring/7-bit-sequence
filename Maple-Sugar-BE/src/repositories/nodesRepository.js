@@ -141,7 +141,7 @@ export async function listBoard() {
       left join buckets b on b.node_id = n.id and b.node_id is not null
       left join lateral (
         select weight, temperature, ice_present, sap_flow_rate_lph, recorded_at
-          from metrics
+          from (select * from metrics where data_mode = active_data_mode()) metrics
          where node_id = n.id
          order by recorded_at desc
          limit 1
@@ -150,7 +150,7 @@ export async function listBoard() {
       -- tree's sugar is the last one a student actually measured this season.
       left join lateral (
         select sugar_percent, recorded_at
-          from metrics
+          from (select * from metrics where data_mode = active_data_mode()) metrics
          where node_id = n.id
            and sugar_percent is not null
            and sap_season(recorded_at) = sap_season(CURRENT_TIMESTAMP)
@@ -251,7 +251,7 @@ export async function recordNodeHeartbeat(id, { batteryPercent = null, signalRss
             battery_reported_at = case when $2::numeric is not null then CURRENT_TIMESTAMP else battery_reported_at end,
             signal_reported_at = case when $3::integer is not null then CURRENT_TIMESTAMP else signal_reported_at end,
             signal_rssi = coalesce($3, signal_rssi),
-            status_code = case when status_code = 3 then status_code else 1 end
+            status_code = case when tap_removed then 3 when status_code = 3 then status_code else 1 end
       where id = $1`,
     [id, batteryPercent, signalRssi],
   );
@@ -323,7 +323,7 @@ export async function updateNode(id, changes) {
  * Registers a tree that is about to be flashed. The node code is assigned here
  * so the web flasher can write the same id into the Heltec.
  */
-export async function createDeployedNode(input) {
+export async function createDeployedNode(input, actorId) {
   return transaction(async (client) => {
     const next = await client.query(
       `select coalesce(max(substring(node_code from 6)::int), 0) + 1 as n
@@ -363,6 +363,11 @@ export async function createDeployedNode(input) {
         input.Tree_Species || 'Sugar Maple',
       ],
     );
+    await client.query('update node set tap_removed = true where id = $1', [node.id]);
+    await client.query(
+      "insert into audit_events (event_type, actor_id, target_id, note) values ('node_setup', $1, $2, $3)",
+      [actorId, node.id, `Set up ${nodeCode}.`],
+    );
     return mapNode(node);
   });
 }
@@ -376,7 +381,6 @@ export async function deleteNode(id) {
     await client.query('update schedule_slots set node_id = null where node_id = $1', [id]);
     await client.query('delete from sap_daily where node_id = $1', [id]);
     await client.query('delete from collection_journal where node_id = $1', [id]);
-    await client.query('delete from collection_logs where node_id = $1', [id]);
     await client.query('delete from alerts where node_id = $1', [id]);
     await client.query('delete from metric_aggregates where node_id = $1', [id]);
     await client.query('delete from metrics where node_id = $1', [id]);

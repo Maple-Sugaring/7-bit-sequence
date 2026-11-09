@@ -62,6 +62,8 @@ mock.method(pool, 'query', async (text, params = []) => {
   return { rows: [], rowCount: 0 };
 });
 
+mock.method(pool, 'connect', async () => ({ query: pool.query.bind(pool), release() {} }));
+
 let baseUrl;
 let server;
 
@@ -276,6 +278,19 @@ describe('authorization over HTTP', () => {
       queries.some((query) => query.sql.includes('from node')),
       false,
     );
+  });
+
+  test('measurement overwrite permission changes apply to an existing session', async () => {
+    const account = userRow({ id: 73, role_id: 2, can_overwrite_measurements: true });
+    const token = tokenFor(account);
+    const patch = (body) => send('/metrics/999999', { method: 'PATCH', token, body });
+    const correction = { Weight: 12, Expected_Revision: 0, Correction_Reason: 'Incorrect tare' };
+
+    assert.equal((await patch({ ...correction, Correction_Reason: ' ' })).status, 422);
+    usersById.set(account.id, { ...account, can_overwrite_measurements: false });
+    assert.equal((await patch(correction)).status, 403);
+    usersById.set(account.id, account);
+    assert.equal((await patch(correction)).status, 404);
   });
 
   test('an invite keeps untrusted text in parameters', async () => {

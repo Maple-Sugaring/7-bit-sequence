@@ -67,6 +67,8 @@ export const createMetricBody = z.object({
 
 export const updateMetricBody = z
   .object({
+    Expected_Revision: z.number().int().nonnegative(),
+    Correction_Reason: z.string().trim().min(1).max(1000),
     BucketID: z.coerce.number().int().positive().nullish(),
     Recorded_At: isoDateTime.optional(),
     Weight: nullableNumber,
@@ -75,7 +77,9 @@ export const updateMetricBody = z
     Weather_Conditions: z.string().max(50).nullish(),
     Ice_Present: z.boolean().optional(),
   })
-  .refine((body) => Object.keys(body).length > 0, { message: 'Nothing to update.' });
+  .refine((body) => Object.keys(body).some((key) => key !== 'Expected_Revision' && key !== 'Correction_Reason'), {
+    message: 'Nothing to update.',
+  });
 
 const registeredGatewayCode = z
   .string()
@@ -149,6 +153,8 @@ export const updateAlertBody = z.object({
 });
 
 export const collectionLogsQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  before: z.coerce.number().int().positive().optional(),
   season: z.coerce.number().int().min(2000).max(2100).optional(),
   from: isoDateTime.optional(),
   to: isoDateTime.optional(),
@@ -191,6 +197,7 @@ export const inviteUserBody = z.object({
 
 export const updateUserBody = z
   .object({
+    Can_Overwrite_Measurements: z.boolean().optional(),
     RoleID: z.coerce.number().int().min(1).max(3).optional(),
     First_Name: z.string().max(100).optional(),
     Last_Name: z.string().max(100).optional(),

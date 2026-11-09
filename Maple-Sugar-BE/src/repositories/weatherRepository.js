@@ -29,7 +29,7 @@ export async function listDaily({ year, nodeId } = {}) {
               temp_min_f, temp_max_f, precip_in, conditions,
               flow_gal, sugar_percent, weight_lb, ice_present, sap_run, flow_index
          from sap_daily
-        where node_id = $1
+        where data_mode = active_data_mode() and node_id = $1
           and ($2::int is null or extract(year from observed_on) = $2)
         order by observed_on`,
       [nodeId, year ?? null],
@@ -50,7 +50,7 @@ export async function listDaily({ year, nodeId } = {}) {
             bool_or(sap_run) as sap_run,
             round(avg(flow_index)::numeric, 3) as flow_index
        from sap_daily
-      where $1::int is null or extract(year from observed_on) = $1
+      where data_mode = active_data_mode() and ($1::int is null or extract(year from observed_on) = $1)
       group by observed_on
       order by observed_on`,
     [year ?? null],
@@ -72,7 +72,7 @@ export async function compareYear(year) {
             s.sap_run
        from sap_daily s
        join node n on n.id = s.node_id
-      where n.tracked
+      where n.tracked and s.data_mode = active_data_mode()
         and extract(year from s.observed_on) = $1
       order by n.stand, n.id, s.observed_on`,
     [year],
@@ -224,7 +224,7 @@ export async function insertSapDaily(rows) {
          (observed_on, node_id, temp_min_f, temp_max_f, precip_in, conditions,
           flow_gal, sugar_percent, weight_lb, ice_present, sap_run, flow_index)
        values ${values.join(', ')}
-       on conflict (observed_on, node_id) do nothing`,
+       on conflict (observed_on, node_id, data_mode) do nothing`,
       params,
     );
   }

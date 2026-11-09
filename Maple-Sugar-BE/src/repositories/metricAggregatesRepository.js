@@ -19,6 +19,7 @@ const PREFIXES = Object.values(AGGREGATED_FIELDS);
 export const ELIGIBLE_RAW = 'not recorded_manually and recorded_by_user_id is null and corrected_at is null and node_id is not null';
 
 const AGGREGATE_COLUMNS = `
+  data_mode,
   id, node_id, bucket_id, period_start, period_seconds, reading_count,
   first_recorded_at, last_recorded_at, ice_present_count, created_at, updated_at, last_run_id,
   ${PREFIXES.map((p) => `${p}_count, ${p}_sum, ${p}_min, ${p}_max`).join(',\n  ')}
@@ -68,6 +69,7 @@ export function mapAggregateAsMetric(row) {
     Corrected_At: null,
     Corrected_By_UserID: null,
     Aggregated: true,
+    Data_Mode: row.data_mode,
     Aggregate: {
       AggregateID: row.id,
       Period_Start: iso(start),
@@ -93,7 +95,7 @@ export function mapAggregateAsMetric(row) {
 
 
 export async function listAggregates({ nodeId, season, from, to } = {}, client = null) {
-  const conditions = [];
+  const conditions = ['data_mode = active_data_mode()'];
   const values = [];
   if (nodeId != null) {
     values.push(nodeId);
@@ -126,7 +128,7 @@ export async function listAggregates({ nodeId, season, from, to } = {}, client =
 // --- Retention job -------------------------------------------------------
 
 const insertColumns = [
-  'node_id', 'bucket_id', 'period_start', 'period_seconds', 'reading_count',
+  'data_mode', 'node_id', 'bucket_id', 'period_start', 'period_seconds', 'reading_count',
   'first_recorded_at', 'last_recorded_at', 'ice_present_count', 'last_run_id',
   ...PREFIXES.flatMap((p) => [`${p}_count`, `${p}_sum`, `${p}_min`, `${p}_max`]),
 ];
@@ -134,6 +136,7 @@ const insertColumns = [
 
 // use epoh time
 const selectAggregates = [
+  'data_mode',
   'node_id',
   'bucket_id',
 
@@ -177,14 +180,14 @@ const COMPACT_SQL = `
     delete from metrics
      where ${ELIGIBLE_RAW}
        and recorded_at >= $1 and recorded_at < $2
-     returning node_id, bucket_id, recorded_at, ice_present, ${PREFIXES.join(', ')}
+     returning data_mode, node_id, bucket_id, recorded_at, ice_present, ${PREFIXES.join(', ')}
   ),
   written as (
     insert into metric_aggregates as a (${insertColumns.join(', ')})
     select ${selectAggregates.join(',\n           ')}
       from moved
-     group by 1, 2, 3
-    on conflict (node_id, (coalesce(bucket_id, 0)), period_start, period_seconds)
+     group by 1, 2, 3, 4
+    on conflict (data_mode, node_id, (coalesce(bucket_id, 0)), period_start, period_seconds)
     do update set ${mergeAssignments.join(',\n      ')}
     returning 1
   )
@@ -327,8 +330,8 @@ export async function storageStats(cutoff) {
  */
 export async function rollup({ nodeId, season, from, to, interval, timeZone }) {
   const values = [interval, timeZone];
-  const raw = [];
-  const agg = [];
+  const raw = ['data_mode = active_data_mode()'];
+  const agg = ['data_mode = active_data_mode()'];
   if (nodeId != null) {
     values.push(nodeId);
     raw.push(`node_id = $${values.length}`);

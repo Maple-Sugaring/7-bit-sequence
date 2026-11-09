@@ -6,7 +6,7 @@ export function listSensorLifecycle() {
     select n.id as "NodeID", coalesce(n.node_name, n.node_code) as "Name",
            n.status_code as "Status", n.battery_level as "Battery", n.signal_rssi as "Signal",
            n.battery_reported_at as "BatteryReportedAt", n.signal_reported_at as "SignalReportedAt",
-           n.last_seen as "LastSeen", n.report_interval_seconds as "ReportInterval",
+           n.tap_removed as "TapRemoved", n.last_seen as "LastSeen", n.report_interval_seconds as "ReportInterval",
            fault.alert_type as "Fault",
            coalesce(events.history, '[]'::json) as "History"
       from node n
@@ -19,7 +19,7 @@ export function listSensorLifecycle() {
       ) events on true
       left join lateral (
         select alert_type from alerts
-         where node_id = n.id and not is_resolved and alert_type = any($1::text[])
+         where node_id = n.id and data_mode = active_data_mode() and not is_resolved and alert_type = any($1::text[])
          order by created_at desc, id desc limit 1
       ) fault on true
      order by n.id

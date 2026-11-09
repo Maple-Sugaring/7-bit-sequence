@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { Capability } from '../business/permissions.js';
-import { ApiError } from '../lib/ApiError.js';
-import { requireAnyCapability, requireCapability } from '../middleware/authenticate.js';
+import { ApiError, forbidden } from '../lib/ApiError.js';
+import { requireAnyCapability, requireAuth, requireCapability } from '../middleware/authenticate.js';
 import {
   createMetricBody,
   idParam,
@@ -57,11 +57,9 @@ metricsRouter.post('/', requireCapability(Capability.RECORD_DATA), async (req, r
   res.status(201).json(reading);
 });
 
-// Correcting an already-recorded reading is an admin action; students record but
-// do not revise. The correction is stamped with who made it and the row is then
-// kept raw by the retention job.
-metricsRouter.patch('/:id', requireCapability(Capability.EDIT_DATA), async (req, res) => {
+metricsRouter.patch('/:id', requireAuth, async (req, res) => {
+  if (!req.user.Can_Overwrite_Measurements) throw forbidden('Measurement corrections are disabled for your account.');
   const id = idParam.parse(req.params.id);
-  const changes = updateMetricBody.parse(req.body);
-  res.json(await metricsService.updateMetric(id, changes, req.user.UserID));
+  const { Expected_Revision, Correction_Reason, ...changes } = updateMetricBody.parse(req.body);
+  res.json(await metricsService.updateMetric(id, changes, req.user.UserID, Expected_Revision, Correction_Reason));
 });
