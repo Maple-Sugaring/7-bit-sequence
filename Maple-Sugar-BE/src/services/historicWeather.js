@@ -101,6 +101,7 @@ export async function ensureHistoricWeather() {
     `select n.id, n.stand, b.tare_weight
        from node n
        left join buckets b on b.node_id = n.id
+      where not n.demo_fixture
       order by n.id`,
   );
 

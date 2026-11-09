@@ -16,7 +16,7 @@ auditEventsRouter.get('/', requireCapability(Capability.MANAGE_USERS), async (re
   const events = await queryAll(
     `select id, event_type, actor_id, target_id, note, created_at
        from audit_events
-      where ($1::bigint is null or id < $1)
+      where (not demo_fixture or active_data_mode() = 'test') and ($1::bigint is null or id < $1)
       order by id desc
       limit $2`,
     [before ?? null, limit + 1],

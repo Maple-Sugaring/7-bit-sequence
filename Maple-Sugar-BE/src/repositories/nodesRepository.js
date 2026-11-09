@@ -100,14 +100,15 @@ export async function deleteGateway(id) {
   });
 }
 
-export async function listNodes() {
+export async function listNodes({ includeDemo = true } = {}) {
   // Ordered by stand then name so the device list and the dashboard's
   // per-stand grouping agree without the client re-sorting.
   const rows = await queryAll(`
     select ${NODE_COLUMNS}
-      from node
+      from visible_nodes
+     where ($1 or not demo_fixture)
      order by stand nulls last, node_name
-  `);
+  `, [includeDemo]);
   return rows.map(mapNode);
 }
 
@@ -137,7 +138,7 @@ export async function listBoard() {
            m.ice_present,
            m.sap_flow_rate_lph,
            m.recorded_at
-      from node n
+      from visible_nodes n
       left join buckets b on b.node_id = n.id and b.node_id is not null
       left join lateral (
         select weight, temperature, ice_present, sap_flow_rate_lph, recorded_at
@@ -192,7 +193,7 @@ export async function listBoard() {
 }
 
 export async function findNodeById(id) {
-  const row = await queryOne(`select ${NODE_COLUMNS} from node where id = $1`, [id]);
+  const row = await queryOne(`select ${NODE_COLUMNS} from node where id = $1 and (not demo_fixture or active_data_mode() = 'test')`, [id]);
   return row ? mapNode(row) : null;
 }
 
@@ -215,14 +216,17 @@ export async function findGatewayByCode(code) {
  * an explicit NodeID is trusted first, then the node code, then the LoRa id.
  */
 export async function findNodeForIngest({ NodeID, Node_Code, LoRa_Device_ID }) {
-  if (NodeID != null) return findNodeById(NodeID);
+  if (NodeID != null) {
+    const row = await queryOne(`select ${NODE_COLUMNS} from node where id = $1 and not demo_fixture`, [NodeID]);
+    return row ? mapNode(row) : null;
+  }
   if (Node_Code) {
-    const row = await queryOne(`select ${NODE_COLUMNS} from node where node_code = $1`, [Node_Code]);
+    const row = await queryOne(`select ${NODE_COLUMNS} from node where node_code = $1 and not demo_fixture`, [Node_Code]);
     return row ? mapNode(row) : null;
   }
   if (LoRa_Device_ID) {
     const row = await queryOne(
-      `select ${NODE_COLUMNS} from node where lora_device_id = $1`,
+      `select ${NODE_COLUMNS} from node where lora_device_id = $1 and not demo_fixture`,
       [LoRa_Device_ID],
     );
     return row ? mapNode(row) : null;
@@ -313,7 +317,7 @@ export async function updateNode(id, changes) {
   if (!assignments.length) return findNodeById(id);
 
   const row = await queryOne(
-    `update node set ${assignments.join(', ')} where id = $1 returning ${NODE_COLUMNS}`,
+    `update node set ${assignments.join(', ')} where id = $1 and (not demo_fixture or lock_data_mode() = 'test') returning ${NODE_COLUMNS}`,
     values,
   );
   return row ? mapNode(row) : null;
@@ -375,7 +379,7 @@ export async function createDeployedNode(input, actorId) {
 /** Removes a deployed node and the rows that point at it. */
 export async function deleteNode(id) {
   return transaction(async (client) => {
-    const existing = await client.query('select id from node where id = $1', [id]);
+    const existing = await client.query('select id from visible_nodes where id = $1', [id]);
     if (!existing.rows[0]) return false;
 
     await client.query('update schedule_slots set node_id = null where node_id = $1', [id]);

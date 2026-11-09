@@ -68,9 +68,7 @@ referenceRouter.get(
   '/buckets',
   requireAnyCapability(Capability.VIEW_DASHBOARD, Capability.VIEW_DATA_TABLE),
   async (req, res) => {
-  res.json(
-    await readThrough(cacheKeys.buckets(), TTL.BUCKETS, () => bucketsRepository.listBuckets()),
-  );
+  res.json(await bucketsRepository.listBuckets());
 });
 
 referenceRouter.get('/guides', requireCapability(Capability.VIEW_GUIDES), async (req, res) => {

@@ -23,10 +23,7 @@ nodesRouter.get(
   '/',
   requireAnyCapability(Capability.VIEW_DASHBOARD, Capability.VIEW_NODES),
   async (req, res) => {
-  const nodes = await readThrough(cacheKeys.nodesHealth(), TTL.NODE_HEALTH, () =>
-    nodesRepository.listNodes(),
-  );
-  res.json(nodes);
+  res.json(await nodesRepository.listNodes());
 });
 
 nodesRouter.get(
@@ -84,7 +81,8 @@ nodesRouter.post('/:id/tap', requireCapability(Capability.DEPLOY_NODES), async (
   const removed = action === 'remove';
   await transaction(async (client) => {
     const { rowCount } = await client.query(
-      'update node set status_code = $2, tap_removed = $3 where id = $1 and tap_removed is distinct from $3',
+      `update node set status_code = $2, tap_removed = $3
+        where id = $1 and (not demo_fixture or lock_data_mode() = 'test') and tap_removed is distinct from $3`,
       [id, removed ? 3 : 0, removed],
     );
     if (rowCount) {
@@ -92,7 +90,7 @@ nodesRouter.post('/:id/tap', requireCapability(Capability.DEPLOY_NODES), async (
         'insert into audit_events (event_type, actor_id, target_id, note) values ($1, $2, $3, $4)',
         [removed ? 'tap_removed' : 'tap_setup', req.user.UserID, id, removed ? 'Tap pulled for the semester.' : 'Tap set up.'],
       );
-    } else if (!(await client.query('select id from node where id = $1', [id])).rowCount) {
+    } else if (!(await client.query('select id from visible_nodes where id = $1', [id])).rowCount) {
       throw notFound('Node');
     }
   });
