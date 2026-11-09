@@ -42,11 +42,12 @@ export async function createAlert({ NodeID, Alert_Type, Description, severity = 
   const row = await queryOne(
     `insert into alerts (node_id, alert_type, severity, message, is_resolved)
      values ($1, $2, $3, $4, false)
-     returning ${ALERT_COLUMNS}`,
+     returning ${ALERT_COLUMNS}, exists (select 1 from node n where n.id = $1 and n.demo_fixture) as demo_node`,
     [NodeID, Alert_Type, severity, Description],
   );
   const alert = mapAlert(row);
   // Delivery is best-effort. A mail outage must not roll back the alert row.
+  if (row.demo_node) return alert;
   void notifyCriticalAlert({ ...alert, severity, Alert_Type }).catch((error) => {
     logger.error({ err: error, alertId: alert.AlertID }, 'Critical notification failed');
   });
@@ -120,6 +121,7 @@ export async function claimAlertsForEscalation(minutes, alwaysNotifyTypes) {
     `update alerts
         set escalated_at = CURRENT_TIMESTAMP
       where is_resolved = false and data_mode = active_data_mode()
+        and not exists (select 1 from node where id = alerts.node_id and demo_fixture)
         and escalated_at is null
         and created_at <= CURRENT_TIMESTAMP - make_interval(mins => $1)
         and (severity = 'critical' or alert_type = any($2::text[]))

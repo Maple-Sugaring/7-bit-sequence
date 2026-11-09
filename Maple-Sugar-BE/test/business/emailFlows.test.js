@@ -165,6 +165,7 @@ function fakeQuery(text, params = []) {
         alert_type: params[1],
         severity: params[2],
         message: params[3],
+        demo_node: params[0] === 999,
         is_resolved: false,
         created_at: '2026-10-05T14:00:00.000Z',
       },
@@ -362,6 +363,17 @@ const WHEN = 'Tue, Oct 6, 9:00 AM – 11:00 AM EDT';
 // -------------------------------------------------------------------- tests
 
 describe('critical alert emails', () => {
+  test('demo-node alerts are saved without email or SMS', async () => {
+    config.alertEmails = ['club@rit.edu'];
+    config.twilio = { accountSid: 'AC123', authToken: 'secret', from: '+15855550000' };
+    config.alertSmsTo = ['+15855550001'];
+    const alert = await alertsRepository.createAlert({ NodeID: 999, Alert_Type: 'Spoilage', severity: 'critical' });
+    await settle();
+    assert.equal(alert.NodeID, 999);
+    assert.deepEqual(outbox, []);
+    assert.deepEqual(texts, []);
+  });
+
   test('go to admins, opted-in users, and ALERT_EMAILS once each', async () => {
     db.users.get(OTHER_STUDENT.id).email_alerts = true; // opted in
     config.alertEmails = ['club@rit.edu', 'ADA@rit.edu']; // ADA duplicates the admin
@@ -929,6 +941,7 @@ describe('alert escalation after the window (FR-025)', () => {
     const claim = queries.find((sql) => sql.includes('escalated_at = CURRENT_TIMESTAMP'));
     assert.match(claim, /is_resolved = false/);
     assert.match(claim, /escalated_at is null/);
+    assert.match(claim, /not exists \(select 1 from node where id = alerts.node_id and demo_fixture\)/);
     assert.match(claim, /make_interval\(mins => \$1\)/);
     assert.match(claim, /severity = 'critical' or alert_type = any/);
   });
