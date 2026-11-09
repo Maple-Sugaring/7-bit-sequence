@@ -67,7 +67,7 @@ export function staleNodeAlerts(nodes, now = new Date()) {
 }
 
 export async function watchNodes(now = new Date()) {
-  const nodes = await nodesRepository.listNodes();
+  const nodes = await nodesRepository.listNodes({ includeDemo: false });
   const pending = nodeHealthAlerts(nodes, now);
   let raised = 0;
 

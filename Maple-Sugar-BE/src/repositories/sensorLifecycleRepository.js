@@ -9,7 +9,7 @@ export function listSensorLifecycle() {
            n.tap_removed as "TapRemoved", n.last_seen as "LastSeen", n.report_interval_seconds as "ReportInterval",
            fault.alert_type as "Fault",
            coalesce(events.history, '[]'::json) as "History"
-      from node n
+      from visible_nodes n
       left join lateral (
         select json_agg(json_build_object(
           'id', id, 'type', event_type, 'date', event_date, 'sensorType', sensor_type,
@@ -29,7 +29,7 @@ export function listSensorLifecycle() {
 export function recordSensorEvent(nodeId, event, userId) {
   return queryOne(`
     insert into sensor_lifecycle_events (node_id, event_type, event_date, sensor_type, notes, recorded_by)
-    select id, $2, $3, $4, $5, $6 from node where id = $1
+    select id, $2, $3, $4, $5, $6 from visible_nodes where id = $1
     returning id
   `, [nodeId, event.type, event.date, event.sensorType ?? null, event.notes ?? null, userId]);
 }
