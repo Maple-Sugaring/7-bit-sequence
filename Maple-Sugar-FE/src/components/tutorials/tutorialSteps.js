@@ -139,6 +139,68 @@ export const TUTORIAL_SECTIONS = [
         ],
       },
       {
+        id: 'ice',
+        label: 'Ice in the bucket',
+        steps: [
+          {
+            title: 'Enter the weight',
+            body: 'Pick the tree and enter the bucket’s weight in Sap weight, the same as any collection.',
+            capability: RECORD,
+            screen: 'ice-start',
+            target: 'weight',
+          },
+          {
+            title: 'Turn on Ice in the bucket',
+            body: 'If you see ice in the bucket, switch on Ice in the bucket. It is up to you: the sensor cannot tell there is ice.',
+            capability: RECORD,
+            screen: 'ice-start',
+            target: 'ice',
+          },
+          {
+            title: 'Save is turned off',
+            body: 'Save & next tree and Save & stop here grey out, and a Weight after ice removed field appears. The collection cannot be saved until the bucket is reweighed without the ice.',
+            capability: RECORD,
+            screen: 'ice-blocked',
+            target: 'save',
+          },
+          {
+            title: 'Remove the ice',
+            body: 'Follow the steps on screen: take the bucket off the sensor and remove the ice from the bucket.',
+            capability: RECORD,
+            screen: 'ice-blocked',
+            target: 'steps',
+          },
+          {
+            title: 'Put the bucket back and read the new weight',
+            body: 'Put the bucket back on the sensor and get the new weight reading. The node’s screen shows the live weight; press PRG once if the screen is off.',
+            capability: RECORD,
+            screen: 'ice-reading',
+            target: 'reading',
+          },
+          {
+            title: 'Enter Weight after ice removed',
+            body: 'Type the new weight into Weight after ice removed. It has to be lighter than the first weight, since the ice is out.',
+            capability: RECORD,
+            screen: 'ice-ready',
+            target: 'after-ice',
+          },
+          {
+            title: 'Save',
+            body: 'Save turns back on once the new weight is in. The weight after ice removed is saved as the sap weight, and the first weight is kept with it.',
+            capability: RECORD,
+            screen: 'ice-ready',
+            target: 'save',
+          },
+          {
+            title: 'Check the Ice removed tag',
+            body: 'The collection is tagged Ice removed · reweighed in the round and in the collection history, which also shows both weights.',
+            capability: RECORD,
+            screen: 'ice-saved',
+            target: null,
+          },
+        ],
+      },
+      {
         id: 'schedule',
         label: 'Schedule',
         steps: [
