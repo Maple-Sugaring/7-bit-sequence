@@ -45,8 +45,13 @@ export function statusFromCode(code) {
   );
 }
 
-/** Open alerts of these types mean the hardware itself is in trouble. */
-export const FAULT_ALERT_TYPES = ['Tipped', 'Spill'];
+/**
+ * Open alerts of these types mean the hardware itself is in trouble. The
+ * load-cell faults are the ones the node reports itself (the backend's
+ * FAULT_ALERT_TYPES in business/alerting.js): its weights cannot be trusted
+ * until they clear, so the map must not show the node as healthy (EIR-001).
+ */
+export const FAULT_ALERT_TYPES = ['Tipped', 'Spill', 'Load Cell', 'Reversed Load Cell', 'Untared', 'Unstable Reading'];
 
 const STATUS_OFFLINE = 0;
 const STATUS_DEGRADED = 2;
