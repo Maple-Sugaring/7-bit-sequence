@@ -178,6 +178,8 @@ export const createCollectionBody = z.object({
   Weight: nullableNumber,
   Sugar_Percent: nullableNumber,
   Ice_Present: z.boolean().optional().default(false),
+  // The first weight of an iced bucket, before the ice came out; Weight is then the reweigh.
+  Weight_Before_Ice: nullableNumber,
   Collected_At: isoDateTime.optional(),
   Notes: z.string().trim().max(8000).optional().default(''),
   Round_Label: z.string().trim().max(100).nullish(),

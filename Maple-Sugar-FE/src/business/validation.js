@@ -108,10 +108,33 @@ export function validateReading(form) {
 }
 
 /**
+ * The error for an iced bucket's reweigh, or null. With ice tagged, the student
+ * takes the bucket off the sensor, removes the ice, puts it back, and enters the
+ * new weight. It must be lighter than the first weight (the ice came out) and
+ * above the empty bucket, because it is the sap weight that gets saved.
+ */
+export function weightAfterIceError(afterIce, beforeIce, tareWeight = null) {
+  if (isBlank(afterIce)) return 'Remove the ice, reweigh the bucket, and enter the new weight.';
+  const after = Number(afterIce);
+  const before = Number(beforeIce);
+  if (!Number.isFinite(after) || after < 0) return 'Enter the weight in pounds.';
+  if (!isBlank(beforeIce) && Number.isFinite(before) && after >= before) {
+    return `Should be less than the weight with ice (${before} lb). Check the ice is out and the bucket is back on the sensor.`;
+  }
+  if (!(gallonsFromWeight(netWeight(after, tareWeight ?? 0)) > 0)) {
+    return `That is not more than the empty bucket (${tareWeight ?? 0} lb). Check the scale.`;
+  }
+  return null;
+}
+
+/**
  * Validates one collection from the round form. Weight is required, because it
  * becomes the volume collected. Sugar is optional: it is only there when the
  * student tested the sap. This is the same rule the API enforces; this copy
  * saves the round trip.
+ *
+ * With ice tagged, `Weight` is the first weight (ice still in) and
+ * `Weight_After_Ice` the reweigh, which is required before the entry can save.
  */
 export function validateCollectionEntry(form, { tareWeight = null } = {}) {
   // The form stamps the time when it saves, so a blank one means "now".
@@ -128,6 +151,11 @@ export function validateCollectionEntry(form, { tareWeight = null } = {}) {
     errors.Weight = 'Enter the sap weight.';
   } else if (!errors.Weight && !(gallonsFromWeight(netWeight(Number(form.Weight), tareWeight ?? 0)) > 0)) {
     errors.Weight = `That is not more than the empty bucket (${tareWeight ?? 0} lb). Check the scale.`;
+  }
+
+  if (form.Ice_Present && 'Weight_After_Ice' in form) {
+    const afterIce = weightAfterIceError(form.Weight_After_Ice, form.Weight, tareWeight);
+    if (afterIce) errors.Weight_After_Ice = afterIce;
   }
 
   return { errors, warnings, isValid: Object.keys(errors).length === 0 };

@@ -168,6 +168,8 @@ export function mapCollectionLog(row) {
     Collected_At: iso(row.collected_at),
     Volume_Collected: num(row.volume_collected),
     Quality_Notes: row.quality_notes ?? '',
+    Ice_Present: Boolean(row.ice_present),
+    Weight_Before_Ice_Lb: num(row.weight_before_ice_lb),
   };
 }
 
