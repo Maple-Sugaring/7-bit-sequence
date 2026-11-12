@@ -3,7 +3,7 @@ import { ApiError } from '../ApiError';
 import { Capability, ROLE_LABELS, can, roleFromId } from '../../business/permissions';
 import { sapGallonsFor } from '../../business/collectionRound';
 import { validateCollectionEntry, validateReading } from '../../business/validation';
-import { validateCollectionEntry } from '../../business/validation';
+import { bucketAlertFor } from '../../business/bucketAlerts';
 import { testWeightError } from '../../business/calibration';
 import { SENSOR_KIT } from '../../business/sensorLifecycle';
 import * as seed from '../fixtures/seed';
@@ -43,6 +43,29 @@ let nextId = {
   command: 1,
   lifecycle: seed.nodes.length + 1,
 };
+/**
+ * Opens an alert unless one of that type is already open for the node, the
+ * backend's duplicate rule. A Full Bucket supersedes the earlier Collection
+ * Needed for the same bucket, so the list shows one bucket warning per tree.
+ */
+function raiseAlert(nodeId, alert) {
+  const open = (type) => db.alerts.find((row) => row.NodeID === nodeId && !row.Is_Resolved && row.Alert_Type === type);
+  if (open(alert.Alert_Type)) return null;
+  if (alert.Alert_Type === 'Full Bucket') {
+    const earlier = open('Collection Needed');
+    if (earlier) earlier.Is_Resolved = true;
+  }
+  const row = {
+    AlertID: nextId.alert++,
+    NodeID: nodeId,
+    Alert_Type: alert.Alert_Type,
+    Description: alert.Description,
+    Created_At: dayjs().toISOString(),
+    Is_Resolved: false,
+  };
+  db.alerts.unshift(row);
+  return row;
+}
 
 const sensorHistory = new Map(seed.nodes.map((node, index) => [node.NodeID, [{
   id: index + 1, type: 'installation', date: '2026-10-25', sensorType: SENSOR_KIT, assumed: true,
@@ -665,6 +688,19 @@ const routes = [
       };
 
       db.metrics.push(row);
+
+      // Same rule as the backend's deriveAlerts: a heavy bucket raises Collection
+      // Needed at 75% and Full Bucket near the rim (FR-003).
+      const tare = db.buckets.find((bucket) => bucket.NodeID === node.NodeID)?.Tare_Weight ?? null;
+      if (row.Weight != null && tare != null) {
+        const alert = bucketAlertFor({
+          nodeName: node.Node_Name,
+          grossWeight: row.Weight,
+          tareWeight: tare,
+          icePresent: row.Ice_Present,
+        });
+        if (alert) raiseAlert(node.NodeID, alert);
+      }
       return row;
     },
   },

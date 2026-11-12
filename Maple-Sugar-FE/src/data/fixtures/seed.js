@@ -563,7 +563,7 @@ export const ALERT_TYPES = [
 const ALERT_SPECS = [
   [3, 'Full Bucket', 'Net sap is 9.7 gal, at the 10 gallon bucket capacity. Schedule a collection before it overflows.', 22, false],
   [8, 'Low Battery', 'Battery at 14%. The panel has been in shade for three days.', 3 * 60, false],
-  [11, 'Node Offline', 'No packet in 9 hours. Battery was at 3% on its last report.', 540, false],
+  [2, 'Collection Needed', 'Net sap is 8.1 gal at Alumni House - Tree 2, 81% of the 10 gallon line. Collect before it reaches capacity.', 40, false],
   [8, 'Missed Readings', 'Two report intervals have passed without a packet. Last heard 34 minutes ago.', 5, false],
   [8, 'Signal Loss', 'LoRa RSSI degraded to -108 dBm. Check antenna seating.', 50, false],
   [2, 'Spoilage', 'Sap temperature held above 40F for 5 consecutive hours. Collect or discard.', 95, false],
