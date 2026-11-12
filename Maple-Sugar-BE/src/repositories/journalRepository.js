@@ -26,6 +26,7 @@ function mapEntry(row) {
     Weight_Lb: num(row.weight_lb),
     Sugar_Percent: num(row.sugar_percent),
     Ice_Present: Boolean(row.ice_present),
+    Weight_Before_Ice_Lb: num(row.weight_before_ice_lb),
     Round_Label: row.round_label ?? null,
     Submitted_Role: row.submitted_role ?? null,
   };
@@ -33,7 +34,7 @@ function mapEntry(row) {
 
 const SELECT = `
   select j.id, j.user_id, j.node_id, j.bucket_id, j.collected_at, j.title,
-         j.process_notes, j.weight_lb, j.sugar_percent, j.ice_present,
+         j.process_notes, j.weight_lb, j.sugar_percent, j.ice_present, j.weight_before_ice_lb,
          j.round_label, j.submitted_role, j.data_mode,
          u.full_name as author_name,
          n.node_name
@@ -65,8 +66,9 @@ export async function createEntry(entry, client = null) {
     client,
     `insert into collection_journal
        (user_id, node_id, bucket_id, collected_at, title, process_notes,
-        weight_lb, sugar_percent, ice_present, round_label, client_ref, submitted_role)
-     values ($1, $2, $3, coalesce($4, CURRENT_TIMESTAMP), $5, $6, $7, $8, $9, $10, $11, $12)
+        weight_lb, sugar_percent, ice_present, round_label, client_ref, submitted_role,
+        weight_before_ice_lb)
+     values ($1, $2, $3, coalesce($4, CURRENT_TIMESTAMP), $5, $6, $7, $8, $9, $10, $11, $12, $13)
      returning id`,
     [
       entry.UserID,
@@ -81,6 +83,7 @@ export async function createEntry(entry, client = null) {
       entry.Round_Label ?? null,
       entry.Client_Ref ?? null,
       entry.Submitted_Role ?? null,
+      entry.Weight_Before_Ice ?? null,
     ],
   );
   const saved = await queryOneOn(client, `${SELECT} where j.id = $1`, [row.id]);
