@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
+
+import requests
 
 from receiver import (
     PacketStore,
@@ -11,7 +13,9 @@ from receiver import (
     downlink_command,
     forward_status,
     line_packet,
+    new_request_id,
     parse_reading,
+    post_ingest,
     process_packet,
 )
 
@@ -129,6 +133,29 @@ class ProcessPacketTest(unittest.TestCase):
         packet = line_packet('{"Node_Code":"NODE-001","Weight":1}')
         process_packet(packet, True, "", "url", "GW")
         self.assertIn("GATEWAY_INGEST_TOKEN is empty", packet["forward"]["detail"])
+
+
+class RequestIdTest(unittest.TestCase):
+    ALLOWED = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:-")
+
+    def test_ids_fit_what_the_api_accepts(self) -> None:
+        for code in ("GW-ALUMNI", "gw alumni/2", "", "X" * 80):
+            request_id = new_request_id(code)
+            self.assertTrue(8 <= len(request_id) <= 64, request_id)
+            self.assertTrue(set(request_id) <= self.ALLOWED, request_id)
+
+    def test_ids_are_unique(self) -> None:
+        self.assertNotEqual(new_request_id("GW"), new_request_id("GW"))
+
+    def test_every_retry_sends_the_same_id(self) -> None:
+        reply = Mock(status_code=201)
+        with patch("receiver.requests.post", side_effect=[requests.ConnectionError("drop"), reply]) as post, \
+                patch("receiver.time.sleep"):
+            self.assertIs(post_ingest({"Gateway_Code": "GW-ALUMNI"}, "url", "token"), reply)
+        ids = [call.kwargs["headers"]["X-Request-Id"] for call in post.call_args_list]
+        self.assertEqual(len(ids), 2)
+        self.assertEqual(ids[0], ids[1])
+        self.assertTrue(ids[0].startswith("GW-ALUMNI-"))
 
 
 if __name__ == "__main__":

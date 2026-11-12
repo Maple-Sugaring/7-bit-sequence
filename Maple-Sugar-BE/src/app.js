@@ -21,6 +21,7 @@ import { config } from './config.js';
 import { logger } from './lib/logger.js';
 import { attachUser } from './middleware/authenticate.js';
 import { requestContext } from './middleware/requestContext.js';
+import { activityRecorder } from './middleware/activityRecorder.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { cacheStatus } from './cache/redisCache.js';
 import { pool } from './db/pool.js';
@@ -107,6 +108,9 @@ export function createApp() {
 
   // Resolves the session for every route below without requiring one.
   app.use(attachUser);
+
+  // FR-036: one activity row per routed read or write, written after the response.
+  app.use(activityRecorder);
 
   app.use('/auth', authRouter);
   app.use(referenceRouter);

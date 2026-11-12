@@ -376,7 +376,7 @@ export function AdminPage() {
  
   return (
     <>
-      <Issue49Admin />
+      <Issue49Admin users={data?.users} />
       <PageHeader
         title="Admin"
         subtitle="Invite accounts, change roles, and lock or extend access."

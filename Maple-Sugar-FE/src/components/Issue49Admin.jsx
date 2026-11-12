@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Alert, Button, MenuItem, Stack, TextField, Typography } from '@mui/material';
+import { Alert, Card, CardContent, MenuItem, TextField } from '@mui/material';
 import { apiClient, apiMode } from '../data/apiClient';
 import { ActivityTrace } from './ActivityTrace';
+import { AuditLog } from './AuditLog';
 
-export function Issue49Admin() {
+export function Issue49Admin({ users = [] }) {
   const [mode, setMode] = useState('');
-  const [page, setPage] = useState(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -23,30 +23,28 @@ export function Issue49Admin() {
     }
   }
 
-  async function loadAudit(before) {
-    try {
-      setPage(await apiClient.get('/audit-events', before ? { before } : {}));
-    } catch (failure) {
-      setError(failure.message);
-    }
-  }
-
   if (apiMode !== 'http') return null;
   return (
-    <Stack spacing={2} sx={{ my: 3 }}>
-      {error && <Alert severity="error">{error}</Alert>}
-      <TextField select label="Site data mode" value={mode} disabled={!mode} onChange={(event) => void changeMode(event.target.value)}>
+    <>
+      {error && <Alert severity="error" sx={{ my: 2 }}>{error}</Alert>}
+      <TextField
+        select
+        fullWidth
+        label="Site data mode"
+        value={mode}
+        disabled={!mode}
+        onChange={(event) => void changeMode(event.target.value)}
+        sx={{ mt: 3 }}
+      >
         <MenuItem value="test">Test Mode</MenuItem>
         <MenuItem value="production">Production Mode</MenuItem>
       </TextField>
-      <Button onClick={() => void loadAudit()}>Load audit history</Button>
-      {page?.items.map((event) => (
-        <Typography key={event.id}>
-          {new Date(event.created_at).toLocaleString()} · {event.event_type} · User {event.actor_id ?? 'system'} · Target {event.target_id} · {event.note}
-        </Typography>
-      ))}
-      {page?.next && <Button onClick={() => void loadAudit(page.next)}>Older audit events</Button>}
-      <ActivityTrace />
-    </Stack>
+      <AuditLog users={users} />
+      <Card sx={{ my: 2 }}>
+        <CardContent>
+          <ActivityTrace />
+        </CardContent>
+      </Card>
+    </>
   );
 }

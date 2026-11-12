@@ -57,6 +57,15 @@ export function activityPruneJob(now = new Date()) {
   }));
 }
 
+/** Logged only when the job did something (or failed), not on every quiet tick. */
+const whenNonZero = (count) => (count ? { rowCount: count } : null);
+
+const watchNodesJob = () => trackJob('nodes.watch', () => watchNodes(), whenNonZero);
+const escalationJob = () => trackJob('alerts.escalate', () => escalateStaleAlerts(), whenNonZero);
+const remindersJob = () => trackJob('shifts.remind', () => sendShiftReminders(), whenNonZero);
+// A weather poll succeeding every 10 minutes is not news; a failure is.
+const weatherJob = () => trackJob('weather.poll', () => getLive(), () => null);
+
 async function safe(label, task) {
   try {
     await task();
@@ -66,16 +75,16 @@ async function safe(label, task) {
 }
 
 export function startHousekeeping() {
-  const weather = setInterval(() => safe('Live weather poll failed', () => getLive()), WEATHER_MS);
-  const nodes = setInterval(() => safe('Downed-node check failed', () => watchNodes()), NODES_MS);
+  const weather = setInterval(() => safe('Live weather poll failed', () => weatherJob()), WEATHER_MS);
+  const nodes = setInterval(() => safe('Downed-node check failed', () => watchNodesJob()), NODES_MS);
   const buffer = setInterval(
     () => safe('Ingest buffer replay failed', () => replayBuffer()),
     BUFFER_MS,
   );
-  const reminders = setInterval(() => safe('Shift reminders failed', () => sendShiftReminders()), REMINDERS_MS);
+  const reminders = setInterval(() => safe('Shift reminders failed', () => remindersJob()), REMINDERS_MS);
 
   const escalation = setInterval(
-    () => safe('Alert escalation failed', () => escalateStaleAlerts()),
+    () => safe('Alert escalation failed', () => escalationJob()),
     ESCALATION_MS,
   );
 
@@ -90,11 +99,11 @@ export function startHousekeeping() {
   firstRetention.unref();
 
   const first = setTimeout(() => {
-    safe('Live weather poll failed', () => getLive());
-    safe('Downed-node check failed', () => watchNodes());
+    safe('Live weather poll failed', () => weatherJob());
+    safe('Downed-node check failed', () => watchNodesJob());
     safe('Ingest buffer replay failed', () => replayBuffer());
-    safe('Shift reminders failed', () => sendShiftReminders());
-    safe('Alert escalation failed', () => escalateStaleAlerts());
+    safe('Shift reminders failed', () => remindersJob());
+    safe('Alert escalation failed', () => escalationJob());
     safe('Activity prune failed', () => activityPruneJob());
   }, 15_000);
   first.unref();

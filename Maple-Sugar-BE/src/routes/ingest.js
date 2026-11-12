@@ -22,6 +22,8 @@ function asBatch(body) {
 }
 
 ingestRouter.post('/', requireGateway, async (req, res) => {
+  // ingestReadings records the batch with its outcome; no generic row as well.
+  req.activityRecorded = true;
   const batch = asBatch(ingestBody.parse(req.body));
   let result;
   try {

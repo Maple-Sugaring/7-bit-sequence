@@ -6,6 +6,7 @@ import json
 import os
 import threading
 import time
+import uuid
 from collections import deque
 from datetime import datetime, timezone
 from typing import Any, Callable
@@ -120,8 +121,28 @@ def build_ingest_body(
     return {"Gateway_Code": gateway_code, "Readings": [item]}
 
 
-def post_ingest(body: dict[str, Any], api_url: str, token: str) -> requests.Response:
-    """POST the same body on a dropped connection so the timestamp stays put."""
+def new_request_id(gateway_code: str) -> str:
+    """Correlation id the API keeps in its activity trace (FR-036).
+
+    The API accepts 8-64 characters of [A-Za-z0-9._:-]; anything else in the
+    gateway code is replaced so the id is never thrown away.
+    """
+    prefix = "".join(ch if ch.isalnum() or ch in "._:-" else "-" for ch in gateway_code)[:40]
+    return f"{prefix or 'gw'}-{uuid.uuid4().hex[:16]}"
+
+
+def post_ingest(
+    body: dict[str, Any],
+    api_url: str,
+    token: str,
+    request_id: str | None = None,
+) -> requests.Response:
+    """POST the same body on a dropped connection so the timestamp stays put.
+
+    Every attempt carries the same X-Request-Id, so the API trace shows the
+    retries as one request.
+    """
+    request_id = request_id or new_request_id(str(body.get("Gateway_Code", "")))
     last_error: requests.RequestException | None = None
     for attempt in range(POST_ATTEMPTS):
         try:
@@ -131,6 +152,7 @@ def post_ingest(body: dict[str, Any], api_url: str, token: str) -> requests.Resp
                 headers={
                     "X-Gateway-Token": token,
                     "Content-Type": "application/json",
+                    "X-Request-Id": request_id,
                 },
                 timeout=12,
             )
@@ -224,8 +246,10 @@ def forward_reading(
         return None
     body = build_ingest_body(reading, gateway_code, packet["received_at"])
     packet["ingest"] = body
+    # Shown with the packet so an admin can paste it into the API's trace view.
+    packet["request_id"] = new_request_id(gateway_code)
     try:
-        response = post_ingest(body, api_url, token)
+        response = post_ingest(body, api_url, token, packet["request_id"])
         packet["forward"] = forward_status(response)
         return downlink_command(response, reading)
     except requests.RequestException as exc:
