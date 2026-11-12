@@ -1,10 +1,9 @@
 /**
  * Which bucket alert a weight reading raises (FR-003).
  *
- * The frontend prototype of the backend rule in Maple-Sugar-BE's
+ * Mirrors the bucket branch of deriveAlerts in Maple-Sugar-BE's
  * business/alerting.js. Mock mode runs it on every new reading so the warning
- * flow can be tried without a database; once it is settled, the backend's
- * deriveAlerts gets the same Collection Needed branch.
+ * flow can be tried without a database.
  */
 
 import {

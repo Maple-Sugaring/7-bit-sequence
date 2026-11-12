@@ -22,7 +22,7 @@ alertsRouter.patch('/:id', requireCapability(Capability.RESOLVE_ALERTS), async (
   const id = idParam.parse(req.params.id);
   const { Is_Resolved } = updateAlertBody.parse(req.body);
 
-  const alert = await alertsRepository.setResolved(id, Is_Resolved);
+  const alert = await alertsRepository.setResolved(id, Is_Resolved, req.user.UserID);
   if (!alert) throw notFound('Alert');
 
   await invalidateNamespaces([cacheNamespaces.ALERTS]);

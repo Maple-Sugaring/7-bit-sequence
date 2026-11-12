@@ -12,12 +12,16 @@ import * as metricsRepository from '../repositories/metricsRepository.js';
 import * as collectionLogsRepository from '../repositories/collectionLogsRepository.js';
 import * as journalRepository from '../repositories/journalRepository.js';
 import * as calibrationRepository from '../repositories/calibrationRepository.js';
+import { recordAudit } from '../repositories/auditRepository.js';
 import { transaction } from '../db/pool.js';
 import { FAULT_ALERT_TYPES } from '../business/alerting.js';
 import { liveState } from '../business/calibration.js';
 import { calibrationBody, createNodeBody, flagNodeBody, idParam, nodeActionBody, nodeDetailsBody, nodeIntervalBody, updateNodeBody } from './schemas.js';
 
 export const nodesRouter = Router();
+
+/** Node fields whose changes PATCH /nodes/:id/details names in the audit note. */
+const DETAIL_FIELDS = ['Node_Name', 'Stand', 'Location', 'GatewayID', 'Rf_Tag', 'Notes'];
 
 nodesRouter.get(
   '/',
@@ -67,7 +71,7 @@ nodesRouter.post('/', requireCapability(Capability.DEPLOY_NODES), async (req, re
 
 nodesRouter.delete('/:id', requireCapability(Capability.DEPLOY_NODES), async (req, res) => {
   const id = idParam.parse(req.params.id);
-  const removed = await nodesRepository.deleteNode(id);
+  const removed = await nodesRepository.deleteNode(id, req.user.UserID);
   if (!removed) throw notFound('Node');
   await invalidateNamespaces([cacheNamespaces.NODES, cacheNamespaces.METRICS, cacheNamespaces.ALERTS]);
   res.status(204).end();
@@ -111,13 +115,20 @@ nodesRouter.post('/:id/actions', requireAuth, async (req, res) => {
     throw forbidden('Your role cannot change node status.');
   }
 
-  if (Action === 'maintenance') {
-    const updated = await nodesRepository.updateNode(id, { Status_Code: 3 });
-    await invalidateNamespaces([cacheNamespaces.NODES]);
-    return res.json(updated);
-  }
-  if (Action === 'online') {
-    const updated = await nodesRepository.updateNode(id, { Status_Code: 1 });
+  if (Action === 'maintenance' || Action === 'online') {
+    const parked = Action === 'maintenance';
+    const updated = await transaction(async (client) => {
+      const changed = await nodesRepository.updateNode(id, { Status_Code: parked ? 3 : 1 }, client);
+      if (changed) {
+        await recordAudit(client, {
+          eventType: parked ? 'node_maintenance' : 'node_online',
+          actorId: req.user.UserID,
+          targetId: id,
+          note: parked ? `${node.Node_Name} parked in maintenance.` : `${node.Node_Name} returned to service.`,
+        });
+      }
+      return changed;
+    });
     await invalidateNamespaces([cacheNamespaces.NODES]);
     return res.json(updated);
   }
@@ -183,15 +194,27 @@ nodesRouter.get(
 nodesRouter.patch('/:id/details', requireCapability(Capability.DEPLOY_NODES), async (req, res) => {
   const id = idParam.parse(req.params.id);
   const body = nodeDetailsBody.parse(req.body);
-  const node = await nodesRepository.updateNode(id, {
-    Node_Name: body.Node_Name,
-    Stand: body.Stand,
-    Location: { lat: body.Latitude, lon: body.Longitude },
-    ...(body.Rf_Tag !== undefined ? { Rf_Tag: body.Rf_Tag || null } : {}),
-    ...(body.Notes !== undefined ? { Notes: body.Notes || null } : {}),
-    ...(body.GatewayID != null ? { GatewayID: body.GatewayID } : {}),
+  const before = await nodesRepository.findNodeById(id);
+  if (!before) throw notFound('Node');
+  const node = await transaction(async (client) => {
+    const updated = await nodesRepository.updateNode(id, {
+      Node_Name: body.Node_Name,
+      Stand: body.Stand,
+      Location: { lat: body.Latitude, lon: body.Longitude },
+      ...(body.Rf_Tag !== undefined ? { Rf_Tag: body.Rf_Tag || null } : {}),
+      ...(body.Notes !== undefined ? { Notes: body.Notes || null } : {}),
+      ...(body.GatewayID != null ? { GatewayID: body.GatewayID } : {}),
+    }, client);
+    if (!updated) throw notFound('Node');
+    const changed = DETAIL_FIELDS.filter((key) => JSON.stringify(before[key]) !== JSON.stringify(updated[key]));
+    await recordAudit(client, {
+      eventType: 'node_edited',
+      actorId: req.user.UserID,
+      targetId: id,
+      note: changed.length ? `Changed ${changed.join(', ')}.` : 'Saved details.',
+    });
+    return updated;
   });
-  if (!node) throw notFound('Node');
   await invalidateNamespaces([cacheNamespaces.NODES]);
   res.json(node);
 });
@@ -199,8 +222,19 @@ nodesRouter.patch('/:id/details', requireCapability(Capability.DEPLOY_NODES), as
 nodesRouter.patch('/:id/interval', requireCapability(Capability.DEPLOY_NODES), async (req, res) => {
   const id = idParam.parse(req.params.id);
   const { seconds } = nodeIntervalBody.parse(req.body);
-  const node = await nodesRepository.updateNode(id, { Report_Interval_Seconds: seconds });
-  if (!node) throw notFound('Node');
+  const before = await nodesRepository.findNodeById(id);
+  if (!before) throw notFound('Node');
+  const node = await transaction(async (client) => {
+    const updated = await nodesRepository.updateNode(id, { Report_Interval_Seconds: seconds }, client);
+    if (!updated) throw notFound('Node');
+    await recordAudit(client, {
+      eventType: 'node_interval_changed',
+      actorId: req.user.UserID,
+      targetId: id,
+      note: `Report interval ${before.Report_Interval_Seconds ?? '?'}s to ${updated.Report_Interval_Seconds}s.`,
+    });
+    return updated;
+  });
   await invalidateNamespaces([cacheNamespaces.NODES]);
   res.json(node);
 });
@@ -236,11 +270,21 @@ nodesRouter.post('/:id/calibration', requireCapability(Capability.DEPLOY_NODES),
   const body = calibrationBody.parse(req.body ?? {});
   const node = await nodesRepository.findNodeById(id);
   if (!node) throw notFound('Node');
-  const command = await calibrationRepository.queueCommand({
-    nodeId: id,
-    action: body.Action,
-    pounds: body.Action === 'calibrate' ? body.Pounds : null,
-    userId: req.user.UserID,
+  const tare = body.Action === 'tare';
+  const command = await transaction(async (client) => {
+    const queued = await calibrationRepository.queueCommand({
+      nodeId: id,
+      action: body.Action,
+      pounds: tare ? null : body.Pounds,
+      userId: req.user.UserID,
+    }, client);
+    await recordAudit(client, {
+      eventType: tare ? 'node_tare' : 'node_calibrate',
+      actorId: req.user.UserID,
+      targetId: id,
+      note: tare ? `Tare sent to ${node.Node_Name}.` : `Calibrate ${node.Node_Name} to ${queued.Pounds} lb.`,
+    });
+    return queued;
   });
   res.status(202).json(command);
 });
@@ -254,7 +298,18 @@ nodesRouter.delete('/:id/calibration', requireCapability(Capability.DEPLOY_NODES
   const id = idParam.parse(req.params.id);
   const node = await nodesRepository.findNodeById(id);
   if (!node) throw notFound('Node');
-  const cancelled = await calibrationRepository.cancelOpenCommand(id);
+  const cancelled = await transaction(async (client) => {
+    const command = await calibrationRepository.cancelOpenCommand(id, client);
+    if (command) {
+      await recordAudit(client, {
+        eventType: 'calibration_cancelled',
+        actorId: req.user.UserID,
+        targetId: id,
+        note: `Cancelled the waiting ${command.Action} for ${node.Node_Name}.`,
+      });
+    }
+    return command;
+  });
   res.json(cancelled ?? (await calibrationRepository.findLatestCommand(id)));
 });
 
@@ -280,11 +335,12 @@ nodesRouter.post('/:id/flag', requireCapability(Capability.FLAG_NODE), async (re
   const node = await nodesRepository.findNodeById(id);
   if (!node) throw notFound('Node');
 
-  const alert = await alertsRepository.createAlert({
-    NodeID: id,
-    Alert_Type: type,
-    Description: description ?? `${node.Node_Name} flagged for review.`,
-    severity: 'warning',
+  const message = description ?? `${node.Node_Name} flagged for review.`;
+  const alert = await transaction(async (client) => {
+    // Audit first: createAlert may start a notification, so it is the last write
+    // before COMMIT and nothing after it can roll the alert back.
+    await recordAudit(client, { eventType: 'node_flagged', actorId: req.user.UserID, targetId: id, note: message });
+    return alertsRepository.createAlert({ NodeID: id, Alert_Type: type, Description: message, severity: 'warning' }, client);
   });
 
   await invalidateNamespaces([cacheNamespaces.ALERTS, cacheNamespaces.NODES]);

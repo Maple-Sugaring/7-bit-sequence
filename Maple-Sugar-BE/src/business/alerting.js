@@ -14,6 +14,7 @@ import {
   BUCKET_CAPACITY_GALLONS,
   BUCKET_CAPACITY_LB,
   CELL_CAPACITY_LB,
+  COLLECTION_NEEDED_FRACTION,
   CRITICAL_EXPOSURE_HOURS,
   FULL_MARGIN_LB,
   LB_PER_GALLON,
@@ -88,6 +89,16 @@ export function deriveAlerts({ reading, history = [], tareWeight = null, interva
         Description: ice
           ? `Net sap is ${gallons.toFixed(1)} gal at ${nodeLabel}. Ice is tagged, so the bucket can weigh more than the ${BUCKET_CAPACITY_GALLONS} gallon liquid line. Schedule a collection.`
           : `Net sap is ${gallons.toFixed(1)} gal at ${nodeLabel}, at the ${BUCKET_CAPACITY_GALLONS} gallon bucket capacity. Schedule a collection.`,
+      });
+    } else if (net >= BUCKET_CAPACITY_LB * COLLECTION_NEEDED_FRACTION) {
+      // Earlier warning than Full, so a collector can get out before it spills.
+      const percent = Math.round((net / BUCKET_CAPACITY_LB) * 100);
+      derived.push({
+        Alert_Type: 'Collection Needed',
+        severity: 'warning',
+        Description:
+          `Net sap is ${gallons.toFixed(1)} gal at ${nodeLabel}, ${percent}% of the ${BUCKET_CAPACITY_GALLONS} gallon line. ` +
+          'Collect before it reaches capacity.',
       });
     }
 

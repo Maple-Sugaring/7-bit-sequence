@@ -16,6 +16,7 @@ import { seasonOf } from '../../src/business/season.js';
 import { offsetForStand, SITE_NAMES } from '../../src/business/sites.js';
 import {
   BUCKET_CAPACITY_LB,
+  COLLECTION_NEEDED_FRACTION,
   CRITICAL_EXPOSURE_HOURS,
   FULL_MARGIN_LB,
   LB_PER_GALLON,
@@ -202,6 +203,28 @@ describe('spoilage alerts', () => {
       tareWeight: tare,
     });
     assert.equal(emptyScale.some((alert) => alert.Alert_Type === 'Tipped'), false);
+  });
+
+  test('raises Collection Needed from 75% of the line until the bucket is full', () => {
+    const tare = 2;
+    const bucketAlerts = (net) =>
+      deriveAlerts({
+        reading: { NodeID: 4, Node_Name: 'North maple', Weight: tare + net, Recorded_At: '2026-03-10T18:00:00.000Z' },
+        tareWeight: tare,
+      }).filter((alert) => alert.Alert_Type === 'Collection Needed' || alert.Alert_Type === 'Full Bucket');
+
+    const line = BUCKET_CAPACITY_LB * COLLECTION_NEEDED_FRACTION;
+    assert.deepEqual(bucketAlerts(line - 0.1), []);
+
+    const collect = bucketAlerts(line);
+    assert.equal(collect.length, 1);
+    assert.equal(collect[0].Alert_Type, 'Collection Needed');
+    assert.equal(collect[0].severity, 'warning');
+    assert.match(collect[0].Description, /North maple, 75% of the 10 gallon line/);
+
+    // Full replaces it rather than stacking a second bucket alert.
+    const full = bucketAlerts(BUCKET_CAPACITY_LB - FULL_MARGIN_LB);
+    assert.deepEqual(full.map((alert) => alert.Alert_Type), ['Full Bucket']);
   });
 
   test('flags a weak link, a dead battery, a missed gap, and an impossible step', () => {

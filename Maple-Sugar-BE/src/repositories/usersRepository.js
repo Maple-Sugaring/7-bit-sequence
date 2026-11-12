@@ -124,7 +124,8 @@ const WRITABLE_USER_COLUMNS = {
   Google_Calendar_ID: 'google_calendar_id',
 };
 
-export async function updateUser(id, changes) {
+/** `client` is a transaction client when the update is recorded alongside other writes. */
+export async function updateUser(id, changes, client = null) {
   const assignments = [];
   const values = [id];
 
@@ -137,7 +138,8 @@ export async function updateUser(id, changes) {
 
   if (!assignments.length) return findUserById(id);
 
-  const row = await queryOne(
+  const row = await queryOneOn(
+    client,
     `update users set ${assignments.join(', ')} where id = $1 returning ${USER_COLUMNS}`,
     values,
   );

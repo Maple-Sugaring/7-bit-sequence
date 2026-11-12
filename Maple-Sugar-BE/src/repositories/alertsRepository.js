@@ -1,4 +1,5 @@
-import { query, queryAll, queryOne } from '../db/pool.js';
+import { query, queryAll, queryOne, queryOneOn, transaction } from '../db/pool.js';
+import { recordAudit } from './auditRepository.js';
 import { logger } from '../lib/logger.js';
 import { notifyCriticalAlert } from '../services/notificationService.js';
 import { mapAlert } from './mappers.js';
@@ -38,8 +39,9 @@ export async function findAlertById(id) {
   return row ? mapAlert(row) : null;
 }
 
-export async function createAlert({ NodeID, Alert_Type, Description, severity = 'warning' }) {
-  const row = await queryOne(
+export async function createAlert({ NodeID, Alert_Type, Description, severity = 'warning' }, client = null) {
+  const row = await queryOneOn(
+    client,
     `insert into alerts (node_id, alert_type, severity, message, is_resolved)
      values ($1, $2, $3, $4, false)
      returning ${ALERT_COLUMNS}, exists (select 1 from node n where n.id = $1 and n.demo_fixture) as demo_node`,
@@ -88,12 +90,37 @@ export async function findOpenAlertOfTypes(nodeId, types) {
   return row ? mapAlert(row) : null;
 }
 
-export async function setResolved(id, isResolved) {
-  const row = await queryOne(
-    `update alerts set is_resolved = $2 where id = $1 and data_mode = active_data_mode() returning ${ALERT_COLUMNS}`,
-    [id, isResolved],
-  );
-  return row ? mapAlert(row) : null;
+/**
+ * Resolves or reopens an alert. When the state actually flips, records who did
+ * it in the audit history in the same transaction (FR-019).
+ */
+export async function setResolved(id, isResolved, actorId = null) {
+  return transaction(async (client) => {
+    const before = await queryOneOn(
+      client,
+      `select a.is_resolved, a.alert_type, n.node_name
+         from alerts a left join node n on n.id = a.node_id
+        where a.id = $1 and a.data_mode = active_data_mode()
+        for update of a`,
+      [id],
+    );
+    if (!before) return null;
+
+    const row = await queryOneOn(
+      client,
+      `update alerts set is_resolved = $2 where id = $1 returning ${ALERT_COLUMNS}`,
+      [id, isResolved],
+    );
+    if (Boolean(before.is_resolved) !== Boolean(isResolved)) {
+      await recordAudit(client, {
+        eventType: isResolved ? 'alert_resolved' : 'alert_reopened',
+        actorId,
+        targetId: id,
+        note: `${before.alert_type}${before.node_name ? ` at ${before.node_name}` : ''}.`,
+      });
+    }
+    return row ? mapAlert(row) : null;
+  });
 }
 
 /** Closes every open alert of the given types on one node. */

@@ -6,6 +6,8 @@ import { requireCapability } from '../middleware/authenticate.js';
 import { cacheKeys, cacheNamespaces, TTL } from '../cache/cacheKeys.js';
 import { invalidateNamespaces, readThrough } from '../cache/redisCache.js';
 import * as usersRepository from '../repositories/usersRepository.js';
+import { recordAudit } from '../repositories/auditRepository.js';
+import { transaction } from '../db/pool.js';
 import { inviteEmail } from '../services/emailTemplates.js';
 import { sendQuietly } from '../services/mailService.js';
 import { idParam, inviteUserBody, updateUserBody } from './schemas.js';
@@ -83,8 +85,25 @@ usersRouter.patch('/:id', requireCapability(Capability.MANAGE_USERS), async (req
     }
   }
 
-  const user = await usersRepository.updateUser(id, changes);
-  if (!user) throw notFound('User');
+  const before = await usersRepository.findUserById(id);
+  if (!before) throw notFound('User');
+
+  const user = await transaction(async (client) => {
+    const updated = await usersRepository.updateUser(id, changes, client);
+    if (!updated) throw notFound('User');
+    // Field names only: the audit log should say what changed, not copy emails.
+    const changed = Object.keys(changes).filter((key) => JSON.stringify(before[key]) !== JSON.stringify(updated[key]));
+    if (changed.length) {
+      const name = `${updated.First_Name ?? ''} ${updated.Last_Name ?? ''}`.trim() || `User ${id}`;
+      await recordAudit(client, {
+        eventType: 'user_updated',
+        actorId: req.user.UserID,
+        targetId: id,
+        note: `${name}: changed ${changed.join(', ')}.`,
+      });
+    }
+    return updated;
+  });
 
   await invalidateNamespaces([cacheNamespaces.USERS]);
   res.json(user);

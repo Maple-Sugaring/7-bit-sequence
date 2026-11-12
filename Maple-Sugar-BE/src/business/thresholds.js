@@ -49,6 +49,13 @@ export const BUCKET_CAPACITY_LB = BUCKET_CAPACITY_GALLONS * LB_PER_GALLON;
 export const ICE_CAPACITY_LB = ICE_CAPACITY_GALLONS * LB_PER_GALLON;
 /** How close to the liquid line counts as full enough to schedule a collection. */
 export const FULL_MARGIN_LB = 4;
+/**
+ * Share of the liquid line at which a collection should be scheduled (FR-003).
+ * Full only triggers within FULL_MARGIN_LB of the rim, which on a fast run is
+ * one or two reports from spilling; this leaves time to get a collector out.
+ * Mirrors COLLECTION_NEEDED_FRACTION in the frontend's yieldMetrics.js.
+ */
+export const COLLECTION_NEEDED_FRACTION = 0.75;
 
 // --- Ambient plausibility for a Rochester sap season ---
 

@@ -1,4 +1,5 @@
-import { query, queryAll, queryOne, transaction } from '../db/pool.js';
+import { query, queryAll, queryOne, queryOneOn, transaction } from '../db/pool.js';
+import { recordAudit } from './auditRepository.js';
 import { mapGateway, mapNode } from './mappers.js';
 
 const NODE_COLUMNS = `
@@ -292,7 +293,8 @@ const WRITABLE_NODE_COLUMNS = {
   Notes: 'notes',
 };
 
-export async function updateNode(id, changes) {
+/** `client` is a transaction client when the update is recorded alongside other writes. */
+export async function updateNode(id, changes, client = null) {
   const assignments = [];
   const values = [id];
 
@@ -316,7 +318,8 @@ export async function updateNode(id, changes) {
 
   if (!assignments.length) return findNodeById(id);
 
-  const row = await queryOne(
+  const row = await queryOneOn(
+    client,
     `update node set ${assignments.join(', ')} where id = $1 and (not demo_fixture or lock_data_mode() = 'test') returning ${NODE_COLUMNS}`,
     values,
   );
@@ -376,11 +379,12 @@ export async function createDeployedNode(input, actorId) {
   });
 }
 
-/** Removes a deployed node and the rows that point at it. */
-export async function deleteNode(id) {
+/** Removes a deployed node and the rows that point at it, and records who did it. */
+export async function deleteNode(id, actorId = null) {
   return transaction(async (client) => {
-    const existing = await client.query('select id from visible_nodes where id = $1', [id]);
-    if (!existing.rows[0]) return false;
+    const existing = await client.query('select id, node_name, node_code from visible_nodes where id = $1', [id]);
+    const node = existing.rows[0];
+    if (!node) return false;
 
     await client.query('update schedule_slots set node_id = null where node_id = $1', [id]);
     await client.query('delete from sap_daily where node_id = $1', [id]);
@@ -390,6 +394,12 @@ export async function deleteNode(id) {
     await client.query('delete from metrics where node_id = $1', [id]);
     await client.query('delete from buckets where node_id = $1', [id]);
     await client.query('delete from node where id = $1', [id]);
+    await recordAudit(client, {
+      eventType: 'node_deleted',
+      actorId,
+      targetId: id,
+      note: `${node.node_name ?? node.node_code} (${node.node_code}) removed.`,
+    });
     return true;
   });
 }

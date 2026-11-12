@@ -41,8 +41,9 @@ const CANCEL_OPEN = `
 `;
 
 /** A new request replaces whatever was still waiting for that node. */
-export async function queueCommand({ nodeId, action, pounds = null, userId = null }) {
-  return transaction(async (client) => {
+export async function queueCommand({ nodeId, action, pounds = null, userId = null }, outer = null) {
+  const run = (work) => (outer ? work(outer) : transaction(work));
+  return run(async (client) => {
     await client.query(CANCEL_OPEN, [nodeId]);
     const row = await queryOneOn(
       client,
@@ -110,8 +111,8 @@ export async function findLastScale(nodeId) {
 }
 
 /** Stops the Pi radioing a command the person gave up on. Null when nothing was waiting. */
-export async function cancelOpenCommand(nodeId) {
-  return mapCommand(await queryOne(CANCEL_OPEN, [nodeId]));
+export async function cancelOpenCommand(nodeId, client = null) {
+  return mapCommand(await queryOneOn(client, CANCEL_OPEN, [nodeId]));
 }
 
 export async function markSent(commandId) {
