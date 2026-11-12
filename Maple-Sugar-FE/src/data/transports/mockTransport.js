@@ -2,6 +2,7 @@ import dayjs from 'dayjs';
 import { ApiError } from '../ApiError';
 import { Capability, ROLE_LABELS, can, roleFromId } from '../../business/permissions';
 import { sapGallonsFor } from '../../business/collectionRound';
+import { validateCollectionEntry, validateReading } from '../../business/validation';
 import { validateCollectionEntry } from '../../business/validation';
 import { testWeightError } from '../../business/calibration';
 import { SENSOR_KIT } from '../../business/sensorLifecycle';
@@ -644,6 +645,11 @@ const routes = [
 
       const node = db.nodes.find((candidate) => candidate.NodeID === Number(body.NodeID));
       if (!node) notFound('Node');
+
+      // The backend re-checks every reading and answers 422 with a message per
+      // field, so a bad entry is never stored (EIR-001). Blank time means now.
+      const { errors, isValid } = validateReading({ ...body, Recorded_At: body.Recorded_At ?? dayjs().toISOString() });
+      if (!isValid) invalid('Some fields need attention.', errors);
 
       const row = {
         MetricID: nextId.metric++,
