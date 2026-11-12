@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useDeferredValue, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -81,11 +81,20 @@ export function SapDataPage() {
     [readings.data, boardIds],
   );
 
+  // The pickers update right away; the filter, aggregation and chart redraw follow
+  // at lower priority, so typing or clicking through dates doesn't stall the inputs.
+  const deferredFrom = useDeferredValue(from);
+  const deferredTo = useDeferredValue(to);
+  const deferredUnit = useDeferredValue(unit);
+  const deferredIds = useDeferredValue(selectedIds);
+  const stale = deferredFrom !== from || deferredTo !== to || deferredUnit !== unit || deferredIds !== selectedIds;
+
   const weights = useMemo(() => {
-    const start = from?.format('YYYY-MM-DD');
-    const end = to?.format('YYYY-MM-DD');
+    const start = deferredFrom?.isValid() ? deferredFrom.format('YYYY-MM-DD') : null;
+    const end = deferredTo?.isValid() ? deferredTo.format('YYYY-MM-DD') : null;
+    const allowed = new Set(deferredIds);
     const ranged = tracked.filter((row) => {
-      if (!selectedIds.includes(row.NodeID)) return false;
+      if (!allowed.has(row.NodeID)) return false;
       const date = String(row.Recorded_At).slice(0, 10);
       if (start && date < start) return false;
       if (end && date > end) return false;
@@ -94,11 +103,11 @@ export function SapDataPage() {
     return {
       ranged,
       ...dailyWeightRows(ranged, {
-        nodeIds: selectedIds,
-        unit,
+        nodeIds: deferredIds,
+        unit: deferredUnit,
       }),
     };
-  }, [tracked, selectedIds, from, to, unit]);
+  }, [tracked, deferredIds, deferredFrom, deferredTo, deferredUnit]);
 
   const stands = useMemo(() => {
     const names = [...new Set(nodes.map((node) => node.Stand).filter(Boolean))];
@@ -331,7 +340,11 @@ export function SapDataPage() {
               </Button>
             ) : null}
           </Box>
-          <Box data-tour="sugar-woods-chart" sx={{ flex: 1, minWidth: 0 }}>
+          <Box
+            data-tour="sugar-woods-chart"
+            aria-busy={stale}
+            sx={{ flex: 1, minWidth: 0, opacity: stale ? 0.6 : 1, transition: 'opacity 150ms' }}
+          >
             <ChartCard
               title="2026 Weight"
               description={chartDescription}
@@ -342,7 +355,7 @@ export function SapDataPage() {
               emptyTitle={emptyTitle}
               emptyDescription={emptyDescription}
             >
-              <WeightChart rows={weights.rows} series={weights.series} unit={unit} />
+              <WeightChart rows={weights.rows} series={weights.series} unit={deferredUnit} />
             </ChartCard>
           </Box>
         </Stack>

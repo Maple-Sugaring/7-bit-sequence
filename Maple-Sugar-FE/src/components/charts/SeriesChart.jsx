@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react';
 import dayjs from 'dayjs';
 import { AccessibilityChartWrapper } from './AccessibilityChartWrapper';
 import {
@@ -73,34 +74,48 @@ function weightTick(unit) {
   return 'MMM D';
 }
 
-export function WeightChart({ rows, series, unit = 'day', accessibilityLayer = true }) {
-  const format = weightTick(unit);
-  const tick = (value) => dayjs(value).format(format);
+function weightTooltip(value, name, item) {
+  const pounds = item?.payload?.[`${item.dataKey}-lb`];
+  const gallons = Number(value).toFixed(1);
+  const scale = pounds == null ? `${gallons} gal` : `${gallons} gal · ${Number(pounds).toFixed(1)} lb`;
+  return [scale, name];
+}
+
+const WEIGHT_DOMAIN = [0, (max) => Math.max(10, Math.ceil(max))];
+const WEIGHT_MARGIN = { top: 8, right: 12, left: 0, bottom: 0 };
+const LEGEND_STYLE = { maxHeight: 36, overflowY: 'auto', fontSize: 12 };
+
+/*
+ * Memoized, with animation off: Sugar Woods can chart thousands of points per
+ * tree, and replaying the draw-in animation on every date change is what made
+ * the page lag.
+ */
+export const WeightChart = memo(function WeightChart({ rows, series, unit = 'day', accessibilityLayer = true }) {
+  const tick = useMemo(() => {
+    const format = weightTick(unit);
+    return (value) => dayjs(value).format(format);
+  }, [unit]);
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <LineChart accessibilityLayer={accessibilityLayer} data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+      <LineChart accessibilityLayer={accessibilityLayer} data={rows} margin={WEIGHT_MARGIN}>
         <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
         <XAxis dataKey="Date" tickFormatter={tick} minTickGap={28} tick={TICK} />
         <YAxis
           width={56}
           unit=" gal"
-          domain={[0, (max) => Math.max(10, Math.ceil(max))]}
+          domain={WEIGHT_DOMAIN}
           tick={TICK}
         />
         <Tooltip
           labelFormatter={tick}
-          formatter={(value, name, item) => {
-            const pounds = item?.payload?.[`${item.dataKey}-lb`];
-            const gallons = Number(value).toFixed(1);
-            const scale = pounds == null ? `${gallons} gal` : `${gallons} gal · ${Number(pounds).toFixed(1)} lb`;
-            return [scale, name];
-          }}
+          formatter={weightTooltip}
+          isAnimationActive={false}
           {...tooltipProps}
         />
         <Legend
           height={36}
           // 11px was below the 12px used elsewhere; keep legend text readable
-          wrapperStyle={{ maxHeight: 36, overflowY: 'auto', fontSize: 12 }}
+          wrapperStyle={LEGEND_STYLE}
           formatter={legendText}
         />
         {series.map((item, index) => (
@@ -113,12 +128,13 @@ export function WeightChart({ rows, series, unit = 'day', accessibilityLayer = t
             dot={false}
             strokeWidth={2}
             connectNulls
+            isAnimationActive={false}
           />
         ))}
       </LineChart>
     </ResponsiveContainer>
   );
-}
+});
 
 export function DailyFlowChart({ rows }) {
   return (

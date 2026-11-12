@@ -1,6 +1,11 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Alert, Button, MenuItem, Stack, TextField, Typography } from '@mui/material';
 import { correctReading } from '../services/metricsService';
+
+// Same output as Date#toLocaleString(), but one formatter instead of one per row.
+const STAMP = new Intl.DateTimeFormat(undefined, {
+  year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric',
+});
 
 const fields = { Weight: 'Weight (lb)', Temperature: 'Temperature (°F)', Sugar_Percent: 'Sugar (%)' };
 
@@ -11,8 +16,16 @@ export function ReadingCorrections({ readings, refresh, canOverwrite }) {
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const rows = readings.filter((row) => !row.Aggregated && row.MetricID != null);
+  const rows = useMemo(() => readings.filter((row) => !row.Aggregated && row.MetricID != null), [readings]);
   const selected = rows.find((row) => row.MetricID === id);
+  // MUI's Select walks every child on each render, even closed, so build the
+  // (possibly thousands of) options once per readings change, not per keystroke.
+  const options = useMemo(() => rows.map((row) => (
+    <MenuItem key={row.MetricID} value={row.MetricID}>
+      {STAMP.format(new Date(row.Recorded_At))} · Node {row.NodeID} · {row.Weight ?? '—'} lb
+      {row.Corrected_At ? ' · Corrected' : ''}{row.Data_Mode === 'test' ? ' · Test' : ''}
+    </MenuItem>
+  )), [rows]);
 
   async function save(event) {
     event.preventDefault();
@@ -44,12 +57,7 @@ export function ReadingCorrections({ readings, refresh, canOverwrite }) {
         setReason('');
         setError('');
       }}>
-        {rows.map((row) => (
-          <MenuItem key={row.MetricID} value={row.MetricID}>
-            {new Date(row.Recorded_At).toLocaleString()} · Node {row.NodeID} · {row.Weight ?? '—'} lb
-            {row.Corrected_At ? ' · Corrected' : ''}{row.Data_Mode === 'test' ? ' · Test' : ''}
-          </MenuItem>
-        ))}
+        {options}
       </TextField>
       {selected?.Correction_Note && <Typography>{selected.Correction_Note}</Typography>}
       {selected && canOverwrite && (
