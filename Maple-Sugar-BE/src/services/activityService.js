@@ -17,8 +17,13 @@ import {
 import { iso } from '../repositories/mappers.js';
 import * as activityRepository from '../repositories/activityRepository.js';
 
-/** Request id, receipt time and caller, taken from requestContext. */
+/**
+ * Request id, receipt time and caller, taken from requestContext. Calling it
+ * means the route records its own event for this request, so the generic
+ * activityRecorder row is skipped.
+ */
 export function requestActivity(req) {
+  if (req) req.activityRecorded = true;
   return {
     requestId: req?.id ?? null,
     receivedAt: req?.receivedAt ?? null,
