@@ -119,6 +119,17 @@ export function buildFleetNodes({ nodes = [], board = [], alerts = [], now = new
   });
 }
 
+/**
+ * The node stopped reporting after it had weighed something, so its last
+ * weight is history, not the bucket now. Sap keeps running while a node is
+ * silent, so the screen must not present that number as current (FR-003).
+ * Maintenance nodes are parked on purpose and are left out.
+ */
+export function weightIsStale(fleetNode) {
+  if (fleetNode?.Last_Seen == null) return false;
+  return fleetNode.mapStatus === MapStatus.OFFLINE || fleetNode.mapStatus === MapStatus.STALE;
+}
+
 export function statusCounts(rows) {
   const counts = Object.fromEntries(Object.values(MapStatus).map((status) => [status, 0]));
   rows.forEach((row) => {

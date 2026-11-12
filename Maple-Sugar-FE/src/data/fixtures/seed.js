@@ -213,8 +213,9 @@ const NODE_SPECS = [
   { id: 9, stand: 2, status: 1, battery: 77, rssi: -90, seen: 2, gal: 5.0, daily: 1.7, notes: null },
   // Tipped over about six hours ago, then set upright.
   { id: 10, stand: 2, status: 1, battery: 63, rssi: -97, seen: 6, gal: 0.4, daily: 1.5, tipAt: 380, notes: 'Windy corner of the barn.' },
-  // Dead battery: offline since last night.
-  { id: 11, stand: 2, status: 0, battery: 3, rssi: -121, seen: 560, gal: 5.8, daily: 1.5, notes: null },
+  // Dead battery: offline since last night, at 84% when it went quiet, so the
+  // dashboard has to say the bucket may be full now (FR-003 stale weight).
+  { id: 11, stand: 2, status: 0, battery: 3, rssi: -121, seen: 560, gal: 8.4, daily: 1.5, notes: null },
   // Registered but never reported yet.
   { id: 12, stand: 2, status: 0, battery: null, rssi: null, seen: null, notes: 'Newly registered. Waiting for the first packet.' },
 ];

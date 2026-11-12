@@ -16,8 +16,8 @@ import { batchesByNode, shelfLifeSummary } from '../business/shelfLife';
 import { weekForecastRows, weekLabel, weekStart } from '../business/weekWindows';
 import { bushAverageSugar, syrupEstimate } from '../business/sugarContent';
 import { healthReading } from '../business/sensorLifecycle';
-import { MapStatus, STATUS_META } from '../business/nodeMapStatus';
-import { isFull } from '../business/yieldMetrics';
+import { MapStatus, STATUS_META, weightIsStale } from '../business/nodeMapStatus';
+import { BucketLevel, COLLECTION_NEEDED_FRACTION, bucketLevel, isFull } from '../business/yieldMetrics';
 import { LIVE_FROM, LIVE_NODE_IDS, LIVE_TO, bucketGallons, bucketPercent, recordedSugar } from '../business/liveWeight';
 import { SiteForecastFigure } from '../components/charts/SeriesChart';
 import { FleetMapCard } from '../components/map/FleetMapCard';
@@ -28,7 +28,7 @@ import { PageHeader } from '../components/common/PageHeader';
 import { FieldOverview } from '../components/layout/FieldOverview';
 import { useAuth } from '../context/auth';
 import { Capability } from '../business/permissions';
-import { dateOnly, dateTime } from '../components/common/format';
+import { dateOnly, dateTime, relativeMinutes } from '../components/common/format';
 import { useAutoRefresh, useBucketShelfLife, useFleetMap, useLiveWeather, useReadings } from '../services/hooks';
  
 function Meter({ label, value, percent, detail, color }) {
@@ -88,6 +88,15 @@ export function DashboardPage() {
   const batchByNode = useMemo(() => batchesByNode(batches), [batches]);
  
   const offlineNodes = bushNodes.filter((node) => node.mapStatus === MapStatus.OFFLINE);
+  const levelOf = (node) => bucketLevel(node.Weight, node.Tare_Weight ?? 0);
+  // A silent node's last weight is not the bucket now, so it gets its own
+  // warning instead of counting as a live "collect soon" (FR-003).
+  const collectSoonNodes = bushNodes.filter(
+    (node) => !weightIsStale(node) && levelOf(node) === BucketLevel.COLLECT,
+  );
+  const staleHighNodes = bushNodes.filter(
+    (node) => weightIsStale(node) && [BucketLevel.COLLECT, BucketLevel.FULL].includes(levelOf(node)),
+  );
   const { shortest: shortestShelf, holdingSap } = useMemo(() => shelfLifeSummary(batches), [batches]);
  
   return (
@@ -252,14 +261,20 @@ export function DashboardPage() {
               <Box component="dd" sx={{ m: 0 }}>
               {bushNodes.map((node) => {
                 const gallons = bucketGallons(node.Weight, node.Tare_Weight ?? 0);
-                const full = isFull(node.Weight, node.Tare_Weight ?? 0);
+                const level = levelOf(node);
+                const stale = gallons != null && weightIsStale(node);
                 return (
                   <Stack key={node.NodeID} direction="row" sx={{ justifyContent: 'space-between', gap: 1, flexWrap: 'wrap', py: 0.5 }}>
                     <Typography>{node.Node_Name}</Typography>
                     <Typography sx={{ fontWeight: 700 }}>
                       {gallons == null ? '—' : `${gallons.toFixed(1)} gal · ${Number(node.Weight).toFixed(1)} lb`}
-                      {full ? ' · full' : ''}
+                      {level === BucketLevel.FULL ? ' · full' : level === BucketLevel.COLLECT ? ' · collect soon' : ''}
                     </Typography>
+                    {stale ? (
+                      <Typography variant="caption" color="warning.main" sx={{ width: '100%', textAlign: 'right' }}>
+                        Last weighed {relativeMinutes(node.minutesSinceSeen)}. Sap may have kept running since.
+                      </Typography>
+                    ) : null}
                   </Stack>
                 );
               })}
@@ -303,6 +318,20 @@ export function DashboardPage() {
           {bushNodes.some((node) => isFull(node.Weight, node.Tare_Weight ?? 0)) ? (
             <Alert severity="warning" sx={{ mt: 2 }} action={can(Capability.VIEW_ALERTS) ? <Button color="inherit" onClick={() => navigate('/notifications')}>Alerts</Button> : null}>
               A bucket is full. Arrange a collection before it spills.
+            </Alert>
+          ) : null}
+          {collectSoonNodes.length ? (
+            <Alert severity="info" sx={{ mt: 2 }}>
+              {collectSoonNodes.map((node) => node.Node_Name).join(', ')}{' '}
+              {collectSoonNodes.length === 1 ? 'is' : 'are'} over {Math.round(COLLECTION_NEEDED_FRACTION * 100)}% full.
+              Collect soon so {collectSoonNodes.length === 1 ? 'it does' : 'they do'} not reach capacity.
+            </Alert>
+          ) : null}
+          {staleHighNodes.length ? (
+            <Alert severity="warning" sx={{ mt: 2 }}>
+              {staleHighNodes.map((node) => node.Node_Name).join(', ')} stopped reporting while{' '}
+              {staleHighNodes.length === 1 ? 'its bucket was' : 'their buckets were'} nearly full. Treat{' '}
+              {staleHighNodes.length === 1 ? 'it' : 'them'} as full and check in person.
             </Alert>
           ) : null}
           {offlineNodes.length ? (
