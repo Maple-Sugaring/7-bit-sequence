@@ -8,6 +8,7 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
+import FileUploadIcon from '@mui/icons-material/FileUpload';
 import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import MenuItem from '@mui/material/MenuItem';
@@ -205,12 +206,17 @@ function InviteDialog({ open, onClose, roles, onInvite, pending, error }) {
   );
 }
 
+function UploadPageDialog({open, onClose, file, error}) {
+  // upload page
+}
+
 export function AdminPage() {
   const { user: currentUser } = useAuth();
   const { data, loading, error, refresh } = useUsers();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [pendingRemoval, setPendingRemoval] = useState(null);
   const [expiryUser, setExpiryUser] = useState(null);
+  const [uploadPageOpen, setUploadPageOpen] = useState(null);
 
   const invite = useAction(async (form) => {
     await inviteUser(form);
@@ -363,6 +369,10 @@ export function AdminPage() {
             <GatewayButton />
             <Button variant="contained" startIcon={<PersonAddAltIcon />} onClick={() => setInviteOpen(true)}>
               Invite user
+            </Button>
+            <Button variant="contained" startIcon={<FileUploadIcon />} onClick={() =>
+              setUploadPageOpen(true)}>
+              Upload student CSV file
             </Button>
           </Stack>
         }
