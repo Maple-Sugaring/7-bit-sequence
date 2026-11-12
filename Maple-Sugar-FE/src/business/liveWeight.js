@@ -36,9 +36,12 @@ function round1(value) {
   return Math.round(Number(value) * 10) / 10;
 }
 
-/** Hardware ingest leaves temperature empty. The seeded series always set one. */
+/** Include sensor readings and the historical chart fixtures imported into Test. */
 export function isNodeReading(row) {
-  return row?.Weight != null && row.Temperature == null && row.Recorded_By_UserID == null;
+  return row?.Weight != null && row.Recorded_By_UserID == null && (
+    row.Temperature == null || row.Corrected_At != null ||
+    (row.Data_Mode === 'test' && row.Weather_Conditions === 'Test chart fixture')
+  );
 }
 
 export const TIME_UNITS = [

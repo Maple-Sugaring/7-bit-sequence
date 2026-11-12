@@ -1,6 +1,6 @@
 .layout > footer {
-  background: #f6f3f0;
-  border-top: 1px solid #e2ddd7;
+  background: var(--surface-page);
+  border-top: 1px solid var(--line);
   padding-bottom: calc(84px + env(safe-area-inset-bottom));
 }
 
@@ -20,7 +20,7 @@
   min-width: 0;
   max-width: 100%;
   overflow-wrap: anywhere;
-  color: #69675f;
+  color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
   margin: 0;

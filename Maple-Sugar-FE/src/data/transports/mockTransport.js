@@ -4,6 +4,7 @@ import { Capability, ROLE_LABELS, can, roleFromId } from '../../business/permiss
 import { sapGallonsFor } from '../../business/collectionRound';
 import { validateCollectionEntry } from '../../business/validation';
 import { testWeightError } from '../../business/calibration';
+import { SENSOR_KIT } from '../../business/sensorLifecycle';
 import * as seed from '../fixtures/seed';
 
 /**
@@ -39,11 +40,23 @@ let nextId = {
   log: maxId(db.collectionLogs, 'LogID') + 1,
   journal: maxId(db.journal, 'EntryID') + 1,
   command: 1,
+  lifecycle: seed.nodes.length + 1,
 };
+
+const sensorHistory = new Map(seed.nodes.map((node, index) => [node.NodeID, [{
+  id: index + 1, type: 'installation', date: '2026-10-25', sensorType: SENSOR_KIT, assumed: true,
+}]]));
+function requireLifecycleAccess() {
+  if (!session) throw new ApiError('Sign in to continue.', { status: 401 });
+  if (!can(roleFromId(session.user.RoleID), Capability.MANAGE_USERS)) {
+    throw new ApiError('Your role cannot manage sensor lifecycle.', { status: 403 });
+  }
+}
 
 // Calibration commands. A real node answers on its next packets; here each
 // GET moves a command one step (pending, sent, done) so the page shows them all.
 const calibrationCommands = [];
+const FAULT_ALERT_TYPES = { 'Load Cell': 'load-cell', 'Unstable Reading': 'unstable', 'Reversed Load Cell': 'reversed', Untared: 'untared' };
 
 let session = null;
 
@@ -203,6 +216,11 @@ function authorName(user) {
   return user ? `${user.First_Name} ${user.Last_Name}`.trim() : null;
 }
 
+/** The author's role when they submitted, matching the backend's stored tag. */
+function submittedRole(user) {
+  return user ? roleFromId(user.RoleID) : null;
+}
+
 const routes = [
   // ---- Auth -------------------------------------------------------------
   {
@@ -303,6 +321,33 @@ const routes = [
 
   // ---- Nodes ------------------------------------------------------------
   { method: 'GET', match: /^\/nodes$/, handler: () => db.nodes },
+  {
+    method: 'GET',
+    match: /^\/nodes\/lifecycle$/,
+    handler: () => {
+      requireLifecycleAccess();
+      return db.nodes.map((node) => ({
+        NodeID: node.NodeID, Name: node.Node_Name, Status: node.Status_Code,
+        Battery: node.Battery_Percent, Signal: node.Signal_Rssi, LastSeen: node.Last_Seen,
+        ReportInterval: node.Report_Interval_Seconds,
+        History: sensorHistory.get(node.NodeID) ?? [],
+      }));
+    },
+  },
+  {
+    method: 'POST',
+    match: /^\/nodes\/(\d+)\/lifecycle$/,
+    handler: ([id], { body }) => {
+      requireLifecycleAccess();
+      const nodeId = Number(id);
+      if (!db.nodes.some((node) => node.NodeID === nodeId)) return notFound('Node');
+      const event = { ...body, id: nextId.lifecycle++, assumed: false };
+      const history = [event, ...(sensorHistory.get(nodeId) ?? [])];
+      history.sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
+      sensorHistory.set(nodeId, history);
+      return { id: event.id };
+    },
+  },
   { method: 'GET', match: /^\/nodes\/board$/, handler: () => boardRows() },
   {
     method: 'POST',
@@ -380,6 +425,7 @@ const routes = [
         EntryID: nextId.journal++,
         UserID: user?.UserID ?? null,
         Author: authorName(user),
+        Submitted_Role: submittedRole(user),
         NodeID: node.NodeID,
         Node_Name: node.Node_Name,
         BucketID: bucket?.BucketID ?? null,
@@ -409,6 +455,7 @@ const routes = [
       const index = db.nodes.findIndex((node) => node.NodeID === Number(id));
       if (index < 0) notFound('Node');
       db.nodes.splice(index, 1);
+      sensorHistory.delete(Number(id));
       return null;
     },
   },
@@ -507,12 +554,42 @@ const routes = [
         node.Last_Seen = latest.Completed_At;
       }
       const calibrations = mine.filter((command) => command.Action === 'calibrate' && command.Status === 'done');
+      const scales = mine.filter((command) => command.Status === 'done' && command.Counts_Per_Lb != null);
+      const reading = db.metrics
+        .filter((metric) => metric.NodeID === node.NodeID)
+        .reduce((newest, metric) => (!newest || metric.Recorded_At > newest.Recorded_At ? metric : newest), null);
+      const fault = db.alerts.findLast(
+        (alert) => alert.NodeID === node.NodeID && !alert.Is_Resolved && FAULT_ALERT_TYPES[alert.Alert_Type],
+      );
       return {
         NodeID: node.NodeID,
         Report_Interval_Seconds: node.Report_Interval_Seconds ?? null,
         Command: latest ? { ...latest } : null,
         Last_Calibration: calibrations.length ? { ...calibrations.at(-1) } : null,
+        Last_Scale: scales.length ? { ...scales.at(-1) } : null,
+        Live: {
+          Weight: reading?.Weight ?? null,
+          Recorded_At: reading?.Recorded_At ?? null,
+          Last_Seen: node.Last_Seen ?? null,
+          Fault: fault
+            ? { Code: FAULT_ALERT_TYPES[fault.Alert_Type], Description: fault.Description, Since: fault.Created_At }
+            : null,
+        },
       };
+    },
+  },
+  {
+    method: 'DELETE',
+    match: /^\/nodes\/(\d+)\/calibration$/,
+    handler: ([id]) => {
+      const node = db.nodes.find((candidate) => candidate.NodeID === Number(id));
+      if (!node) notFound('Node');
+      const latest = calibrationCommands.filter((command) => command.NodeID === node.NodeID).at(-1) ?? null;
+      if (latest && ['pending', 'sent'].includes(latest.Status)) {
+        latest.Status = 'cancelled';
+        latest.Completed_At = dayjs().toISOString();
+      }
+      return latest ? { ...latest } : null;
     },
   },
   {
@@ -705,6 +782,7 @@ const routes = [
         EntryID: nextId.journal++,
         UserID: user.UserID,
         Author: authorName(user),
+        Submitted_Role: submittedRole(user),
         NodeID: node.NodeID,
         Node_Name: node.Node_Name,
         BucketID: bucket?.BucketID ?? null,
@@ -977,6 +1055,7 @@ const routes = [
         EntryID: nextId.journal++,
         UserID: user?.UserID ?? null,
         Author: authorName(user),
+        Submitted_Role: submittedRole(user),
         NodeID: node?.NodeID ?? null,
         Node_Name: node?.Node_Name ?? null,
         BucketID: body?.BucketID ? Number(body.BucketID) : null,

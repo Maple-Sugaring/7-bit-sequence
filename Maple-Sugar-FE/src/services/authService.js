@@ -21,6 +21,7 @@ export function toSessionUser(user) {
     role: roleFromId(user.RoleID),
     accountExpiry: user.Account_Expiry,
     isActive: user.Is_Active,
+    canOverwriteMeasurements: user.Can_Overwrite_Measurements ?? true,
     calendarConnected: Boolean(user.Calendar_Connected),
   };
 }

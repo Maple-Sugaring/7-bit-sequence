@@ -52,7 +52,7 @@ usersRouter.post('/invite', requireCapability(Capability.MANAGE_USERS), async (r
     firstName: body.firstName ?? email.split('@')[0],
     lastName: body.lastName ?? '',
     accountExpiry: body.accountExpiry ?? defaultExpiry(),
-  });
+  }, req.user.UserID);
 
   await invalidateNamespaces([cacheNamespaces.USERS]);
   res.status(201).json(user);
@@ -99,7 +99,7 @@ usersRouter.delete('/:id', requireCapability(Capability.MANAGE_USERS), async (re
 
   // Readings and collection logs survive with their attribution nulled, per the
   // ON DELETE SET NULL in migration 002.
-  const removed = await usersRepository.deleteUser(id);
+  const removed = await usersRepository.deleteUser(id, req.user.UserID);
   if (!removed) throw notFound('User');
 
   await invalidateNamespaces([cacheNamespaces.USERS]);

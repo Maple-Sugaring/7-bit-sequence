@@ -461,6 +461,14 @@ function author(userId) {
   return user ? `${user.First_Name} ${user.Last_Name}`.trim() : null;
 }
 
+const ROLE_NAMES = Object.fromEntries(roles.map((role) => [role.RoleID, role.Role_Name]));
+
+/** The role tag a collection carries: its author's role at submission. */
+function authorRole(userId) {
+  const user = users.find((candidate) => candidate.UserID === userId);
+  return user ? ROLE_NAMES[user.RoleID] ?? null : null;
+}
+
 const recentCollections = collectionEvents.slice(0, 14);
 
 const journalRows = recentCollections.map((event, index) => {
@@ -469,6 +477,7 @@ const journalRows = recentCollections.map((event, index) => {
   return {
     UserID: event.user,
     Author: author(event.user),
+    Submitted_Role: authorRole(event.user),
     NodeID: event.node,
     Node_Name: nodeName(event.node),
     BucketID: event.node,
@@ -487,6 +496,7 @@ journalRows.push(
   {
     UserID: 12,
     Author: author(12),
+    Submitted_Role: authorRole(12),
     NodeID: null,
     Node_Name: null,
     BucketID: null,
@@ -501,6 +511,7 @@ journalRows.push(
   {
     UserID: 4,
     Author: author(4),
+    Submitted_Role: authorRole(4),
     NodeID: null,
     Node_Name: null,
     BucketID: null,

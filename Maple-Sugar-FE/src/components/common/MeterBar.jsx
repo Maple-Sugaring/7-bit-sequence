@@ -10,7 +10,7 @@ export function MeterBar({ percent, color }) {
         marginTop: 8,
         height: 10,
         borderRadius: 5,
-        background: 'rgba(0, 0, 0, 0.12)',
+        background: 'var(--meter-track)',
         overflow: 'hidden',
       }}
     >

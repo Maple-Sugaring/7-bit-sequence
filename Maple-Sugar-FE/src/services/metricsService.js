@@ -33,7 +33,8 @@ export function enrichReadings(metrics, nodes, buckets) {
 
     return {
       ...row,
-      id: row.MetricID,
+      // Hourly aggregates from the hub have no MetricID (BRU-007).
+      id: row.MetricID ?? `agg-${row.Aggregate?.AggregateID}`,
       nodeName: node?.Node_Name ?? `Node ${row.NodeID}`,
       stand: node?.Stand ?? null,
       barcode: bucket?.Barcode_ID ?? null,
@@ -50,7 +51,7 @@ export function enrichReadings(metrics, nodes, buckets) {
       season: seasonOf(row.Recorded_At),
       semester: semesterOf(row.Recorded_At),
       // Null Recorded_By_UserID means the ESP32 sent it unattended.
-      source: row.Recorded_By_UserID == null ? 'Sensor' : 'Manual',
+      source: row.Aggregated ? 'Sensor (hourly average)' : row.Recorded_By_UserID == null ? 'Sensor' : 'Manual',
     };
   });
 }

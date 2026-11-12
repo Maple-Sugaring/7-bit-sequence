@@ -15,6 +15,8 @@ import dayjs from 'dayjs';
 import { addToRound, loggedNodeIds, nextTreeToLog, sapGallonsFor, sensorDefaults, startRound } from '../business/collectionRound';
 import { bushAverageSugar, syrupEstimate } from '../business/sugarContent';
 import { validateCollectionEntry } from '../business/validation';
+import { CollectionLogHistory } from '../components/CollectionLogHistory';
+import { apiMode } from '../data/apiClient';
 import { CollectionHistory } from '../components/collection/CollectionHistory';
 import { RoundSummary } from '../components/collection/RoundSummary';
 import { SyrupEstimate } from '../components/collection/SyrupEstimate';
@@ -455,7 +457,9 @@ export function CollectionPage() {
         </Grid>
 
         <Grid size={12}>
-          <CollectionHistory entries={journal.data ?? []} loading={journal.loading} error={journal.error} />
+          {apiMode === 'http' ? <CollectionLogHistory refreshKey={journal.data} /> : (
+            <CollectionHistory entries={journal.data ?? []} loading={journal.loading} error={journal.error} />
+          )}
         </Grid>
       </Grid>
 

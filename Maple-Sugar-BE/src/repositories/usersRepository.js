@@ -1,4 +1,4 @@
-import { query, queryAll, queryOne } from '../db/pool.js';
+import { query, queryAll, queryOne, queryOneOn, transaction } from '../db/pool.js';
 import { decryptSecret, encryptSecret } from '../auth/secrets.js';
 import { canonicalEmail } from '../business/emailAddress.js';
 import { mapRole, mapUser } from './mappers.js';
@@ -21,6 +21,7 @@ const USER_COLUMNS = `
   google_calendar_id,
   (google_refresh_token is not null) as calendar_connected,
   invite_pending,
+  can_overwrite_measurements,
   email_alerts,
   email_shifts,
   pronouns
@@ -59,14 +60,21 @@ export async function findUserByGoogleSub(googleSub) {
   return row ? mapUser(row) : null;
 }
 
-export async function createInvite({ email, roleId, firstName, lastName, accountExpiry }) {
-  const row = await queryOne(
-    `insert into users (role_id, first_name, last_name, email, account_expiry, invite_pending)
-     values ($1, $2, $3, $4, $5, true)
-     returning ${USER_COLUMNS}`,
-    [roleId, firstName, lastName, canonicalEmail(email), accountExpiry],
-  );
-  return mapUser(row);
+export async function createInvite({ email, roleId, firstName, lastName, accountExpiry }, actorId) {
+  return transaction(async (client) => {
+    const row = await queryOneOn(
+      client,
+      `insert into users (role_id, first_name, last_name, email, account_expiry, invite_pending)
+       values ($1, $2, $3, $4, $5, true)
+       returning ${USER_COLUMNS}`,
+      [roleId, firstName, lastName, canonicalEmail(email), accountExpiry],
+    );
+    await client.query(
+      "insert into audit_events (event_type, actor_id, target_id, note) values ('user_created', $1, $2, $3)",
+      [actorId, row.id, 'User account invited.'],
+    );
+    return mapUser(row);
+  });
 }
 
 /**
@@ -111,6 +119,7 @@ const WRITABLE_USER_COLUMNS = {
   Last_Name: 'last_name',
   Email: 'email',
   Is_Active: 'is_active',
+  Can_Overwrite_Measurements: 'can_overwrite_measurements',
   Account_Expiry: 'account_expiry',
   Google_Calendar_ID: 'google_calendar_id',
 };
@@ -251,9 +260,16 @@ export async function updateProfile(id, changes) {
   return row ? mapUser(row) : null;
 }
 
-export async function deleteUser(id) {
-  const row = await queryOne('delete from users where id = $1 returning id', [id]);
-  return Boolean(row);
+export async function deleteUser(id, actorId) {
+  return transaction(async (client) => {
+    const row = await queryOneOn(client, 'delete from users where id = $1 returning id', [id]);
+    if (!row) return false;
+    await client.query(
+      "insert into audit_events (event_type, actor_id, target_id, note) values ('user_deleted', $1, $2, $3)",
+      [actorId, id, 'User account deleted.'],
+    );
+    return true;
+  });
 }
 
 export async function saveCalendarConnection(userId, refreshToken) {

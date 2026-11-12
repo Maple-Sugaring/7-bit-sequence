@@ -126,7 +126,7 @@ function TourCard({ title, children, actions, onEnd, progress, total }) {
         maxHeight: '50dvh',
         overflowY: 'auto',
         p: { xs: 1.5, sm: 2 },
-        borderTop: '3px solid #F76902',
+        borderTop: '3px solid var(--brand-orange)',
         borderRadius: 2,
         '& .MuiButton-root': { minHeight: 44, px: 1.5, fontSize: '0.8125rem', lineHeight: 1.25 },
         '& .MuiTypography-h6': { fontSize: { xs: '1.125rem', sm: '1.25rem' }, lineHeight: 1.3, fontWeight: 600 },
@@ -225,8 +225,8 @@ export function TourOverlay({ index, offset, nodePath, transitioning, goTo, onEn
             height: rect.height + SPOTLIGHT_PAD * 2,
             boxSizing: 'border-box',
             borderRadius: 2,
-            border: '2px solid #F76902',
-            boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.45)',
+            border: '2px solid var(--brand-orange)',
+            boxShadow: '0 0 0 9999px var(--scrim)',
           }} />
         </Box>
       ) : null}

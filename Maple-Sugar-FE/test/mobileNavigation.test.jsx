@@ -7,7 +7,8 @@ import { AppNavigation } from '../src/components/layout/AppNavigation';
 import { FieldOverview } from '../src/components/layout/FieldOverview';
 
 let role = Role.ADMIN;
-vi.mock('../src/context/auth', () => ({ useAuth: () => ({ role, can: (capability) => can(role, capability) }) }));
+const signOut = vi.fn(async () => {});
+vi.mock('../src/context/auth', () => ({ useAuth: () => ({ role, can: (capability) => can(role, capability), signOut }) }));
 afterEach(cleanup);
 
 function setup(as = Role.ADMIN, path = '/dashboard') {
@@ -75,5 +76,23 @@ describe('mobile navigation', () => {
     expect(screen.getAllByText('—')).toHaveLength(3);
     expect(screen.queryByRole('link', { name: /Start collecting/ })).toBeNull();
   });
-});
 
+  it('logs out from the All pages sheet and returns to the login page', async () => {
+    signOut.mockClear();
+    const router = setup(Role.STUDENT);
+    fireEvent.click(screen.getByRole('button', { name: 'All pages' }));
+    const sheet = within(screen.getByRole('dialog', { name: 'All pages' }));
+    fireEvent.click(sheet.getByRole('button', { name: 'Log out' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/login'));
+    expect(signOut).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers Log out to every role in the sidebar', () => {
+    for (const as of [Role.ADMIN, Role.STUDENT, Role.MSS]) {
+      setup(as);
+      const account = within(screen.getAllByRole('navigation', { name: 'Account' })[0]);
+      expect(account.getByRole('button', { name: 'Log out' })).toBeTruthy();
+      cleanup();
+    }
+  });
+});

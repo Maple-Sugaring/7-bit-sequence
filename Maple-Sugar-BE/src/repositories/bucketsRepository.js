@@ -10,11 +10,11 @@ const BUCKET_COLUMNS = `
 `;
 
 export async function listBuckets() {
-  const rows = await queryAll(`select ${BUCKET_COLUMNS} from buckets order by id`);
+  const rows = await queryAll(`select ${BUCKET_COLUMNS} from visible_buckets order by id`);
   return rows.map(mapBucket);
 }
 
 export async function findBucketById(id) {
-  const row = await queryOne(`select ${BUCKET_COLUMNS} from buckets where id = $1`, [id]);
+  const row = await queryOne(`select ${BUCKET_COLUMNS} from visible_buckets where id = $1`, [id]);
   return row ? mapBucket(row) : null;
 }

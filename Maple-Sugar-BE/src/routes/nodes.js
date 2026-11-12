@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { z } from 'zod';
+import { listSensorLifecycle, recordSensorEvent } from '../repositories/sensorLifecycleRepository.js';
 import { forbidden, notFound } from '../lib/ApiError.js';
 import { can, Capability } from '../business/permissions.js';
 import { requireAnyCapability, requireAuth, requireCapability } from '../middleware/authenticate.js';
@@ -7,9 +9,12 @@ import { invalidateNamespaces, readThrough } from '../cache/redisCache.js';
 import * as nodesRepository from '../repositories/nodesRepository.js';
 import * as alertsRepository from '../repositories/alertsRepository.js';
 import * as metricsRepository from '../repositories/metricsRepository.js';
+import * as collectionLogsRepository from '../repositories/collectionLogsRepository.js';
 import * as journalRepository from '../repositories/journalRepository.js';
 import * as calibrationRepository from '../repositories/calibrationRepository.js';
-import { query } from '../db/pool.js';
+import { transaction } from '../db/pool.js';
+import { FAULT_ALERT_TYPES } from '../business/alerting.js';
+import { liveState } from '../business/calibration.js';
 import { calibrationBody, createNodeBody, flagNodeBody, idParam, nodeActionBody, nodeDetailsBody, nodeIntervalBody, updateNodeBody } from './schemas.js';
 
 export const nodesRouter = Router();
@@ -18,10 +23,7 @@ nodesRouter.get(
   '/',
   requireAnyCapability(Capability.VIEW_DASHBOARD, Capability.VIEW_NODES),
   async (req, res) => {
-  const nodes = await readThrough(cacheKeys.nodesHealth(), TTL.NODE_HEALTH, () =>
-    nodesRepository.listNodes(),
-  );
-  res.json(nodes);
+  res.json(await nodesRepository.listNodes());
 });
 
 nodesRouter.get(
@@ -32,9 +34,33 @@ nodesRouter.get(
   },
 );
 
+const sensorEventBody = z.object({
+  type: z.enum(['installation', 'replacement', 'maintenance']),
+  date: z.iso.date().refine(
+    (date) => date <= new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date()),
+    'The event date cannot be in the future.',
+  ),
+  sensorType: z.string().trim().min(1).max(120).optional(),
+  notes: z.string().trim().max(1000).optional(),
+}).refine((event) => event.type === 'maintenance' ? Boolean(event.notes) : Boolean(event.sensorType), {
+  message: 'Provide a sensor type for installation or replacement, or notes for maintenance.',
+});
+
+nodesRouter.get('/lifecycle', requireCapability(Capability.MANAGE_USERS), async (req, res) => {
+  res.json(await listSensorLifecycle());
+});
+
+nodesRouter.post('/:id/lifecycle', requireCapability(Capability.MANAGE_USERS), async (req, res) => {
+  const id = idParam.parse(req.params.id);
+  const event = sensorEventBody.parse(req.body);
+  const result = await recordSensorEvent(id, event, req.user.UserID);
+  if (!result) throw notFound('Node');
+  res.status(201).json(result);
+});
+
 nodesRouter.post('/', requireCapability(Capability.DEPLOY_NODES), async (req, res) => {
   const body = createNodeBody.parse(req.body);
-  const node = await nodesRepository.createDeployedNode(body);
+  const node = await nodesRepository.createDeployedNode(body, req.user.UserID);
   await invalidateNamespaces([cacheNamespaces.NODES]);
   res.status(201).json(node);
 });
@@ -44,6 +70,31 @@ nodesRouter.delete('/:id', requireCapability(Capability.DEPLOY_NODES), async (re
   const removed = await nodesRepository.deleteNode(id);
   if (!removed) throw notFound('Node');
   await invalidateNamespaces([cacheNamespaces.NODES, cacheNamespaces.METRICS, cacheNamespaces.ALERTS]);
+  res.status(204).end();
+});
+
+const tapBody = z.object({ action: z.enum(['setup', 'remove']) });
+
+nodesRouter.post('/:id/tap', requireCapability(Capability.DEPLOY_NODES), async (req, res) => {
+  const id = idParam.parse(req.params.id);
+  const { action } = tapBody.parse(req.body);
+  const removed = action === 'remove';
+  await transaction(async (client) => {
+    const { rowCount } = await client.query(
+      `update node set status_code = $2, tap_removed = $3
+        where id = $1 and (not demo_fixture or lock_data_mode() = 'test') and tap_removed is distinct from $3`,
+      [id, removed ? 3 : 0, removed],
+    );
+    if (rowCount) {
+      await client.query(
+        'insert into audit_events (event_type, actor_id, target_id, note) values ($1, $2, $3, $4)',
+        [removed ? 'tap_removed' : 'tap_setup', req.user.UserID, id, removed ? 'Tap pulled for the semester.' : 'Tap set up.'],
+      );
+    } else if (!(await client.query('select id from visible_nodes where id = $1', [id])).rowCount) {
+      throw notFound('Node');
+    }
+  });
+  await invalidateNamespaces([cacheNamespaces.NODES]);
   res.status(204).end();
 });
 
@@ -73,31 +124,44 @@ nodesRouter.post('/:id/actions', requireAuth, async (req, res) => {
 
   const board = (await nodesRepository.listBoard()).find((item) => item.NodeID === id);
   const tare = board?.Tare_Weight ?? 2;
-  await metricsRepository.createMetric({
-    NodeID: id,
-    BucketID: board?.BucketID ?? null,
-    Recorded_By_UserID: req.user.UserID,
-    Weight: tare,
-    Weather_Conditions: 'Collected',
-    Ice_Present: false,
+  const bucketId = board?.BucketID ?? null;
+  const notes = Notes?.trim() || 'Bucket emptied from the bush dashboard.';
+  await transaction(async (client) => {
+    await metricsRepository.createMetric({
+      NodeID: id,
+      BucketID: bucketId,
+      Recorded_By_UserID: req.user.UserID,
+      Weight: tare,
+      Weather_Conditions: 'Collected',
+      Ice_Present: false,
+    }, client);
+    await journalRepository.createEntry({
+      UserID: req.user.UserID,
+      NodeID: id,
+      BucketID: bucketId,
+      Title: `Collected ${node.Node_Name}`,
+      Process_Notes: notes,
+      Weight: tare,
+      Ice_Present: false,
+      Submitted_Role: req.role,
+    }, client);
+    await collectionLogsRepository.createCollectionLog({
+      NodeID: id,
+      BucketID: bucketId,
+      UserID: req.user.UserID,
+      Volume_Collected: null,
+      Quality_Notes: notes,
+    }, client);
+    await client.query(
+      `update alerts
+          set is_resolved = true
+        where node_id = $1
+          and data_mode = active_data_mode()
+          and is_resolved = false
+          and alert_type in ('Full Bucket', 'Collection Needed')`,
+      [id],
+    );
   });
-  await journalRepository.createEntry({
-    UserID: req.user.UserID,
-    NodeID: id,
-    BucketID: board?.BucketID ?? null,
-    Title: `Collected ${node.Node_Name}`,
-    Process_Notes: Notes?.trim() || 'Bucket emptied from the bush dashboard.',
-    Weight: tare,
-    Ice_Present: false,
-  });
-  await query(
-    `update alerts
-        set is_resolved = true
-      where node_id = $1
-        and is_resolved = false
-        and alert_type in ('Full Bucket', 'Collection Needed')`,
-    [id],
-  );
   await invalidateNamespaces([cacheNamespaces.NODES, cacheNamespaces.METRICS, cacheNamespaces.ALERTS]);
   res.json(await nodesRepository.findNodeById(id));
 });
@@ -143,21 +207,27 @@ nodesRouter.patch('/:id/interval', requireCapability(Capability.DEPLOY_NODES), a
 
 /**
  * Tare and test-weight calibration over LoRa. The command rides back to the
- * node on its next packet, so the page polls GET until it settles.
+ * node on its next packet, so the page polls GET until it settles. `Live` is
+ * what the platform reads meanwhile, so the person can see the weight is on.
  */
 nodesRouter.get('/:id/calibration', requireCapability(Capability.DEPLOY_NODES), async (req, res) => {
   const id = idParam.parse(req.params.id);
   const node = await nodesRepository.findNodeById(id);
   if (!node) throw notFound('Node');
-  const [command, lastCalibration] = await Promise.all([
+  const [command, lastCalibration, lastScale, [latest], fault] = await Promise.all([
     calibrationRepository.findLatestCommand(id),
     calibrationRepository.findLastCalibration(id),
+    calibrationRepository.findLastScale(id),
+    metricsRepository.listRecentForNode(id, 1),
+    alertsRepository.findOpenAlertOfTypes(id, FAULT_ALERT_TYPES),
   ]);
   res.json({
     NodeID: id,
     Report_Interval_Seconds: node.Report_Interval_Seconds,
     Command: command,
     Last_Calibration: lastCalibration,
+    Last_Scale: lastScale,
+    Live: liveState(node, latest, fault),
   });
 });
 
@@ -173,6 +243,19 @@ nodesRouter.post('/:id/calibration', requireCapability(Capability.DEPLOY_NODES),
     userId: req.user.UserID,
   });
   res.status(202).json(command);
+});
+
+/**
+ * Cancels the waiting command so the next ingest reply no longer carries it.
+ * Answers with the node's latest command, which is the settled one when the
+ * node answered before the cancel landed.
+ */
+nodesRouter.delete('/:id/calibration', requireCapability(Capability.DEPLOY_NODES), async (req, res) => {
+  const id = idParam.parse(req.params.id);
+  const node = await nodesRepository.findNodeById(id);
+  if (!node) throw notFound('Node');
+  const cancelled = await calibrationRepository.cancelOpenCommand(id);
+  res.json(cancelled ?? (await calibrationRepository.findLatestCommand(id)));
 });
 
 nodesRouter.patch('/:id', requireCapability(Capability.MANAGE_USERS), async (req, res) => {

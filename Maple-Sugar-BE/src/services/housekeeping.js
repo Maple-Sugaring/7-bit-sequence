@@ -12,8 +12,12 @@ import { escalateStaleAlerts } from './notificationService.js';
 import { ingestBuffer } from './readingBuffer.js';
 import { sendShiftReminders } from './shiftNotifications.js';
 import { getLive } from './weatherService.js';
+import { runRetention } from './metricRetention.js';
 
 const WEATHER_MS = 10 * 60 * 1000;
+// BRU-007. The cutoff moves an hour at a time, so a few runs a day keeps the
+// raw table close to the window without the job ever being urgent.
+const RETENTION_MS = 6 * 60 * 60 * 1000;
 const NODES_MS = 5 * 60 * 1000;
 const BUFFER_MS = 60 * 1000;
 const REMINDERS_MS = 5 * 60 * 1000;
@@ -42,7 +46,13 @@ export function startHousekeeping() {
     ESCALATION_MS,
   );
 
-  for (const timer of [weather, nodes, buffer, reminders, escalation]) timer.unref();
+  const retention = setInterval(() => safe('Reading retention failed', () => runRetention()), RETENTION_MS);
+
+  for (const timer of [weather, nodes, buffer, reminders, escalation, retention]) timer.unref();
+
+  // Later than the other first runs so boot traffic is served first.
+  const firstRetention = setTimeout(() => safe('Reading retention failed', () => runRetention()), 5 * 60 * 1000);
+  firstRetention.unref();
 
   const first = setTimeout(() => {
     safe('Live weather poll failed', () => getLive());
@@ -59,6 +69,8 @@ export function startHousekeeping() {
     clearInterval(buffer);
     clearInterval(reminders);
     clearInterval(escalation);
+    clearInterval(retention);
     clearTimeout(first);
+    clearTimeout(firstRetention);
   };
 }

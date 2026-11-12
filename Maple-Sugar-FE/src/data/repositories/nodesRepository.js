@@ -100,3 +100,16 @@ export async function requestCalibration(nodeId, body) {
   invalidatePrefix(cacheNamespaces.NODES);
   return command;
 }
+
+/** Stops the Pi radioing a waiting command. Answers with the node's latest command. */
+export function cancelCalibration(nodeId) {
+  return apiClient.delete(`/nodes/${nodeId}/calibration`);
+}
+
+export function listSensorLifecycle() {
+  return apiClient.get('/nodes/lifecycle');
+}
+
+export function recordSensorEvent(nodeId, event) {
+  return apiClient.post(`/nodes/${nodeId}/lifecycle`, event);
+}

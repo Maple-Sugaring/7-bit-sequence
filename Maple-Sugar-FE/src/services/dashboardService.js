@@ -12,6 +12,7 @@ import {
   dailySeries,
   dailyTotals,
   percentChange,
+  readingCount,
   seasonComparisonSeries,
   seasonOf,
 } from '../business/aggregation';
@@ -105,7 +106,7 @@ export async function getDashboard({ season } = {}) {
         medianShelfLifeHours: shelfLifeHours.length
           ? [...shelfLifeHours].sort((a, b) => a - b)[Math.floor(shelfLifeHours.length / 2)]
           : null,
-        readingCount: current.length,
+        readingCount: readingCount(current),
         fullBuckets: current.filter((row) => row.isFull).length,
         nodesAtSpoilageRisk: atRisk.length,
       },

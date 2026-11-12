@@ -11,13 +11,20 @@ import StepLabel from '@mui/material/StepLabel';
 import Stepper from '@mui/material/Stepper';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { calibrationCheck, commandState, packetIntervalLabel, testWeightError } from '../../business/calibration';
+import {
+  calibrationCheck,
+  commandState,
+  liveStatus,
+  packetIntervalLabel,
+  readingAfterAck,
+  testWeightError,
+  waitingStatus,
+} from '../../business/calibration';
 import { dateTime } from '../common/format';
 import { useAction, useAutoRefresh, useCalibration } from '../../services/hooks';
-import { calibrateNode, tareNode } from '../../services/nodeService';
+import { calibrateNode, cancelCalibration, tareNode } from '../../services/nodeService';
 
 const POLL_MS = 3000;
-const ACK_CLOCK_SLACK_MS = 3000;
 
 /** Which step the wizard is on, read from the newest command. */
 function stepFor(command, restartedAfter) {
@@ -27,21 +34,39 @@ function stepFor(command, restartedAfter) {
   return 0;
 }
 
+/** The scale factor line. Every ack carries the node's counts/lb, so it also covers a USB calibration. */
+function scaleLine(last, scale) {
+  const reported = scale?.Counts_Per_Lb != null ? `The node reports ${Math.round(scale.Counts_Per_Lb)} counts/lb` : null;
+  if (last && reported) return `Last calibrated ${dateTime(last.Completed_At)} with ${last.Pounds} lb. ${reported}.`;
+  if (last) {
+    return `Last calibrated ${dateTime(last.Completed_At)} with ${last.Pounds} lb${last.Counts_Per_Lb ? ` · ${Math.round(last.Counts_Per_Lb)} counts/lb` : ''}.`;
+  }
+  if (reported) return `${reported}. Not calibrated from the app yet.`;
+  return 'Not calibrated from the app yet. The node uses its datasheet value.';
+}
+
 /**
  * Tare and test-weight calibration over LoRa. Each request rides to the node on
- * its next packet, so the card polls until the node answers.
+ * its next packet, so the card polls quickly until the node answers, and about
+ * once a packet otherwise so the live weight keeps up with the platform.
  */
 export function CalibrationCard({ node, onSettled }) {
   const nodeId = node?.NodeID;
   const calibration = useCalibration(nodeId);
   const command = calibration.data?.Command ?? null;
   const last = calibration.data?.Last_Calibration ?? null;
+  const live = calibration.data?.Live ?? null;
+  const intervalSeconds = calibration.data?.Report_Interval_Seconds ?? node?.Report_Interval_Seconds;
   const state = commandState(command);
+  const status = liveStatus(live);
+  const blocked = Boolean(status.fault?.blocksCommands);
+  const waiting = waitingStatus(command, intervalSeconds);
   const [pounds, setPounds] = useState('');
   const [restartedAfter, setRestartedAfter] = useState(null);
   const step = stepFor(command, restartedAfter);
 
-  useAutoRefresh(calibration.refresh, POLL_MS, { enabled: state.open });
+  const idleMs = Math.min(60, Math.max(5, intervalSeconds ?? 900)) * 1000;
+  useAutoRefresh(calibration.refresh, state.open ? POLL_MS : idleMs);
 
   // A settled command changed what the node reports, so the page refetches.
   const settledId = command && !state.open ? `${command.CommandID}:${command.Status}` : null;
@@ -55,15 +80,17 @@ export function CalibrationCard({ node, onSettled }) {
     calibration.refresh();
   });
 
+  const cancel = useAction(async () => {
+    await cancelCalibration(nodeId);
+    calibration.refresh();
+  });
+
   const weightError = pounds === '' ? null : testWeightError(pounds);
-  // The packet that carries the ack already weighs with the new scale, and the
-  // Pi stamps it a moment before the API settles the command.
-  const fresh =
-    command?.Completed_At &&
-    node?.Recorded_At &&
-    Date.parse(node.Recorded_At) >= Date.parse(command.Completed_At) - ACK_CLOCK_SLACK_MS;
-  const check = fresh && command?.Action === 'calibrate' ? calibrationCheck(node.Weight, command.Pounds) : null;
-  const intervalLabel = packetIntervalLabel(node?.Report_Interval_Seconds).toLowerCase();
+  // The packet that carries the ack already weighs with the new scale; anything
+  // older was weighed before the calibration and says nothing about it.
+  const reading = command?.Action === 'calibrate' ? readingAfterAck(command, live) : null;
+  const check = reading ? calibrationCheck(reading.Weight, command.Pounds) : null;
+  const intervalLabel = packetIntervalLabel(intervalSeconds).toLowerCase();
 
   return (
     <Card sx={{ mb: 2 }}>
@@ -75,17 +102,43 @@ export function CalibrationCard({ node, onSettled }) {
           Over the radio, no cable. Each step reaches the node on its next packet ({intervalLabel}).
         </Typography>
         <Typography variant="body2" sx={{ mb: 2 }}>
-          {last
-            ? `Last calibrated ${dateTime(last.Completed_At)} with ${last.Pounds} lb${last.Counts_Per_Lb ? ` · ${Math.round(last.Counts_Per_Lb)} counts/lb` : ''}.`
-            : 'Not calibrated from the app yet. The node uses its datasheet value.'}
+          {scaleLine(last, calibration.data?.Last_Scale ?? null)}
         </Typography>
 
         {calibration.error ? <Alert severity="error" sx={{ mb: 2 }}>{calibration.error}</Alert> : null}
         {send.error ? <Alert severity="error" sx={{ mb: 2 }}>{send.error}</Alert> : null}
-        {command && (state.open || command.Status === 'failed') ? (
+        {cancel.error ? <Alert severity="error" sx={{ mb: 2 }}>{cancel.error}</Alert> : null}
+        {status.fault ? (
+          <Alert severity={status.fault.severity} sx={{ mb: 1 }}>
+            {status.fault.text}
+          </Alert>
+        ) : null}
+        {status.weight ? (
+          <Typography variant="subtitle2" component="p" sx={{ mb: 2 }} aria-live="polite">
+            {status.weight}
+          </Typography>
+        ) : null}
+        {waiting ? (
+          <Alert
+            severity="info"
+            sx={{ mb: 2 }}
+            action={
+              <Button color="inherit" size="small" disabled={cancel.pending} onClick={() => cancel.execute()}>
+                Cancel
+              </Button>
+            }
+          >
+            <Typography variant="body2" component="div">
+              {waiting.label}
+            </Typography>
+            <Typography variant="body2" component="div" sx={{ mt: 0.5 }}>
+              {waiting.hint}
+            </Typography>
+            <LinearProgress sx={{ mt: 1 }} />
+          </Alert>
+        ) : command && (command.Status === 'failed' || command.Status === 'cancelled') ? (
           <Alert severity={state.severity} sx={{ mb: 2 }}>
             {state.label}
-            {state.open ? <LinearProgress sx={{ mt: 1 }} /> : null}
           </Alert>
         ) : null}
 
@@ -98,7 +151,7 @@ export function CalibrationCard({ node, onSettled }) {
               </Typography>
               <Button
                 variant="contained"
-                disabled={send.pending || state.open}
+                disabled={send.pending || state.open || blocked}
                 onClick={() => send.execute('tare')}
               >
                 Tare
@@ -124,7 +177,7 @@ export function CalibrationCard({ node, onSettled }) {
                 />
                 <Button
                   variant="contained"
-                  disabled={send.pending || state.open || pounds === '' || Boolean(weightError)}
+                  disabled={send.pending || state.open || blocked || pounds === '' || Boolean(weightError)}
                   onClick={() => send.execute('calibrate')}
                 >
                   Calibrate
@@ -138,9 +191,14 @@ export function CalibrationCard({ node, onSettled }) {
           <Step>
             <StepLabel>Check the reading</StepLabel>
             <StepContent>
-              {check ? (
+              {check?.removed ? (
+                <Alert severity="info" sx={{ mb: 1.5 }}>
+                  The platform reads {Number(reading.Weight).toFixed(2)} lb, so the test weight is off. Put the{' '}
+                  {command.Pounds} lb test weight back on to check the calibration.
+                </Alert>
+              ) : check ? (
                 <Alert severity={check.ok ? 'success' : 'warning'} sx={{ mb: 1.5 }}>
-                  The platform reads {Number(node.Weight).toFixed(2)} lb for a {command.Pounds} lb test weight
+                  The platform reads {Number(reading.Weight).toFixed(2)} lb for a {command.Pounds} lb test weight
                   {check.ok ? '. Calibration is good.' : ` (${check.off > 0 ? '+' : ''}${check.off.toFixed(2)} lb). Calibrate again.`}
                 </Alert>
               ) : (

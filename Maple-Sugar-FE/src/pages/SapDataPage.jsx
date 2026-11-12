@@ -30,6 +30,7 @@ import { ChartCard } from '../components/charts/ChartCard';
 import { TREE_COLORS, WeightChart } from '../components/charts/SeriesChart';
 import { PageHeader } from '../components/common/PageHeader';
 import { EmptyBlock } from '../components/common/StateBlock';
+import { ReadingCorrections } from '../components/ReadingCorrections';
 import { useAuth } from '../context/auth';
 import { useBush, useReadings } from '../services/hooks';
 
@@ -486,6 +487,7 @@ export function SapDataPage() {
           </Box>
         </Stack>
       )}
+      <ReadingCorrections readings={weights.ranged} refresh={readings.refresh} canOverwrite={user?.canOverwriteMeasurements} />
     </>
   );
 }

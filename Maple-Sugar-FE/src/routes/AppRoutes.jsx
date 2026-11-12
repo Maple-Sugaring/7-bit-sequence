@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+  import { lazy, Suspense, useLayoutEffect } from 'react';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
@@ -42,21 +42,34 @@ const FleetMapPage = lazy(() =>
 const DeployPage = lazy(() =>
   import('../pages/DeployPage').then((module) => ({ default: module.DeployPage })),
 );
+const TutorialsPage = lazy(() =>
+  import('../pages/TutorialsPage').then((module) => ({ default: module.TutorialsPage })),
+);
 const FeedbackPage = lazy(() =>
   import('../pages/FeedbackPage').then((module) => ({ default: module.FeedbackPage })),
 );
+//WCAG 2.2 SC 2.4.2: Each page must have a unique title
+const SITE_NAME = 'Maple Sugaring';
+
+function PageTitle({title, children}){
+  useLayoutEffect(()=>{
+    document.title = title ? `${title} - ${SITE_NAME}` : SITE_NAME;
+  },[title]);
+  return children;
+}
 
 const PROTECTED = [
-  { path: '/dashboard', element: <DashboardPage /> },
-  { path: '/map', element: <FleetMapPage /> },
-  { path: '/deploy', element: <DeployPage /> },
-  { path: '/table', element: <SapDataPage /> },
-  { path: '/collection', element: <CollectionPage /> },
-  { path: '/nodes/:nodeId', element: <NodePage /> },
-  { path: '/notifications', element: <AlertsPage /> },
-  { path: '/schedule', element: <SchedulePage /> },
-  { path: '/admin', element: <AdminPage /> },
-  { path: '/profile', element: <ProfilePage /> },
+  { path: '/dashboard', title: 'The Bush', element: <DashboardPage /> },
+  { path: '/map', title: 'Fleet map', element: <FleetMapPage /> },
+  { path: '/deploy', title: 'Deploy', element: <DeployPage /> },
+  { path: '/table', title: 'Sugar Woods', element: <SapDataPage /> },
+  { path: '/collection', title: 'Collection', element: <CollectionPage /> },
+  { path: '/nodes/:nodeId', title: 'Sensor Node', element: <NodePage /> },
+  { path: '/notifications', title: 'Notifications', element: <AlertsPage /> },
+  { path: '/schedule', title: 'Schedule', element: <SchedulePage /> },
+  { path: '/admin', title: 'Admin', element: <AdminPage /> },
+  { path: '/profile', title: 'Your profile', element: <ProfilePage /> },
+  { path: '/tutorials', title: 'Tutorials', element: <TutorialsPage /> },
   ...(apiMode === 'mock' ? [{ path: '/feedback', element: <FeedbackPage /> }] : []),
 ];
 
@@ -83,21 +96,21 @@ function PageFallback() {
 export function AppRoutes() {
   return (
     <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/" element={<LandingPage />} />
-      <Route path="/auth/callback" element={<AuthCallbackPage />} />
-      <Route path="/privacy" element={<PrivacyPage />} />
-
+      <Route path="/login" element={<PageTitle title="Sign in"><LoginPage /></PageTitle>} />
+      <Route path="/" element={<PageTitle><LandingPage /></PageTitle>} />
+      <Route path="/auth/callback" element={<PageTitle title="Signing in"><AuthCallbackPage /></PageTitle>} />
+      <Route path="/privacy" element={<PageTitle title="Privacy"><PrivacyPage /></PageTitle>} />
+ 
       <Route path="/data" element={<Navigate to="/table" replace />} />
       <Route path="/input" element={<Navigate to="/collection" replace />} />
       <Route path="/record" element={<Navigate to="/collection" replace />} />
       <Route path="/alerts" element={<Navigate to="/notifications" replace />} />
       <Route path="/schedule/manage" element={<RedirectKeepingSearch to="/schedule" />} />
       <Route path="/schedule-admin" element={<RedirectKeepingSearch to="/schedule" />} />
-      <Route path="/guides" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/guides" element={<Navigate to="/tutorials" replace />} />
       <Route path="/nodes" element={<Navigate to="/deploy" replace />} />
       <Route path="/deployed" element={<Navigate to="/deploy" replace />} />
-
+ 
       <Route
         element={
           <ProtectedRoute>
@@ -105,20 +118,23 @@ export function AppRoutes() {
           </ProtectedRoute>
         }
       >
-        {PROTECTED.map(({ path, element }) => (
+        {PROTECTED.map(({ path, title, element }) => (
           <Route
             key={path}
             path={path}
             element={
               <ProtectedRoute capability={ROUTE_CAPABILITIES[path] ?? undefined}>
-                <Suspense fallback={<PageFallback />}>{element}</Suspense>
+                {/* Outside Suspense so the title changes immediately, even while the page chunk loads. */}
+                <PageTitle title={title}>
+                  <Suspense fallback={<PageFallback />}>{element}</Suspense>
+                </PageTitle>
               </ProtectedRoute>
             }
           />
         ))}
       </Route>
-
-      <Route path="*" element={<NotFoundPage />} />
+ 
+      <Route path="*" element={<PageTitle title="Page not found"><NotFoundPage /></PageTitle>} />
     </Routes>
   );
 }

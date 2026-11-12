@@ -17,7 +17,7 @@ describe('weight export', () => {
   test('CSV escapes quotes and commas and matches the rows', () => {
     const rows = exportRows(readings, null, null);
     const lines = toCsv(rows).split('\r\n');
-    expect(lines[0]).toBe('timestamp_utc,node,tree,stand,weight_lb,sugar_percent');
+    expect(lines[0]).toBe('timestamp_utc,node,tree,stand,weight_lb,sugar_percent,samples');
     expect(lines).toHaveLength(rows.length + 1);
     expect(lines[2]).toContain('"Árbol ""Grande"", ñandú"');
   });
@@ -25,6 +25,17 @@ describe('weight export', () => {
   test('totals ignore missing weights', () => {
     expect(totals(exportRows(readings, null, null))).toEqual({ count: 3, nodes: 2, averageWeight: (9.5 + 11 + 1) / 3 });
     expect(totals([]).averageWeight).toBeNull();
+  });
+
+  test('hourly aggregates from the hub keep their sample count and weigh that much in totals', () => {
+    const aggregated = [
+      { NodeID: 1, nodeName: 'Tree 1', stand: 'Alumni', Weight: 20, Recorded_At: '2025-03-01T13:00:00.000Z',
+        Aggregated: true, Aggregate: { Sample_Count: 3, Counts: { Weight: 3 } } },
+      { NodeID: 1, nodeName: 'Tree 1', stand: 'Alumni', Weight: 100, Recorded_At: '2025-03-01T14:10:00.000Z' },
+    ];
+    const rows = exportRows(aggregated, null, null);
+    expect(toCsv(rows).split('\r\n')[1]).toBe('2025-03-01 13:00:00,1,Tree 1,Alumni,20,,3');
+    expect(totals(rows)).toEqual({ count: 2, nodes: 1, averageWeight: (20 * 3 + 100) / 4 });
   });
 
   test('PDF paginates large exports and handles empty data', async () => {

@@ -1,3 +1,5 @@
+import { SensorLifecycleCard } from '../components/deploy/SensorLifecycleCard';
+import { Issue49Admin } from '../components/Issue49Admin';
 import { useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
@@ -36,9 +38,10 @@ import {
   setAccountExpiry,
   removeUser,
   setActive,
+  setCanOverwriteMeasurements,
 } from '../services/adminService';
 import { useAction, useUsers } from '../services/hooks';
-
+ 
 function GatewayButton() {
   return (
     <Button
@@ -49,16 +52,16 @@ function GatewayButton() {
       endIcon={<OpenInNewIcon />}
       aria-label="Open Maple gateway (opens in a new tab)"
     >
-      Open Maple gateway
+      Open Maple Gateway
     </Button>
   );
 }
-
+ 
 function ExpiryDialog({ user, onClose, onSave, pending, error }) {
   const [value, setValue] = useState(() =>
     user?.Account_Expiry ? dayjs(user.Account_Expiry) : dayjs().add(4, 'month').hour(23).minute(59).second(0),
   );
-
+ 
   return (
     <Dialog open={Boolean(user)} onClose={onClose} fullWidth maxWidth="xs">
       <DialogTitle>Set end date</DialogTitle>
@@ -97,7 +100,7 @@ function ExpiryDialog({ user, onClose, onSave, pending, error }) {
     </Dialog>
   );
 }
-
+ 
 function InviteDialog({ open, onClose, roles, onInvite, pending, error }) {
   const [form, setForm] = useState({
     email: '',
@@ -108,13 +111,13 @@ function InviteDialog({ open, onClose, roles, onInvite, pending, error }) {
   });
   const [touched, setTouched] = useState(false);
   const { errors, isValid } = validateInvite(form);
-
+ 
   const update = (field) => (event) => setForm((prev) => ({ ...prev, [field]: event.target.value }));
-
+ 
   const handleInvite = async () => {
     setTouched(true);
     if (!isValid) return;
-
+ 
     if (!form.accountExpiry?.isValid()) return;
     const result = await onInvite({
       ...form,
@@ -132,7 +135,7 @@ function InviteDialog({ open, onClose, roles, onInvite, pending, error }) {
       onClose();
     }
   };
-
+ 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle>Invite a user</DialogTitle>
@@ -140,13 +143,13 @@ function InviteDialog({ open, onClose, roles, onInvite, pending, error }) {
         <DialogContentText sx={{ mb: 2 }}>
           Only administrators create accounts. Pick the exact date and time access should end.
         </DialogContentText>
-
+ 
         {error ? (
           <Alert severity="error" sx={{ mb: 2 }}>
             {error}
           </Alert>
         ) : null}
-
+ 
         <Grid container spacing={2}>
           <Grid size={12}>
             <TextField
@@ -161,10 +164,10 @@ function InviteDialog({ open, onClose, roles, onInvite, pending, error }) {
             />
           </Grid>
           <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField label="First name" value={form.firstName} onChange={update('firstName')} fullWidth />
+            <TextField label="First Name" value={form.firstName} onChange={update('firstName')} fullWidth />
           </Grid>
           <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField label="Last name" value={form.lastName} onChange={update('lastName')} fullWidth />
+            <TextField label="Last Name" value={form.lastName} onChange={update('lastName')} fullWidth />
           </Grid>
           <Grid size={12}>
             <DateTimePicker
@@ -198,20 +201,20 @@ function InviteDialog({ open, onClose, roles, onInvite, pending, error }) {
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
         <Button variant="contained" onClick={handleInvite} loading={pending}>
-          Send invite
+          Send Invite
         </Button>
       </DialogActions>
     </Dialog>
   );
 }
-
+ 
 export function AdminPage() {
   const { user: currentUser } = useAuth();
   const { data, loading, error, refresh } = useUsers();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [pendingRemoval, setPendingRemoval] = useState(null);
   const [expiryUser, setExpiryUser] = useState(null);
-
+ 
   const invite = useAction(async (form) => {
     await inviteUser(form);
     await refresh();
@@ -224,6 +227,10 @@ export function AdminPage() {
     await setActive(userId, isActive);
     await refresh();
   });
+  const toggleOverwrite = useAction(async (userId, enabled) => {
+    await setCanOverwriteMeasurements(userId, enabled);
+    await refresh();
+  });
   const saveExpiry = useAction(async (userId, accountExpiry) => {
     await setAccountExpiry(userId, accountExpiry);
     await refresh();
@@ -232,7 +239,7 @@ export function AdminPage() {
     await removeUser(userId);
     await refresh();
   });
-
+ 
   const columns = [
     { field: 'fullName', headerName: 'Name', width: 180 },
     {
@@ -311,6 +318,20 @@ export function AdminPage() {
       ),
     },
     {
+      field: 'Can_Overwrite_Measurements',
+      headerName: 'Overwrite readings',
+      width: 155,
+      sortable: false,
+      renderCell: (params) => (
+        <Switch
+          checked={params.value ?? true}
+          onChange={(event) => toggleOverwrite.execute(params.row.UserID, event.target.checked)}
+          disabled={toggleOverwrite.pending}
+          slotProps={{ input: { 'aria-label': `Overwrite readings for ${params.row.fullName}` } }}
+        />
+      ),
+    },
+    {
       field: 'expiry',
       headerName: 'Account status',
       width: 160,
@@ -337,7 +358,7 @@ export function AdminPage() {
         ),
     },
   ];
-
+ 
   if (error) {
     return (
       <>
@@ -350,11 +371,12 @@ export function AdminPage() {
       </>
     );
   }
-
-  const actionError = updateRole.error ?? toggleActive.error ?? remove.error;
-
+ 
+  const actionError = updateRole.error ?? toggleActive.error ?? toggleOverwrite.error ?? remove.error;
+ 
   return (
     <>
+      <Issue49Admin />
       <PageHeader
         title="Admin"
         subtitle="Invite accounts, change roles, and lock or extend access."
@@ -367,13 +389,15 @@ export function AdminPage() {
           </Stack>
         }
       />
+ 
+      <SensorLifecycleCard />
 
       {actionError ? (
         <Alert severity="error" sx={{ mb: 3 }}>
           {actionError}
         </Alert>
       ) : null}
-
+ 
       {data?.summary?.expiringSoon > 0 ? (
         <Alert severity="warning" sx={{ mb: 3 }}>
           {data.summary.expiringSoon}{' '}
@@ -381,7 +405,7 @@ export function AdminPage() {
           Open the calendar on that row to choose a later end date.
         </Alert>
       ) : null}
-
+ 
       <Grid container spacing={2} sx={{ mb: 3 }}>
         {[
           { label: 'Total users', value: data?.summary.total },
@@ -401,7 +425,11 @@ export function AdminPage() {
           </Grid>
         ))}
       </Grid>
-
+ 
+      {/* WCAG 1.3.1 / 2.4.6: section heading so each user card's name (h3) follows an h2 */}
+      <Typography variant="h6" component="h2" sx={{ mb: 1.5 }}>
+        Users
+      </Typography>
       <ColumnCards
         rows={data?.users ?? []}
         columns={columns}
@@ -409,7 +437,7 @@ export function AdminPage() {
         loading={loading}
         emptyLabel="No users yet."
       />
-
+ 
       <ExpiryDialog
         key={expiryUser?.UserID ?? 'none'}
         user={expiryUser}
@@ -421,7 +449,7 @@ export function AdminPage() {
           if (result?.ok) setExpiryUser(null);
         }}
       />
-
+ 
       <InviteDialog
         open={inviteOpen}
         onClose={() => setInviteOpen(false)}
@@ -430,7 +458,7 @@ export function AdminPage() {
         pending={invite.pending}
         error={invite.error}
       />
-
+ 
       <Dialog open={Boolean(pendingRemoval)} onClose={() => setPendingRemoval(null)}>
         <DialogTitle>Remove {pendingRemoval?.fullName}?</DialogTitle>
         <DialogContent>
