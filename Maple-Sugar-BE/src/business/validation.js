@@ -36,7 +36,12 @@ function asNumber(value) {
  * Advisory checks the client shows as warnings are intentionally not enforced:
  * an unusual but genuine reading must still be recordable.
  */
-export function validateReading(reading) {
+/**
+ * `now` is the moment the reading must not be later than. Ingest passes the
+ * request's receipt time, so a batch replayed from the local buffer is judged
+ * against when it arrived rather than when it was replayed (FR-036).
+ */
+export function validateReading(reading, { now = Date.now() } = {}) {
   const errors = {};
 
   if (isBlank(reading.NodeID)) {
@@ -92,7 +97,7 @@ export function validateReading(reading) {
     const recordedAt = new Date(reading.Recorded_At);
     if (Number.isNaN(recordedAt.getTime())) {
       errors.Recorded_At = 'That is not a valid date and time.';
-    } else if (recordedAt > new Date(Date.now() + 60_000)) {
+    } else if (recordedAt > new Date(new Date(now).getTime() + 60_000)) {
       // A minute of slack, so a client clock running slightly fast does not
       // reject a legitimate reading taken just now.
       errors.Recorded_At = 'Readings cannot be dated in the future.';

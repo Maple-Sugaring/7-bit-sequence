@@ -20,6 +20,8 @@ import * as collectionLogsRepository from '../repositories/collectionLogsReposit
 import * as journalRepository from '../repositories/journalRepository.js';
 import * as metricsRepository from '../repositories/metricsRepository.js';
 import * as nodesRepository from '../repositories/nodesRepository.js';
+import { ingestDelaySeconds } from '../business/activity.js';
+import { recordActivity } from './activityService.js';
 
 /** Postgres unique_violation. Two uploads of one Client_Ref can race. */
 const UNIQUE_VIOLATION = '23505';
@@ -28,7 +30,12 @@ function blankToNull(value) {
   return value === undefined || value === null || value === '' ? null : value;
 }
 
-export async function recordCollection(body, user) {
+/**
+ * `context` carries the request id and receipt time (FR-036). A phone that was
+ * offline uploads later: Collected_At stays the measurement time and
+ * Received_At shows when the API actually got it.
+ */
+export async function recordCollection(body, user, context = {}) {
   const node = await nodesRepository.findNodeById(body.NodeID);
   if (!node) throw notFound('Tree');
 
@@ -58,7 +65,7 @@ export async function recordCollection(body, user) {
         if (existing) return { entry: existing, log: null, duplicate: true };
       }
 
-      await metricsRepository.createMetric(
+      const reading = await metricsRepository.createMetric(
         {
           NodeID: node.NodeID,
           BucketID: bucketId,
@@ -67,6 +74,28 @@ export async function recordCollection(body, user) {
           Weight: input.Weight,
           Sugar_Percent: input.Sugar_Percent,
           Ice_Present: input.Ice_Present,
+          Received_At: context.receivedAt ?? null,
+          Request_ID: context.requestId ?? null,
+        },
+        client,
+      );
+      await recordActivity(
+        {
+          kind: 'write',
+          operation: 'metric.create',
+          requestId: context.requestId ?? null,
+          receivedAt: reading.Received_At,
+          actorUserId: user.UserID,
+          entityType: 'metric',
+          entityId: reading.MetricID,
+          nodeId: reading.NodeID,
+          detail: {
+            source: 'collection',
+            recorded_at: reading.Recorded_At,
+            received_at: reading.Received_At,
+            created_at: reading.Created_At,
+            ingest_delay_seconds: ingestDelaySeconds(reading.Recorded_At, reading.Received_At),
+          },
         },
         client,
       );

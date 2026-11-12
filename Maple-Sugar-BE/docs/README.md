@@ -30,6 +30,7 @@ A route may call a repository directly when the use case is one query. It calls 
 | [services.md](services.md) | Service layer |
 | [business.md](business.md) | Domain rules shared with the UI |
 | [testing.md](testing.md) | Edge cases covered by the API and UI test suites |
+| [timestamps.md](timestamps.md) | What each timestamp means, UTC rules, activity events and the admin trace (FR-036) |
 
 ## Boot
 

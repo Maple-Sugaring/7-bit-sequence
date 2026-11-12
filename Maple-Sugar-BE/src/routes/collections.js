@@ -11,6 +11,6 @@ export const collectionsRouter = Router();
 // already stored, so an offline retry never files a collection twice.
 collectionsRouter.post('/', requireCapability(Capability.RECORD_DATA), async (req, res) => {
   const body = createCollectionBody.parse(req.body);
-  const result = await collectionsService.recordCollection(body, req.user);
+  const result = await collectionsService.recordCollection(body, req.user, { requestId: req.id, receivedAt: req.receivedAt });
   res.status(result.Duplicate ? 200 : 201).json(result);
 });

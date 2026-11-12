@@ -127,7 +127,10 @@ export function mapMetric(row) {
     NodeID: row.node_id,
     BucketID: row.bucket_id,
     Recorded_By_UserID: row.recorded_by_user_id,
+    // FR-036: measured, first received by the API, and written to the database.
     Recorded_At: iso(row.recorded_at),
+    Received_At: iso(row.received_at),
+    Created_At: iso(row.created_at),
     Weight: num(row.weight),
     Temperature: num(row.temperature),
     Sugar_Percent: num(row.sugar_percent),

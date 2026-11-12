@@ -9,6 +9,7 @@ import { requireGateway } from '../middleware/authenticate.js';
 import { ingestReadings } from '../services/ingestService.js';
 import { ingestBuffer, isDatabaseUnavailable } from '../services/readingBuffer.js';
 import { ingestBody } from './schemas.js';
+import { recordActivity } from '../services/activityService.js';
 
 export const ingestRouter = Router();
 
@@ -24,10 +25,26 @@ ingestRouter.post('/', requireGateway, async (req, res) => {
   const batch = asBatch(ingestBody.parse(req.body));
   let result;
   try {
-    result = await ingestReadings({ ...batch, clientIp: req.ip });
+    result = await ingestReadings({ ...batch, clientIp: req.ip, receivedAt: req.receivedAt, requestId: req.id });
   } catch (error) {
     if (!isDatabaseUnavailable(error)) throw error;
-    await ingestBuffer.enqueue({ ...batch, clientIp: req.ip });
+    // The receipt time and request id ride along, so the replay stores when
+    // the batch really arrived, not when Postgres came back (FR-036).
+    await ingestBuffer.enqueue({
+      ...batch,
+      clientIp: req.ip,
+      receivedAt: req.receivedAt.toISOString(),
+      requestId: req.id,
+    });
+    // Usually fails too while the database is down; the log line still has the id.
+    await recordActivity({
+      kind: 'ingest',
+      operation: 'ingest.buffered',
+      requestId: req.id,
+      receivedAt: req.receivedAt,
+      rowCount: batch.readings.length,
+      detail: { gateway_code: batch.gatewayCode },
+    });
     return res.status(202).json({
       Buffered: true,
       Accepted: [],

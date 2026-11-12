@@ -103,7 +103,7 @@ A calibration command has `CommandID`, `Action`, `Pounds`, `Status` (`pending` �
 
 Body fields: `NodeID`, `BucketID`, `Recorded_At`, `Weight`, `Temperature`, `Sugar_Percent`, `Weather_Conditions`, `Ice_Present`.
 
-Every row also has `Corrected_At`, `Corrected_By_UserID` and `Aggregated`.
+Every row also has `Corrected_At`, `Corrected_By_UserID` and `Aggregated`, plus `Received_At` (first receipt by the API) and `Created_At` (database write). Both are null on aggregates and on rows from before migration 026. `Recorded_At` in a body must carry an offset (`Z` or `±hh:mm`). See [timestamps.md](timestamps.md).
 
 ### Compacted periods (BRU-007)
 
@@ -140,7 +140,7 @@ The ingest endpoint rejects a sample older than the raw window: `Rejected` gets 
 
 Send `X-Gateway-Token: <GATEWAY_INGEST_TOKEN>`. `Authorization: Bearer` or `Authorization: Gateway` with the same secret also works. A session cookie is ignored. A missing or wrong token is 401 `BAD_CREDENTIALS`. If the env var is unset the route answers 503 and stores nothing.
 
-`Weight` is gross pounds, bucket included. `Recorded_At` is the sample time on the Pi. Posting the same node and timestamp again returns the existing row (`Duplicate: true`, HTTP 200) so a retry does not insert a second reading. `recorded_by_user_id` stays null.
+`Weight` is gross pounds, bucket included. `Recorded_At` is the sample time on the Pi and must carry an offset (`Z` or `±hh:mm`). A late upload keeps it. `Received_At` on the stored row is when the API got the batch, including for a batch buffered while Postgres was down and replayed later. A gateway may send `X-Request-Id` (8–64 of `[A-Za-z0-9._:-]`) to correlate its logs with the trace. Posting the same node and timestamp again returns the existing row (`Duplicate: true`, HTTP 200) so a retry does not insert a second reading. `recorded_by_user_id` stays null.
 
 Name the gateway with `Gateway_Code` (`GW-ALUMNI`, `GW-CHABAD`, `GW-BARN`). Name each node with `Node_Code`, `LoRa_Device_ID`, or `NodeID`. A node that belongs to a different Pi is rejected. Optional fields: `Sugar_Percent`, `Weather_Conditions`, `Ice_Present`, `Battery_Percent` (0–100), `Signal_Rssi`.
 
@@ -168,6 +168,16 @@ A stored reading updates the node's `last_seen`, battery, and RSSI, and marks th
 ```
 
 Liquid buckets reject gross weight above about 10 gallons plus tare slack. Ice may go to about 14 gallons. A full net weight raises a Full Bucket alert. Weight far below tare raises Tipped. Spoilage still requires a temperature on the reading, which an ingest row does not have.
+
+## Activity trace (FR-036)
+
+| Method | Path | Auth | |
+| --- | --- | --- | --- |
+| GET | `/activity-events` | Admin | Reads, writes, ingest batches and jobs, newest first. Filters: `kind`, `operation`, `entityType`, `entityId`, `nodeId`, `requestId`, `actorUserId`, `from`, `to`, `before`, `limit`. |
+| GET | `/activity-events/policy` | Admin | Retention (`ACTIVITY_RETENTION_DAYS`), access, and what each timestamp means. |
+| GET | `/activity-events/metrics/:id` | Admin | One reading's measured/received/written/corrected times, the requests and jobs that touched it, the reads that returned it, and its audit entries. 404 if there is no trace of the id. |
+
+Every response carries `X-Request-Id`. See [timestamps.md](timestamps.md).
 
 ## Alerts
 

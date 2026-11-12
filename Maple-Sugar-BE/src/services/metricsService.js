@@ -14,14 +14,46 @@ import * as nodesRepository from '../repositories/nodesRepository.js';
 import * as alertsRepository from '../repositories/alertsRepository.js';
 import { cacheNamespaces } from '../cache/cacheKeys.js';
 import { invalidateNamespaces } from '../cache/redisCache.js';
+import { ingestDelaySeconds, summarizeRead } from '../business/activity.js';
+import { recordActivity } from './activityService.js';
 
-export async function listMetrics(filters) {
-  return metricsRepository.listMetrics(filters);
+/**
+ * `activity` is the caller's request context (activityService.requestActivity).
+ * The read is recorded with which nodes and measurement range it returned, so
+ * an admin trace can tell which reads included a given reading (FR-036).
+ */
+export async function listMetrics(filters, activity = null) {
+  const rows = await metricsRepository.listMetrics(filters);
+  if (activity) {
+    await recordActivity({
+      ...activity,
+      kind: 'read',
+      operation: 'metrics.list',
+      entityType: filters?.nodeId != null ? 'node' : null,
+      entityId: filters?.nodeId ?? null,
+      nodeId: filters?.nodeId ?? null,
+      rowCount: rows.length,
+      detail: { filters, ...summarizeRead(rows) },
+    });
+  }
+  return rows;
 }
 
 /** Weighted per-period averages across raw and compacted readings (BRU-007). */
-export async function rollupMetrics(filters) {
-  return metricAggregatesRepository.rollup(filters);
+export async function rollupMetrics(filters, activity = null) {
+  const result = await metricAggregatesRepository.rollup(filters);
+  if (activity) {
+    await recordActivity({
+      ...activity,
+      kind: 'read',
+      operation: 'metrics.rollup',
+      entityType: filters?.nodeId != null ? 'node' : null,
+      entityId: filters?.nodeId ?? null,
+      nodeId: filters?.nodeId ?? null,
+      detail: { filters },
+    });
+  }
+  return result;
 }
 
 /**
@@ -31,7 +63,7 @@ export async function rollupMetrics(filters) {
  * losing it because alert generation hit a problem would be a worse outcome than
  * a missing notification.
  */
-async function raiseDerivedAlerts(reading, node) {
+async function raiseDerivedAlerts(reading, node, requestId = null) {
   try {
     const [history, tareWeight] = await Promise.all([
       metricsRepository.listRecentForNode(reading.NodeID, 24),
@@ -55,7 +87,18 @@ async function raiseDerivedAlerts(reading, node) {
       if (await alertsRepository.hasOpenAlertOfType(reading.NodeID, candidate.Alert_Type)) {
         continue;
       }
-      created.push(await alertsRepository.createAlert({ ...candidate, NodeID: reading.NodeID }));
+      const alert = await alertsRepository.createAlert({ ...candidate, NodeID: reading.NodeID });
+      created.push(alert);
+      // Automatic processing triggered by the reading, so it shows on its trace.
+      await recordActivity({
+        kind: 'write',
+        operation: 'alert.derive',
+        entityType: 'alert',
+        entityId: alert?.AlertID ?? null,
+        nodeId: reading.NodeID,
+        requestId,
+        detail: { metric_id: reading.MetricID, alert_type: candidate.Alert_Type },
+      });
     }
 
     if (created.length) {
@@ -73,7 +116,14 @@ async function raiseDerivedAlerts(reading, node) {
   }
 }
 
-export async function createMetric(input, recordedByUserId) {
+/**
+ * @param {object} [context] FR-036 provenance
+ * @param {string} [context.requestId] the request that carried the reading
+ * @param {Date|string} [context.receivedAt] first receipt; a replay passes the original
+ * @param {'manual'|'gateway'|'buffer_replay'} [context.source]
+ * @param {number} [context.gatewayId]
+ */
+export async function createMetric(input, recordedByUserId, context = {}) {
   const { errors, isValid } = validateReading(input);
   if (!isValid) {
     // details is field-keyed so the Record Data form can attach each message to
@@ -89,10 +139,31 @@ export async function createMetric(input, recordedByUserId) {
     // Taken from the session, never the body: a client must not be able to file
     // a reading under someone else's name.
     Recorded_By_UserID: recordedByUserId ?? null,
+    Received_At: context.receivedAt ?? null,
+    Request_ID: context.requestId ?? null,
+  });
+
+  await recordActivity({
+    kind: 'write',
+    operation: 'metric.create',
+    requestId: context.requestId ?? null,
+    receivedAt: reading.Received_At,
+    actorUserId: recordedByUserId ?? null,
+    gatewayId: context.gatewayId ?? null,
+    entityType: 'metric',
+    entityId: reading.MetricID,
+    nodeId: reading.NodeID,
+    detail: {
+      source: context.source ?? (recordedByUserId == null ? 'gateway' : 'manual'),
+      recorded_at: reading.Recorded_At,
+      received_at: reading.Received_At,
+      created_at: reading.Created_At,
+      ingest_delay_seconds: ingestDelaySeconds(reading.Recorded_At, reading.Received_At),
+    },
   });
 
   await invalidateNamespaces([cacheNamespaces.METRICS, cacheNamespaces.DASHBOARD]);
-  await raiseDerivedAlerts(reading, node);
+  await raiseDerivedAlerts(reading, node, context.requestId ?? null);
 
   return reading;
 }
@@ -103,7 +174,7 @@ function describeValue(field, value) {
   return value == null ? 'unset' : `${value}${CORRECTION_UNITS[field] ?? ''}`;
 }
 
-export async function updateMetric(id, changes, actorId, expectedRevision, reason) {
+export async function updateMetric(id, changes, actorId, expectedRevision, reason, activity = null) {
   const updated = await transaction(async (client) => {
     const existing = await metricsRepository.findMetricById(id, client);
     if (!existing) throw notFound('Reading');
@@ -127,6 +198,25 @@ export async function updateMetric(id, changes, actorId, expectedRevision, reaso
     await client.query(
       "insert into audit_events (event_type, actor_id, target_id, note) values ('measurement_overwritten', $1, $2, $3)",
       [actorId, id, note],
+    );
+    // Field names and times only. The values and reason live in audit_events.
+    await recordActivity(
+      {
+        ...activity,
+        actorUserId: actorId,
+        kind: 'write',
+        operation: 'metric.correct',
+        entityType: 'metric',
+        entityId: id,
+        nodeId: reading.NodeID,
+        detail: {
+          fields: Object.keys(changes),
+          revision: reading.Revision,
+          recorded_at: reading.Recorded_At,
+          corrected_at: reading.Corrected_At,
+        },
+      },
+      client,
     );
     return reading;
   });

@@ -9,6 +9,7 @@
 
 import { z } from 'zod';
 import { CALIBRATION_ACTIONS, MAX_TEST_POUNDS, MIN_TEST_POUNDS } from '../business/calibration.js';
+import { ACTIVITY_KINDS, hasExplicitOffset } from '../business/activity.js';
 import { DEFAULT_ROLLUP_TIMEZONE, isValidTimeZone, ROLLUP_INTERVALS } from '../business/retention.js';
 
 /** Path ids arrive as strings and must be positive integers. */
@@ -23,6 +24,15 @@ const isoDateTime = z.string().refine((value) => !Number.isNaN(Date.parse(value)
   message: 'Must be a valid date and time.',
 });
 
+/**
+ * A measurement time from a client. The offset must be explicit ("Z" or
+ * "+hh:mm"): a bare "2026-03-01T10:00" would be read in the API's local zone by
+ * JavaScript and in the session zone by Postgres, which need not agree (FR-036).
+ */
+const utcInstant = z.string().refine(hasExplicitOffset, {
+  message: 'Must be an ISO 8601 date and time with a UTC offset, such as 2026-03-01T15:00:00Z.',
+});
+
 // null is tried first. z.coerce.number() runs Number(null), which is 0, so with
 // the order reversed an explicit null became 0: a blank sugar reading turned
 // into "0% sugar" and was rejected, and an unknown battery turned into 0%.
@@ -35,6 +45,21 @@ export const metricsQuery = z.object({
   to: isoDateTime.optional(),
   // false returns raw rows only, leaving out hourly averages for compacted periods.
   aggregates: booleanish.optional(),
+});
+
+/** GET /activity-events. Every filter is optional; `before` pages by id. */
+export const activityQuery = z.object({
+  kind: z.enum(ACTIVITY_KINDS).optional(),
+  operation: z.string().trim().min(1).max(64).optional(),
+  entityType: z.string().trim().min(1).max(32).optional(),
+  entityId: z.coerce.number().int().positive().optional(),
+  nodeId: z.coerce.number().int().positive().optional(),
+  requestId: z.string().trim().min(1).max(64).optional(),
+  actorUserId: z.coerce.number().int().positive().optional(),
+  from: isoDateTime.optional(),
+  to: isoDateTime.optional(),
+  before: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
 });
 
 /** GET /metrics/rollup: weighted averages per local calendar period. */
@@ -57,7 +82,7 @@ export const retentionRunBody = z
 export const createMetricBody = z.object({
   NodeID: z.coerce.number().int().positive({ message: 'A tree must be selected.' }),
   BucketID: z.coerce.number().int().positive().nullish(),
-  Recorded_At: isoDateTime.optional(),
+  Recorded_At: utcInstant.optional(),
   Weight: nullableNumber,
   Temperature: nullableNumber,
   Sugar_Percent: nullableNumber,
@@ -70,7 +95,7 @@ export const updateMetricBody = z
     Expected_Revision: z.number().int().nonnegative(),
     Correction_Reason: z.string().trim().min(1).max(1000),
     BucketID: z.coerce.number().int().positive().nullish(),
-    Recorded_At: isoDateTime.optional(),
+    Recorded_At: utcInstant.optional(),
     Weight: nullableNumber,
     Temperature: nullableNumber,
     Sugar_Percent: nullableNumber,
@@ -344,7 +369,7 @@ const ingestReadingObject = z.object({
   NodeID: z.coerce.number().int().positive().optional(),
   Node_Code: z.string().trim().min(1).max(50).optional(),
   LoRa_Device_ID: z.string().trim().min(1).max(64).optional(),
-  Recorded_At: isoDateTime,
+  Recorded_At: utcInstant,
   Weight: z.number().finite().optional(),
   Fault: z.enum(['load-cell', 'unstable', 'reversed', 'untared']).optional(),
   Sugar_Percent: nullableNumber,

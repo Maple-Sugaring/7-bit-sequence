@@ -20,6 +20,8 @@ import * as alertsRepository from '../repositories/alertsRepository.js';
 import * as calibrationRepository from '../repositories/calibrationRepository.js';
 import * as metricsService from './metricsService.js';
 import { logger } from '../lib/logger.js';
+import { ingestDelaySeconds, toUtcIso } from '../business/activity.js';
+import { recordActivity } from './activityService.js';
 
 function readingIdentity(reading) {
   return {
@@ -62,7 +64,7 @@ async function replyFor(node, reading) {
   };
 }
 
-async function acceptReading(gateway, reading) {
+async function acceptReading(gateway, reading, context) {
   const node = await nodesRepository.findNodeForIngest(reading);
   if (!node) throw notFound('Node');
   if (node.GatewayID !== gateway.GatewayID) {
@@ -92,7 +94,7 @@ async function acceptReading(gateway, reading) {
     Temperature: reading.Sap_Temperature ?? null,
     Sap_Flow_Rate_Lph: reading.Sap_Flow_Rate_Lph ?? null,
   };
-  const { errors, isValid } = validateReading(input);
+  const { errors, isValid } = validateReading(input, { now: context.receivedAt });
   if (!isValid) {
     const message = errors.Weight ?? errors.Recorded_At ?? errors.Sugar_Percent ?? 'Some fields need attention.';
     await raiseOnce(node.NodeID, {
@@ -123,9 +125,35 @@ async function acceptReading(gateway, reading) {
   });
 
   const reply = await replyFor(node, reading);
-  if (existing) return { Reading: existing, Duplicate: true, ...reply };
+  if (existing) {
+    // A retry. The stored row keeps its first receipt time; this records the
+    // later attempt against the same reading (FR-036).
+    await recordActivity({
+      kind: 'write',
+      operation: 'metric.duplicate',
+      outcome: 'skipped',
+      requestId: context.requestId,
+      receivedAt: context.receivedAt,
+      gatewayId: gateway.GatewayID,
+      entityType: 'metric',
+      entityId: existing.MetricID,
+      nodeId: node.NodeID,
+      detail: {
+        source: context.source,
+        recorded_at: existing.Recorded_At,
+        first_received_at: existing.Received_At,
+        retry_received_at: toUtcIso(context.receivedAt),
+      },
+    });
+    return { Reading: existing, Duplicate: true, ...reply };
+  }
 
-  const stored = await metricsService.createMetric(input, null);
+  const stored = await metricsService.createMetric(input, null, {
+    requestId: context.requestId,
+    receivedAt: context.receivedAt,
+    source: context.source,
+    gatewayId: gateway.GatewayID,
+  });
   const cleared = await alertsRepository.resolveOpenByTypes(node.NodeID, clearedAlertTypes(reading));
   if (cleared) {
     await invalidateNamespaces([cacheNamespaces.ALERTS]);
@@ -134,15 +162,64 @@ async function acceptReading(gateway, reading) {
   return { Reading: stored, Duplicate: false, ...reply };
 }
 
+/** Counts, ids and times for the batch's activity row. No reading values. */
+function batchSummary(accepted, rejected, context) {
+  const stored = accepted.filter((item) => item.Reading);
+  const delays = stored
+    .map((item) => ingestDelaySeconds(item.Reading.Recorded_At, context.receivedAt))
+    .filter((delay) => delay != null);
+  const times = stored.map((item) => item.Reading.Recorded_At).sort();
+  return {
+    source: context.source,
+    accepted: accepted.length,
+    created: stored.filter((item) => !item.Duplicate).length,
+    duplicates: stored.filter((item) => item.Duplicate).length,
+    faults: accepted.filter((item) => item.Fault).length,
+    rejected: rejected.length,
+    rejected_codes: rejected.map((item) => item.code),
+    metric_ids: stored.map((item) => item.Reading.MetricID),
+    recorded_from: times[0] ?? null,
+    recorded_to: times.at(-1) ?? null,
+    max_delay_seconds: delays.length ? Math.max(...delays) : null,
+  };
+}
+
 /**
  * Stores every reading that passes, and reports the ones that do not.
  *
  * One bad node in a batch must not drop the others: the Pi is often forwarding
  * several trees at once, and it will retry the whole body.
  */
-export async function ingestReadings({ gatewayCode, readings, clientIp }) {
+/**
+ * `receivedAt` is when the API first got the batch and `requestId` the request
+ * that carried it. A batch replayed from the local buffer passes both from the
+ * original request, so stored readings keep their real receipt time (FR-036).
+ */
+export async function ingestReadings({
+  gatewayCode,
+  readings,
+  clientIp,
+  receivedAt = new Date(),
+  requestId = null,
+  source = 'gateway',
+}) {
+  const started = performance.now();
+  const context = { receivedAt: new Date(receivedAt), requestId, source };
+  if (Number.isNaN(context.receivedAt.getTime())) context.receivedAt = new Date();
+
   const gateway = await nodesRepository.findGatewayByCode(gatewayCode);
-  if (!gateway) throw notFound('Gateway');
+  if (!gateway) {
+    await recordActivity({
+      kind: 'ingest',
+      operation: 'ingest.batch',
+      outcome: 'rejected',
+      requestId,
+      receivedAt: context.receivedAt,
+      rowCount: readings.length,
+      detail: { source, gateway_code: gatewayCode, reason: 'unknown gateway' },
+    });
+    throw notFound('Gateway');
+  }
 
   await nodesRepository.touchGateway(gateway.GatewayID, clientIp);
 
@@ -151,7 +228,7 @@ export async function ingestReadings({ gatewayCode, readings, clientIp }) {
 
   for (const reading of readings) {
     try {
-      accepted.push(await acceptReading(gateway, reading));
+      accepted.push(await acceptReading(gateway, reading, context));
     } catch (error) {
       if (error instanceof ApiError && error.status < 500) {
         rejected.push({
@@ -176,6 +253,20 @@ export async function ingestReadings({ gatewayCode, readings, clientIp }) {
   } else {
     await invalidateNamespaces([cacheNamespaces.NODES, cacheNamespaces.GATEWAYS]);
   }
+
+  await recordActivity({
+    kind: 'ingest',
+    operation: 'ingest.batch',
+    outcome: !rejected.length ? 'ok' : accepted.length ? 'partial' : 'rejected',
+    requestId,
+    receivedAt: context.receivedAt,
+    gatewayId: gateway.GatewayID,
+    entityType: 'gateway',
+    entityId: gateway.GatewayID,
+    rowCount: readings.length,
+    durationMs: Math.round(performance.now() - started),
+    detail: batchSummary(accepted, rejected, context),
+  });
 
   return {
     GatewayID: gateway.GatewayID,

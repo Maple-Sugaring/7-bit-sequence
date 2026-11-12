@@ -16,6 +16,7 @@ import { transaction } from '../db/pool.js';
 import { FAULT_ALERT_TYPES } from '../business/alerting.js';
 import { liveState } from '../business/calibration.js';
 import { calibrationBody, createNodeBody, flagNodeBody, idParam, nodeActionBody, nodeDetailsBody, nodeIntervalBody, updateNodeBody } from './schemas.js';
+import { recordActivity, requestActivity } from '../services/activityService.js';
 
 export const nodesRouter = Router();
 
@@ -127,13 +128,24 @@ nodesRouter.post('/:id/actions', requireAuth, async (req, res) => {
   const bucketId = board?.BucketID ?? null;
   const notes = Notes?.trim() || 'Bucket emptied from the bush dashboard.';
   await transaction(async (client) => {
-    await metricsRepository.createMetric({
+    const reading = await metricsRepository.createMetric({
       NodeID: id,
       BucketID: bucketId,
       Recorded_By_UserID: req.user.UserID,
       Weight: tare,
       Weather_Conditions: 'Collected',
       Ice_Present: false,
+      Received_At: req.receivedAt,
+      Request_ID: req.id,
+    }, client);
+    await recordActivity({
+      ...requestActivity(req),
+      kind: 'write',
+      operation: 'metric.create',
+      entityType: 'metric',
+      entityId: reading.MetricID,
+      nodeId: id,
+      detail: { source: 'dashboard_collect', recorded_at: reading.Recorded_At, received_at: reading.Received_At },
     }, client);
     await journalRepository.createEntry({
       UserID: req.user.UserID,

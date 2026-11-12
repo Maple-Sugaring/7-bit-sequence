@@ -12,6 +12,7 @@ import {
 } from './schemas.js';
 import * as metricsService from '../services/metricsService.js';
 import * as metricRetention from '../services/metricRetention.js';
+import { recordActivity, requestActivity } from '../services/activityService.js';
 
 export const metricsRouter = Router();
 
@@ -19,7 +20,7 @@ const viewData = requireAnyCapability(Capability.VIEW_DASHBOARD, Capability.VIEW
 
 metricsRouter.get('/', viewData, async (req, res) => {
   const filters = metricsQuery.parse(req.query);
-  res.json(await metricsService.listMetrics(filters));
+  res.json(await metricsService.listMetrics(filters, requestActivity(req)));
 });
 
 // Weighted averages per local day/week/month across raw and compacted
@@ -27,7 +28,7 @@ metricsRouter.get('/', viewData, async (req, res) => {
 // many came from hourly aggregates.
 metricsRouter.get('/rollup', viewData, async (req, res) => {
   const filters = rollupQuery.parse(req.query);
-  res.json(await metricsService.rollupMetrics(filters));
+  res.json(await metricsService.rollupMetrics(filters, requestActivity(req)));
 });
 
 // Storage use and retention policy. Admin only: it exposes the job controls.
@@ -42,6 +43,14 @@ metricsRouter.post('/retention/run', requireCapability(Capability.EDIT_DATA), as
     userId: req.user.UserID,
     dryRun,
   });
+  await recordActivity({
+    ...requestActivity(req),
+    kind: 'job',
+    operation: 'retention.run',
+    outcome: result.Status === 'succeeded' ? 'ok' : 'skipped',
+    rowCount: result.Rows_Compacted ?? 0,
+    detail: { run_id: result.RunID ?? null, status: result.Status, cutoff: result.Cutoff ?? null, trigger: 'manual', dry_run: dryRun },
+  });
   if (result.Status === 'skipped') {
     throw new ApiError(result.Reason, { status: 409, code: 'RETENTION_BUSY' });
   }
@@ -53,7 +62,11 @@ metricsRouter.post('/retention/run', requireCapability(Capability.EDIT_DATA), as
 
 metricsRouter.post('/', requireCapability(Capability.RECORD_DATA), async (req, res) => {
   const body = createMetricBody.parse(req.body);
-  const reading = await metricsService.createMetric(body, req.user.UserID);
+  const reading = await metricsService.createMetric(body, req.user.UserID, {
+    requestId: req.id,
+    receivedAt: req.receivedAt,
+    source: 'manual',
+  });
   res.status(201).json(reading);
 });
 
@@ -61,5 +74,7 @@ metricsRouter.patch('/:id', requireAuth, async (req, res) => {
   if (!req.user.Can_Overwrite_Measurements) throw forbidden('Measurement corrections are disabled for your account.');
   const id = idParam.parse(req.params.id);
   const { Expected_Revision, Correction_Reason, ...changes } = updateMetricBody.parse(req.body);
-  res.json(await metricsService.updateMetric(id, changes, req.user.UserID, Expected_Revision, Correction_Reason));
+  res.json(
+    await metricsService.updateMetric(id, changes, req.user.UserID, Expected_Revision, Correction_Reason, requestActivity(req)),
+  );
 });

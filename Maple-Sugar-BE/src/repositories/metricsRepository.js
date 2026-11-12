@@ -8,6 +8,8 @@ const METRIC_COLUMNS = `
   bucket_id,
   recorded_by_user_id,
   recorded_at,
+  received_at,
+  created_at,
   weight,
   temperature,
   sugar_percent,
@@ -121,8 +123,9 @@ export async function createMetric(reading, client = null) {
     client,
     `insert into metrics (node_id, bucket_id, recorded_by_user_id, recorded_at,
                           weight, temperature, sugar_percent, weather_conditions, ice_present,
-                          sap_flow_rate_lph)
-     values ($1, $2, $3, coalesce($4, CURRENT_TIMESTAMP), $5, $6, $7, $8, $9, $10)
+                          sap_flow_rate_lph, received_at, request_id)
+     values ($1, $2, $3, coalesce($4, $11, CURRENT_TIMESTAMP), $5, $6, $7, $8, $9, $10,
+             coalesce($11, CURRENT_TIMESTAMP), $12)
      returning ${METRIC_COLUMNS}`,
     [
       reading.NodeID,
@@ -135,6 +138,10 @@ export async function createMetric(reading, client = null) {
       reading.Weather_Conditions ?? null,
       Boolean(reading.Ice_Present),
       reading.Sap_Flow_Rate_Lph ?? null,
+      // FR-036: when the API first got the request, and which request it was.
+      // A blank Recorded_At on a manual entry means "measured on receipt".
+      reading.Received_At ?? null,
+      reading.Request_ID ?? null,
     ],
   );
   return mapMetric(row);

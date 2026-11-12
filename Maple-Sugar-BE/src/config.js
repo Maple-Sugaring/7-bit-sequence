@@ -73,6 +73,12 @@ if (metricsRawRetentionDays > 0 && metricsRawRetentionDays < 30) {
   problems.push('METRICS_RAW_RETENTION_DAYS must be 0 (off) or at least 30.');
 }
 
+// FR-036. Activity events are operational traces, not the audit trail, so they age out.
+const activityRetentionDays = integer('ACTIVITY_RETENTION_DAYS', 90);
+if (activityRetentionDays > 0 && activityRetentionDays < 7) {
+  problems.push('ACTIVITY_RETENTION_DAYS must be 0 (keep forever) or at least 7.');
+}
+
 const publicApiUrl = trimTrailingSlash(optional('PUBLIC_API_URL', 'http://localhost:5173/api'));
 const publicWebUrl = trimTrailingSlash(optional('PUBLIC_WEB_URL', 'http://localhost:5173'));
 
@@ -172,6 +178,7 @@ export const config = {
   // How far ahead of a shift the reminder email goes out.
   shiftReminderHours: integer('SHIFT_REMINDER_HOURS', 12),
   metricsRawRetentionDays,
+  activityRetentionDays,
 };
 
 export const accessTokenTtlSeconds = config.accessTokenTtlMinutes * 60;

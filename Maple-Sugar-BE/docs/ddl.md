@@ -71,7 +71,10 @@ A sensor or manual reading.
 | --- | --- |
 | `node_id`, `bucket_id` | |
 | `recorded_by_user_id` | Null when the node reported it. Set for a manual reading. |
-| `recorded_at` | |
+| `recorded_at` | Measurement time from the node or the person. Kept through retries and delayed ingestion. |
+| `received_at` | When the API first received the carrying request (migration 026). A buffered batch keeps its original receipt time. Null on older rows. |
+| `created_at` | When the row was written (`clock_timestamp()`). Null on older rows. |
+| `request_id` | The request that wrote it. Matches `activity_events.request_id` and the `X-Request-Id` header. |
 | `weight` | Gross pounds, including the bucket. |
 | `temperature` | °F. Null on a Pi ingest. Air temperature comes from OpenWeather. |
 | `sugar_percent` | Brix. |
@@ -82,6 +85,10 @@ A sensor or manual reading.
 | `recorded_manually` | Sticky manual-source flag, retained when deleting an author detaches `recorded_by_user_id`. |
 
 Indexed on `(node_id, recorded_at desc)`, `recorded_at`, `sap_season(recorded_at)`, `bucket_id`. The partial index `metrics_retention_eligible_idx` covers the rows the retention job may compact.
+
+### `activity_events` (FR-036, migration 026)
+
+One row per instrumented read, write, ingest batch or background job. Columns: `occurred_at`, `received_at`, `request_id`, `kind` (`read`/`write`/`ingest`/`job`), `operation`, `outcome`, `actor_user_id`, `gateway_id`, `entity_type`, `entity_id`, `node_id`, `row_count`, `duration_ms`, `data_mode`, and `detail` (jsonb, ids/counts/times only). Pruned after `ACTIVITY_RETENTION_DAYS`. Unlike `audit_events` it is not append-only. Indexed on `occurred_at`, `(entity_type, entity_id)`, `node_id` and `request_id`. See [timestamps.md](timestamps.md).
 
 ### Retention and aggregation (BRU-007, migration 018)
 

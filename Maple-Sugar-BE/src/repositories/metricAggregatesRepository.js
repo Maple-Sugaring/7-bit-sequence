@@ -60,6 +60,9 @@ export function mapAggregateAsMetric(row) {
     BucketID: row.bucket_id,
     Recorded_By_UserID: null,
     Recorded_At: iso(start),
+    // An average has no single receipt or write; Aggregate.Compacted_At says when it was built.
+    Received_At: null,
+    Created_At: null,
     Weight: averages.Weight,
     Temperature: averages.Temperature,
     Sugar_Percent: averages.Sugar_Percent,

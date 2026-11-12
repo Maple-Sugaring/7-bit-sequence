@@ -20,6 +20,7 @@ import pinoHttp from 'pino-http';
 import { config } from './config.js';
 import { logger } from './lib/logger.js';
 import { attachUser } from './middleware/authenticate.js';
+import { requestContext } from './middleware/requestContext.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { cacheStatus } from './cache/redisCache.js';
 import { pool } from './db/pool.js';
@@ -30,6 +31,7 @@ import { nodesRouter } from './routes/nodes.js';
 import { metricsRouter } from './routes/metrics.js';
 import { ingestRouter } from './routes/ingest.js';
 import { auditEventsRouter } from './routes/auditEvents.js';
+import { activityEventsRouter } from './routes/activityEvents.js';
 import { alertsRouter } from './routes/alerts.js';
 import { collectionLogsRouter } from './routes/collectionLogs.js';
 import { collectionsRouter } from './routes/collections.js';
@@ -49,9 +51,13 @@ export function createApp() {
   app.set('trust proxy', config.trustProxyHops);
   app.disable('x-powered-by');
 
+  // Before the logger so the log line carries the same id as the response.
+  app.use(requestContext);
+
   app.use(
     pinoHttp({
       logger,
+      genReqId: (req) => req.id,
       // Health checks would otherwise dominate the log at one line per probe.
       autoLogging: { ignore: (req) => req.url === '/health' },
     }),
@@ -71,6 +77,8 @@ export function createApp() {
         callback(null, false);
       },
       credentials: true,
+      // Lets the browser show the id an admin can paste into the trace view.
+      exposedHeaders: ['X-Request-Id'],
     }),
   );
 
@@ -107,6 +115,7 @@ export function createApp() {
   app.use('/ingest', ingestRouter);
   app.use('/alerts', alertsRouter);
   app.use('/audit-events', auditEventsRouter);
+  app.use('/activity-events', activityEventsRouter);
   app.use('/collection-logs', collectionLogsRouter);
   app.use('/collections', collectionsRouter);
   app.use('/users', usersRouter);

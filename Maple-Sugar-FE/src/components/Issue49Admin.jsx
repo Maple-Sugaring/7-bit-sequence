@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, Button, MenuItem, Stack, TextField, Typography } from '@mui/material';
 import { apiClient, apiMode } from '../data/apiClient';
+import { ActivityTrace } from './ActivityTrace';
 
 export function Issue49Admin() {
   const [mode, setMode] = useState('');
@@ -45,6 +46,7 @@ export function Issue49Admin() {
         </Typography>
       ))}
       {page?.next && <Button onClick={() => void loadAudit(page.next)}>Older audit events</Button>}
+      <ActivityTrace />
     </Stack>
   );
 }
