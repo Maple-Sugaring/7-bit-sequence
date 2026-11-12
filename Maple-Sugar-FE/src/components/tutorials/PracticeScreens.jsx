@@ -766,7 +766,7 @@ const SCREENS = {
     render: () => (
       <Bench title="Read the new weight" subtitle="Bucket back on the sensor, ice out.">
         <Spot id="reading">
-          <Board lines={['NODE-001', 'Weight 45.0 lb', 'Pack 82%  3.98 V', 'Next report 41 s']} />
+          <Board lines={['NODE-001', 'Weight 45.0 lb', 'Next report 41 s']} />
         </Spot>
       </Bench>
     ),
