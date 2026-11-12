@@ -341,9 +341,6 @@ export function SapDataPage() {
             </MenuItem>
           ))}
         </TextField>
-<<<<<<< HEAD
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ order: { xs: 6, md: 0 } }}>
-=======
         {compare ? (
         <Stack direction="row" spacing={1} sx={{ order: { xs: 6, md: 0 } }}>
           <DatePicker
@@ -368,7 +365,6 @@ export function SapDataPage() {
         </Stack>
         ) : (
         <Stack direction="row" spacing={1} sx={{ order: { xs: 6, md: 0 } }}>
->>>>>>> 8ced5a3 (Issue #68 Year-to-Year chart added)
           <DatePicker
             label="From"
             value={from}

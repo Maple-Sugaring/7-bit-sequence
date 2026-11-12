@@ -64,6 +64,7 @@ export function WeightChart({ rows, series, unit = 'day' }) {
           domain={[0, (max) => Math.max(10, Math.ceil(max))]}
           tick={{ fontSize: 12 }}
         />
+        <Legend />
         <Tooltip
           labelFormatter={tick}
           formatter={(value, name, item) => {
@@ -73,7 +74,6 @@ export function WeightChart({ rows, series, unit = 'day' }) {
             return [scale, name];
           }}
         />
-        <Legend height={36} wrapperStyle={{ maxHeight: 36, overflowY: 'auto', fontSize: 11 }} />
         {series.map((item, index) => (
           <Line
             key={item.key}
