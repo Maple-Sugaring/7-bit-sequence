@@ -21,6 +21,7 @@ import {
   waitingStatus,
 } from '../../business/calibration';
 import { dateTime } from '../common/format';
+import { ConfirmDialog } from '../common/ConfirmDialog';
 import { useAction, useAutoRefresh, useCalibration } from '../../services/hooks';
 import { calibrateNode, cancelCalibration, tareNode } from '../../services/nodeService';
 
@@ -63,6 +64,8 @@ export function CalibrationCard({ node, onSettled }) {
   const waiting = waitingStatus(command, intervalSeconds);
   const [pounds, setPounds] = useState('');
   const [restartedAfter, setRestartedAfter] = useState(null);
+  // 'tare' or 'cancel' while its confirmation is open (FR-019).
+  const [confirming, setConfirming] = useState(null);
   const step = stepFor(command, restartedAfter);
 
   const idleMs = Math.min(60, Math.max(5, intervalSeconds ?? 900)) * 1000;
@@ -123,7 +126,7 @@ export function CalibrationCard({ node, onSettled }) {
             severity="info"
             sx={{ mb: 2 }}
             action={
-              <Button color="inherit" size="small" disabled={cancel.pending} onClick={() => cancel.execute()}>
+              <Button color="inherit" size="small" disabled={cancel.pending} onClick={() => setConfirming('cancel')}>
                 Cancel
               </Button>
             }
@@ -152,7 +155,7 @@ export function CalibrationCard({ node, onSettled }) {
               <Button
                 variant="contained"
                 disabled={send.pending || state.open || blocked}
-                onClick={() => send.execute('tare')}
+                onClick={() => setConfirming('tare')}
               >
                 Tare
               </Button>
@@ -215,6 +218,32 @@ export function CalibrationCard({ node, onSettled }) {
             </StepContent>
           </Step>
         </Stepper>
+
+        <ConfirmDialog
+          open={confirming === 'tare'}
+          title={`Tare ${node?.Node_Name ?? 'this node'}?`}
+          body="Whatever is on the platform now becomes 0 lb. If the bucket is still hanging, its sap will read as empty and full-bucket warnings will come late. Take everything off first."
+          confirmLabel="Tare"
+          pending={send.pending}
+          onClose={() => setConfirming(null)}
+          onConfirm={async () => {
+            await send.execute('tare');
+            setConfirming(null);
+          }}
+        />
+        <ConfirmDialog
+          open={confirming === 'cancel'}
+          title="Cancel the waiting command?"
+          body={`The ${command?.Action ?? 'command'} has not reached the node yet. Cancelling stops it from being sent; you will need to send it again.`}
+          confirmLabel="Cancel command"
+          danger
+          pending={cancel.pending}
+          onClose={() => setConfirming(null)}
+          onConfirm={async () => {
+            await cancel.execute();
+            setConfirming(null);
+          }}
+        />
       </CardContent>
     </Card>
   );
