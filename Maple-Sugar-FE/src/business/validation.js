@@ -181,3 +181,16 @@ export function validateLogin(form) {
 
   return { errors, isValid: Object.keys(errors).length === 0 };
 }
+
+export function validateCSVFile(form) {
+  const errors = {};
+
+  if(isBlank(form.file)) {
+    errors.file = "No file provided.";
+    return {errors, isValid: false}
+  }
+  
+  // validate that the CSV provided comes from myCourses
+
+  return {errors, isValid: Object.keys(errors).length === 0};
+}

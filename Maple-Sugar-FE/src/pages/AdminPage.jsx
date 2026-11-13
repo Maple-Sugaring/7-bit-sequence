@@ -26,7 +26,7 @@ import { ColumnCards } from '../components/common/ColumnCards';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import dayjs from 'dayjs';
 import { ROLE_LABELS } from '../business/permissions';
-import { validateInvite } from '../business/validation';
+import { validateInvite, validateCSVFile } from '../business/validation';
 import { PageHeader } from '../components/common/PageHeader';
 import { ErrorBlock } from '../components/common/StateBlock';
 import { dateTime } from '../components/common/format';
@@ -208,6 +208,39 @@ function InviteDialog({ open, onClose, roles, onInvite, pending, error }) {
 
 function UploadPageDialog({open, onClose, file, error}) {
   // upload page
+  // const [form, setForm] = useState({
+  //   file: '',
+  //   //accountExpiry: dayjs().add(4, 'month').hour(23).minute(59).second(0),
+  // });
+  // const [touched, setTouched] = useState(false);
+  // const { errors, isValid } = validateCSVFile(form);
+
+  return (
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+      <DialogTitle>Upload CSV file</DialogTitle>
+      <DialogContent>
+        <DialogContentText sx={{ mb: 2 }}>
+          Upload a CSV file from myCourses of the student classlist. This tool will create accounts for all students in the class.
+        </DialogContentText>
+        <DialogContentText sx={{ mb: 2 }}>
+          For more information on how to do this, see the documentation page "myCoursesUpload.md".
+        </DialogContentText>
+
+        {error ? (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        ) : null}
+
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancel</Button>
+        {/* <Button variant="contained" onClick={handleInvite} loading={pending}>
+          Send invites
+        </Button> */}
+      </DialogActions>
+    </Dialog>
+  );
 }
 
 export function AdminPage() {
@@ -216,7 +249,7 @@ export function AdminPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [pendingRemoval, setPendingRemoval] = useState(null);
   const [expiryUser, setExpiryUser] = useState(null);
-  const [uploadPageOpen, setUploadPageOpen] = useState(null);
+  const [uploadPageOpen, setUploadPageOpen] = useState(false);
 
   const invite = useAction(async (form) => {
     await inviteUser(form);
@@ -370,8 +403,7 @@ export function AdminPage() {
             <Button variant="contained" startIcon={<PersonAddAltIcon />} onClick={() => setInviteOpen(true)}>
               Invite user
             </Button>
-            <Button variant="contained" startIcon={<FileUploadIcon />} onClick={() =>
-              setUploadPageOpen(true)}>
+            <Button variant="contained" startIcon={<FileUploadIcon />} onClick={() => setUploadPageOpen(true)}>
               Upload student CSV file
             </Button>
           </Stack>
@@ -439,6 +471,12 @@ export function AdminPage() {
         onInvite={invite.execute}
         pending={invite.pending}
         error={invite.error}
+      />
+
+      <UploadPageDialog 
+        open={uploadPageOpen}
+        onClose={() => setUploadPageOpen(false)}
+        //error={file.error}
       />
 
       <Dialog open={Boolean(pendingRemoval)} onClose={() => setPendingRemoval(null)}>
