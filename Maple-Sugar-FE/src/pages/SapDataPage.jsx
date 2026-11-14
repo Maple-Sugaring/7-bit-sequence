@@ -252,18 +252,20 @@ export function SapDataPage() {
         subtitle="Chart gallons in each bucket over time, then export a CSV or PDF when you need it."
       />
 
-      <Box sx={{ maxWidth: 900, mx: 'auto', mb: 1.5 }}>
-        <ToggleButtonGroup size="small" exclusive value={mode} onChange={(_, next) => changeMode(next)} aria-label="View">
+      
+        {/* <ToggleButtonGroup size="small" exclusive value={mode} onChange={(_, next) => changeMode(next)} aria-label="View">
           <ToggleButton value="range">Current range</ToggleButton>
           <ToggleButton value="compare">Compare years</ToggleButton>
-        </ToggleButtonGroup>
-      </Box>
+        </ToggleButtonGroup> */}
 
       <Box
         sx={{
           display: 'grid',
           // One column on phones, where `order` puts each heading above its own control.
-          gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.7fr)' },
+          gridTemplateColumns: { 
+            xs: 'minmax(0, 1fr)',
+            md: 'auto minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.7fr)'
+          },
           gridTemplateRows: { md: 'auto auto' },
           columnGap: 2,
           rowGap: 1.5,
@@ -272,6 +274,9 @@ export function SapDataPage() {
           mb: 2,
         }}
       >
+        <Typography variant="subtitle2" component="h2" sx={{ order: 0 }}>
+          View
+        </Typography>
         <Typography variant="subtitle2" component="h2" sx={{ order: { xs: 1, md: 0 } }}>
           {compare ? 'Years' : 'Time period'}
         </Typography>
@@ -281,6 +286,17 @@ export function SapDataPage() {
         <Typography variant="subtitle2" component="h2" sx={{ order: { xs: 5, md: 0 } }}>
           {compare ? 'Date window (each year)' : 'Date selection'}
         </Typography>
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={mode}
+          onChange={(_, next) => changeMode(next)}
+          aria-label="View"
+          sx={{ order: 0, alignSelf: 'start' }}
+        >
+          <ToggleButton value="range">Current range</ToggleButton>
+          <ToggleButton value="compare">Compare years</ToggleButton>
+        </ToggleButtonGroup>
         {compare ? (
           <TextField
             select
