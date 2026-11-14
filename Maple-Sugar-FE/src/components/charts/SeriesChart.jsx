@@ -87,7 +87,6 @@ export function WeightChart({ rows, series, unit = 'day', accessibilityLayer = t
           domain={[0, (max) => Math.max(10, Math.ceil(max))]}
           tick={TICK}
         />
-        <Legend />
         <Tooltip
           labelFormatter={tick}
           formatter={(value, name, item) => {
@@ -96,12 +95,13 @@ export function WeightChart({ rows, series, unit = 'day', accessibilityLayer = t
             const scale = pounds == null ? `${gallons} gal` : `${gallons} gal · ${Number(pounds).toFixed(1)} lb`;
             return [scale, name];
           }}
+          wrapperStyle={{ zIndex: 10 }}
           {...tooltipProps}
         />
         <Legend
           height={36}
           // 11px was below the 12px used elsewhere; keep legend text readable
-          wrapperStyle={{ maxHeight: 36, overflowY: 'auto', fontSize: 12 }}
+          wrapperStyle={{ maxHeight: 36, overflowY: 'auto', fontSize: 12, zIndex: 1 }}
           formatter={legendText}
         />
         {series.map((item, index) => (
