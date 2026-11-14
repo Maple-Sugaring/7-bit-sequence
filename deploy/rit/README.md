@@ -33,6 +33,13 @@ No systemd user session? Use cron instead: `* * * * * $HOME/maple/app/deploy/rit
 Note: the first run when HEAD already equals origin/main exits without starting anything, so start the stack manually once:
 `docker compose --env-file ~/maple/config/compose.env -f docker-compose.yml -f deploy/rit/compose.rit.yml up -d --build`
 
+## Checking which commit is live
+Every successful deploy (the `Deploy to RLES` workflow or the poller) records the commit SHA in two places:
+- Public: `curl https://maplesugaring01.webdev.gccis.rit.edu/deployment.txt` (also `/deployment.json`), baked into the web image.
+- On the VM: `cat ~/maple/deployed-commit.txt`
+
+Compare with `git rev-parse origin/main`; if they differ, RLES is behind main. A value of `unknown` means the web image was built without `DEPLOY_SHA` set (e.g. a manual `docker compose up --build`). Export `DEPLOY_SHA=$(git rev-parse HEAD)` before building by hand.
+
 ## Pointing the Raspberry Pi at it
 On the Pi, in `gateway/raspberry-pi/.env`:
 ```
