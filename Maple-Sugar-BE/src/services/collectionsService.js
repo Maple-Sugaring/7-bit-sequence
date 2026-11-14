@@ -42,6 +42,7 @@ export async function recordCollection(body, user) {
   const input = {
     ...body,
     Weight: blankToNull(body.Weight),
+    Weight_Before_Ice: blankToNull(body.Weight_Before_Ice),
     Sugar_Percent: blankToNull(body.Sugar_Percent),
   };
 
@@ -80,6 +81,8 @@ export async function recordCollection(body, user) {
           Collected_At: collectedAt,
           Volume_Collected: collectionVolumeGallons(input.Weight, tareWeight),
           Quality_Notes: input.Notes,
+          Ice_Present: input.Ice_Present,
+          Weight_Before_Ice: input.Weight_Before_Ice,
         },
         client,
       );
@@ -95,6 +98,7 @@ export async function recordCollection(body, user) {
           Weight: input.Weight,
           Sugar_Percent: input.Sugar_Percent,
           Ice_Present: input.Ice_Present,
+          Weight_Before_Ice: input.Weight_Before_Ice,
           Round_Label: blankToNull(input.Round_Label),
           Client_Ref: input.Client_Ref ?? null,
           // The submitter's role at the time, shown as a tag on the collection.

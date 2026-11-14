@@ -743,11 +743,25 @@ const routes = [
       if (existing) return { Entry: existing, Log: null, Duplicate: true };
 
       const bucket = db.buckets.find((candidate) => candidate.NodeID === node.NodeID) ?? null;
+      // An iced bucket sends the reweigh as Weight and the first weight as
+      // Weight_Before_Ice; the form validator takes them the other way round.
+      const beforeIce = body.Weight_Before_Ice == null ? null : Number(body.Weight_Before_Ice);
+      if (beforeIce != null && !body.Ice_Present) {
+        invalid('A weight before ice only goes with a bucket tagged as having ice.', {
+          Weight_Before_Ice: 'A weight before ice only goes with a bucket tagged as having ice.',
+        });
+      }
       const { errors, isValid } = validateCollectionEntry(
-        { ...body, Recorded_At: body.Collected_At },
+        beforeIce == null
+          ? { ...body, Recorded_At: body.Collected_At }
+          : { ...body, Weight: beforeIce, Weight_After_Ice: body.Weight, Recorded_At: body.Collected_At },
         { tareWeight: bucket?.Tare_Weight ?? null },
       );
-      if (!isValid) invalid(Object.values(errors)[0], errors);
+      if (!isValid) {
+        const { Weight_After_Ice: afterIce, ...rest } = errors;
+        const details = afterIce ? { ...rest, Weight: afterIce } : rest;
+        invalid(Object.values(details)[0], details);
+      }
 
       const collectedAt = body.Collected_At ?? dayjs().toISOString();
       const weight = Number(body.Weight);
@@ -775,6 +789,8 @@ const routes = [
         Collected_At: collectedAt,
         Volume_Collected: Math.round(sapGallonsFor(weight, bucket?.Tare_Weight ?? 0) * 100) / 100,
         Quality_Notes: notes,
+        Ice_Present: Boolean(body.Ice_Present),
+        Weight_Before_Ice_Lb: beforeIce,
       };
       db.collectionLogs.push(log);
 
@@ -792,6 +808,7 @@ const routes = [
         Weight_Lb: weight,
         Sugar_Percent: sugar,
         Ice_Present: Boolean(body.Ice_Present),
+        Weight_Before_Ice_Lb: beforeIce,
         Round_Label: body.Round_Label ?? null,
         Client_Ref: body.Client_Ref ?? null,
       };

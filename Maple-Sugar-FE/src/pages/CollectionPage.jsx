@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Alert from '@mui/material/Alert';
+import AlertTitle from '@mui/material/AlertTitle';
+import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
@@ -36,7 +38,7 @@ import { collectionLocal, useBush, useJournal, useRecordCollection, useRecording
 
 /** Fields the student has not touched are null and fall back to the sensor. */
 function untouchedForm() {
-  return { weight: null, ice: null, sugar: '', notes: '', collectedAt: null };
+  return { weight: null, ice: null, weightAfterIce: '', sugar: '', notes: '', collectedAt: null };
 }
 
 function weightHelp(sensor, touched) {
@@ -129,7 +131,8 @@ export function CollectionPage() {
   const bushSugar = useMemo(() => bushAverageSugar(bush.data), [bush.data]);
 
   const weightValue = form.weight ?? (sensor.usable ? sensor.weight.toFixed(1) : '');
-  const iceValue = form.ice ?? (sensor.usable ? sensor.ice : false);
+  // The sensor cannot see ice: the person at the tree turns this on, and it starts off.
+  const iceValue = form.ice ?? false;
 
   const check = validateCollectionEntry(
     {
@@ -137,13 +140,22 @@ export function CollectionPage() {
       Weight: weightValue,
       Sugar_Percent: form.sugar,
       Ice_Present: iceValue,
+      // With ice, the bucket is reweighed after the ice comes out; that weight is the sap.
+      ...(iceValue ? { Weight_After_Ice: form.weightAfterIce } : {}),
       Recorded_At: form.collectedAt?.toISOString(),
     },
     { tareWeight: tree?.tareWeight ?? null },
   );
   const errors = attempted ? { ...check.errors, ...serverErrors } : serverErrors;
 
-  const sapGallons = weightValue === '' || check.errors.Weight ? null : sapGallonsFor(weightValue, tree?.tareWeight);
+  // Until an iced bucket is reweighed there is no sap weight to estimate from.
+  const sapWeight = iceValue ? form.weightAfterIce : weightValue;
+  const sapWeightError = iceValue ? check.errors.Weight_After_Ice || check.errors.Weight : check.errors.Weight;
+  const sapGallons = sapWeight === '' || sapWeightError ? null : sapGallonsFor(sapWeight, tree?.tareWeight);
+  // Save stays off until the bucket is reweighed without the ice.
+  const iceBlocked = iceValue && Boolean(check.errors.Weight_After_Ice);
+  const afterIceError =
+    iceValue && (attempted || form.weightAfterIce !== '') ? check.errors.Weight_After_Ice : null;
   const estimate =
     sapGallons == null
       ? null
@@ -175,12 +187,14 @@ export function CollectionPage() {
   const submit = async ({ finish = false } = {}) => {
     setNotice(null);
     setAttempted(true);
-    if (!check.isValid || !tree) return;
+    if (!check.isValid || !tree || iceBlocked) return;
 
     const collectedAt = (form.collectedAt ?? dayjs()).toISOString();
     const body = {
       NodeID: tree.nodeId,
-      Weight: Number(weightValue),
+      // With ice, the sap is the reweigh after the ice came out; the first weight is kept too.
+      Weight: Number(iceValue ? form.weightAfterIce : weightValue),
+      Weight_Before_Ice: iceValue ? Number(weightValue) : null,
       // Null unless the student tested it. Never carried over or worked out.
       Sugar_Percent: form.sugar === '' ? null : Number(form.sugar),
       Ice_Present: iceValue,
@@ -198,6 +212,7 @@ export function CollectionPage() {
       weight: body.Weight,
       sugar: body.Sugar_Percent,
       ice: body.Ice_Present,
+      weightBeforeIce: body.Weight_Before_Ice,
       sapGallons: estimate?.sapGallons ?? 0,
       syrupGallons: estimate?.syrupGallons ?? 0,
       basis: estimate?.basis ?? null,
@@ -355,7 +370,7 @@ export function CollectionPage() {
 
                       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                       <TextField
-                        label="Sap weight (lb)"
+                        label={iceValue ? 'Weight with ice (lb)' : 'Sap weight (lb)'}
                         type="number"
                         value={weightValue}
                         onChange={(event) => edit({ weight: event.target.value })}
@@ -386,9 +401,48 @@ export function CollectionPage() {
 
                       </Stack>
                       <FormControlLabel
-                        control={<Switch checked={iceValue} onChange={(event) => edit({ ice: event.target.checked })} />}
+                        control={
+                          <Switch
+                            checked={iceValue}
+                            // A fresh toggle starts the reweigh over; turning ice off drops it.
+                            onChange={(event) => edit({ ice: event.target.checked, weightAfterIce: '' })}
+                          />
+                        }
                         label="Ice in the bucket"
                       />
+                      {iceValue ? (
+                        <>
+                          <Alert severity={iceBlocked ? 'warning' : 'success'} aria-live="polite">
+                            <AlertTitle>{iceBlocked ? 'Remove the ice and reweigh' : 'Reweighed without the ice'}</AlertTitle>
+                            {iceBlocked ? (
+                              <>
+                                <Box component="ol" sx={{ m: 0, pl: 2.5 }}>
+                                  <li>Take the bucket off the sensor.</li>
+                                  <li>Remove the ice from the bucket.</li>
+                                  <li>Put the bucket back on the sensor.</li>
+                                  <li>Enter the new weight in Weight after ice removed.</li>
+                                </Box>
+                                <Typography variant="body2" sx={{ mt: 1 }}>
+                                  Save turns on once the new weight is in.
+                                </Typography>
+                              </>
+                            ) : (
+                              'This collection saves the weight after ice removed and is tagged Ice removed.'
+                            )}
+                          </Alert>
+                          <TextField
+                            label="Weight after ice removed (lb)"
+                            type="number"
+                            value={form.weightAfterIce}
+                            onChange={(event) => edit({ weightAfterIce: event.target.value })}
+                            required
+                            error={Boolean(afterIceError)}
+                            helperText={afterIceError || 'Gross pounds with the ice out, bucket included.'}
+                            fullWidth
+                            slotProps={{ htmlInput: { min: 0, step: 0.1, inputMode: 'decimal' } }}
+                          />
+                        </>
+                      ) : null}
                       <SyrupEstimate estimate={estimate} />
 
                       {showNote || form.notes ? (
@@ -432,7 +486,7 @@ export function CollectionPage() {
                         <Button
                           type="submit"
                           variant="contained"
-                          disabled={save.pending}
+                          disabled={save.pending || iceBlocked}
                           sx={{ minHeight: 48, flexGrow: 1 }}
                         >
                           {remainingAfter.length ? 'Save & next tree' : 'Save & finish round'}
@@ -440,7 +494,7 @@ export function CollectionPage() {
                         {remainingAfter.length ? (
                           <Button
                             variant="outlined"
-                            disabled={save.pending}
+                            disabled={save.pending || iceBlocked}
                             onClick={() => submit({ finish: true })}
                             sx={{ minHeight: 48 }}
                           >

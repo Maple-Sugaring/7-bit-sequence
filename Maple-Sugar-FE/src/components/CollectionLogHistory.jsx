@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, Button, Stack, Typography } from '@mui/material';
+import { Alert, Button, Chip, Stack, Typography } from '@mui/material';
 import { apiClient } from '../data/apiClient';
 
 export function CollectionLogHistory({ refreshKey }) {
@@ -22,10 +22,17 @@ export function CollectionLogHistory({ refreshKey }) {
       {error && <Alert severity="error">{error}</Alert>}
       {page?.items.length === 0 && <Typography>No collections in this mode.</Typography>}
       {page?.items.map((log) => (
-        <Typography key={log.LogID}>
-          {new Date(log.Collected_At).toLocaleString()} · Node {log.NodeID} · {log.Volume_Collected == null ? 'Volume unrecorded' : `${log.Volume_Collected} gal`}
-          {log.Data_Mode === 'test' ? ' · Test' : ''} {log.Quality_Notes}
-        </Typography>
+        <Stack key={log.LogID} direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+          <Typography>
+            {new Date(log.Collected_At).toLocaleString()} · Node {log.NodeID} · {log.Volume_Collected == null ? 'Volume unrecorded' : `${log.Volume_Collected} gal`}
+            {log.Data_Mode === 'test' ? ' · Test' : ''} {log.Quality_Notes}
+          </Typography>
+          {log.Weight_Before_Ice_Lb != null ? (
+            <Chip size="small" color="warning" label="Ice removed · reweighed" />
+          ) : log.Ice_Present ? (
+            <Chip size="small" color="info" label="Ice" />
+          ) : null}
+        </Stack>
       ))}
       <Button onClick={() => { setAll(!all); setBefore(null); }}>{all ? 'Recent collections' : 'All collections'}</Button>
       {all && page?.next && <Button onClick={() => setBefore(page.next)}>Older collections</Button>}
