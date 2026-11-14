@@ -28,7 +28,8 @@ import {
 import { exportFileName, exportRows, buildPdf, toCsv } from '../business/weightExport';
 import { Capability } from '../business/permissions';
 import { ChartCard } from '../components/charts/ChartCard';
-import { TREE_COLORS, WeightChart } from '../components/charts/SeriesChart';
+import { TREE_COLORS } from '../components/charts/chartColors';
+import { WeightChart } from '../components/charts/SeriesChart';
 import { PageHeader } from '../components/common/PageHeader';
 import { EmptyBlock } from '../components/common/StateBlock';
 import { ReadingCorrections } from '../components/ReadingCorrections';
@@ -99,7 +100,12 @@ function collapseToTotal({ rows, series }, { compare, years }) {
     : [{ key: TOTAL_KEY, name: 'All trees (total)', members: series.map((item) => item.key) }];
 
   return {
-    series: groups.map(({ members, ...rest }) => rest),
+    // Same series shape as before, without the internal `members` list.
+    series: groups.map((group) => {
+      const item = { ...group };
+      delete item.members;
+      return item;
+    }),
     rows: rows.map((row) => {
       const out = { Date: row.Date };
       for (const group of groups) {

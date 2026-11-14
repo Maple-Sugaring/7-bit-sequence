@@ -14,6 +14,7 @@ import {
   YAxis,
 } from 'recharts';
 import { ritOrange } from '../../theme/ritColors';
+import { TREE_COLORS } from './chartColors';
 
 /*
  * Accessibility (WCAG 2.2):
@@ -219,17 +220,6 @@ export function SiteForecastFigure({ rows, height = 240 }) {
     </AccessibilityChartWrapper>
   );
 }
-
-export const TREE_COLORS = [
-  ritOrange,
-  'var(--chart-blue)',
-  'var(--chart-green)',
-  'var(--chart-contrast)',
-  'var(--chart-purple)',
-  'var(--chart-red)',
-  'var(--chart-orange)',
-  'var(--chart-gray)',
-];
 
 export function OverlayChart({ rows, flowSeries, tempSeries }) {
   return (
