@@ -14,6 +14,7 @@ import {
   YAxis,
 } from 'recharts';
 import { ritOrange } from '../../theme/ritColors';
+import { TREE_COLORS } from './chartColors';
 
 /*
  * Accessibility (WCAG 2.2):
@@ -95,12 +96,13 @@ export function WeightChart({ rows, series, unit = 'day', accessibilityLayer = t
             const scale = pounds == null ? `${gallons} gal` : `${gallons} gal · ${Number(pounds).toFixed(1)} lb`;
             return [scale, name];
           }}
+          wrapperStyle={{ zIndex: 10 }}
           {...tooltipProps}
         />
         <Legend
           height={36}
           // 11px was below the 12px used elsewhere; keep legend text readable
-          wrapperStyle={{ maxHeight: 36, overflowY: 'auto', fontSize: 12 }}
+          wrapperStyle={{ maxHeight: 36, overflowY: 'auto', fontSize: 12, zIndex: 1 }}
           formatter={legendText}
         />
         {series.map((item, index) => (
@@ -110,6 +112,7 @@ export function WeightChart({ rows, series, unit = 'day', accessibilityLayer = t
             dataKey={item.key}
             name={item.name}
             stroke={TREE_COLORS[index % TREE_COLORS.length]}
+            strokeDasharray={item.dash}
             dot={false}
             strokeWidth={2}
             connectNulls
@@ -217,17 +220,6 @@ export function SiteForecastFigure({ rows, height = 240 }) {
     </AccessibilityChartWrapper>
   );
 }
-
-const TREE_COLORS = [
-  ritOrange,
-  'var(--chart-blue)',
-  'var(--chart-green)',
-  'var(--chart-contrast)',
-  'var(--chart-purple)',
-  'var(--chart-red)',
-  'var(--chart-orange)',
-  'var(--chart-gray)',
-];
 
 export function OverlayChart({ rows, flowSeries, tempSeries }) {
   return (
