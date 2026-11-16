@@ -182,15 +182,32 @@ export function validateLogin(form) {
   return { errors, isValid: Object.keys(errors).length === 0 };
 }
 
-export function validateCSVFile(form) {
+export async function validateCSVFile(file) {
   const errors = {};
 
-  if(isBlank(form.file)) {
+  if(!file) {
     errors.file = "No file provided.";
-    return {errors, isValid: false}
+    return {errors, isValid: false};
+  }
+  if(!file.name.toLowerCase().endsWith(".csv")) {
+    errors.extension = "File must be of type .csv.";
+    return {errors, isValid: false};
   }
   
   // validate that the CSV provided comes from myCourses
+  // get fields from the file
+  const chunk = file.slice(0, 256); // takes a small part of the file data
+  const text = await chunk.text(); // converts file data into text
+  const header = text.split(/\r\n|\n|\r/)[0]; // returns the first line of the file
+  const fields = header.split(","); // creates an array of fields
+
+  // check against expected fields
+  const requiredFields = ["Name", "Pronouns", "UserName", "Email", "Role", "LastAccessed"];
+  if(requiredFields.every(field =>
+    fields.includes(field)
+  )) {
+    errors.file = "Incorrect file was uploaded or file has been corrupted.";
+  }
 
   return {errors, isValid: Object.keys(errors).length === 0};
 }

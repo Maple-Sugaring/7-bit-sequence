@@ -22,6 +22,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import MoreTimeIcon from '@mui/icons-material/MoreTime';
 import PersonAddAltIcon from '@mui/icons-material/PersonAddAlt';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import { styled } from '@mui/material/styles';
 import { ColumnCards } from '../components/common/ColumnCards';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import dayjs from 'dayjs';
@@ -39,6 +40,17 @@ import {
   setActive,
 } from '../services/adminService';
 import { useAction, useUsers } from '../services/hooks';
+
+const VisuallyHiddenInput = styled('input')({
+  clipPath: 'inset(50%)',
+  height: 1,
+  overflow: 'hidden',
+  position: 'absolute',
+  bottom: 0,
+  left: 0,
+  whiteSpace: 'nowrap',
+  width: 1,
+});
 
 function GatewayButton() {
   return (
@@ -206,14 +218,24 @@ function InviteDialog({ open, onClose, roles, onInvite, pending, error }) {
   );
 }
 
-function UploadPageDialog({open, onClose, file, error}) {
+function UploadPageDialog({open, onClose, error}) {
   // upload page
-  // const [form, setForm] = useState({
-  //   file: '',
-  //   //accountExpiry: dayjs().add(4, 'month').hour(23).minute(59).second(0),
-  // });
-  // const [touched, setTouched] = useState(false);
-  // const { errors, isValid } = validateCSVFile(form);
+  const [file, setFile] = useState(null);
+  const [touched, setTouched] = useState(false);
+  const { errors, isValid } = validateCSVFile(file);
+
+  const update = (field) => (event) => setForm((prev) => ({ ...prev, [field]: event.target.value }));
+
+  const handleFile = async () => {
+    setTouched(true);
+    if (!isValid) return;
+
+
+  }
+
+  const handleUpload = async () => {
+
+  }
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
@@ -232,12 +254,25 @@ function UploadPageDialog({open, onClose, file, error}) {
           </Alert>
         ) : null}
 
+        <Button 
+          component="label" 
+          variant="contained"
+        >
+          Upload file
+          <VisuallyHiddenInput
+            type="file"
+            accept=".csv,text/csv"
+            value={file}
+            onChange={(e) => handleFile(e.target.files[0])}
+          ></VisuallyHiddenInput>
+        </Button>
+
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        {/* <Button variant="contained" onClick={handleInvite} loading={pending}>
+        <Button variant="contained" onClick={handleUpload}>
           Send invites
-        </Button> */}
+        </Button>
       </DialogActions>
     </Dialog>
   );
