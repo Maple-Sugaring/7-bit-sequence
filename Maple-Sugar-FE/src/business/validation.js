@@ -190,7 +190,7 @@ export async function validateCSVFile(file) {
     return {errors, isValid: false};
   }
   if(!file.name.toLowerCase().endsWith(".csv")) {
-    errors.extension = "File must be of type .csv.";
+    errors.file = "File must be of type .csv.";
     return {errors, isValid: false};
   }
   

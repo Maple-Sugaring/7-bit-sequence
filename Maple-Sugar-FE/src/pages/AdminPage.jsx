@@ -223,7 +223,6 @@ function InviteDialog({ open, onClose, roles, onInvite, pending, error }) {
 function UploadPageDialog({open, onClose, onUpload, error}) {
   // upload page
   const [file, setFile] = useState(null);
-  const [touched, setTouched] = useState(false);
   const [fileData, setFileData] = useState([]);
   const { errors, isValid } = validateCSVFile(file);
 
@@ -234,7 +233,6 @@ function UploadPageDialog({open, onClose, onUpload, error}) {
   };
 
   const handleUpload = async () => {
-    setTouched(true);
     if (!isValid) return;
 
     Papa.parse(file, {
@@ -258,7 +256,6 @@ function UploadPageDialog({open, onClose, onUpload, error}) {
     if(result?.ok) {
       setFile(null);
       setFileData([]);
-      setTouched(false);
       onClose();
     }
   };
@@ -297,7 +294,7 @@ function UploadPageDialog({open, onClose, onUpload, error}) {
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
         <Button variant="contained" onClick={(e) => handleUpload(e.target.files[0])}>
-          Send invites
+          Create accounts
         </Button>
       </DialogActions>
     </Dialog>
