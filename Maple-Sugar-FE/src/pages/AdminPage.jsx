@@ -26,6 +26,7 @@ import { styled } from '@mui/material/styles';
 import { ColumnCards } from '../components/common/ColumnCards';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import dayjs from 'dayjs';
+import Papa from 'papaparse';
 import { ROLE_LABELS } from '../business/permissions';
 import { validateInvite, validateCSVFile } from '../business/validation';
 import { PageHeader } from '../components/common/PageHeader';
@@ -38,6 +39,7 @@ import {
   setAccountExpiry,
   removeUser,
   setActive,
+  processCSVData,
 } from '../services/adminService';
 import { useAction, useUsers } from '../services/hooks';
 
@@ -218,24 +220,48 @@ function InviteDialog({ open, onClose, roles, onInvite, pending, error }) {
   );
 }
 
-function UploadPageDialog({open, onClose, error}) {
+function UploadPageDialog({open, onClose, onUpload, error}) {
   // upload page
   const [file, setFile] = useState(null);
   const [touched, setTouched] = useState(false);
+  const [fileData, setFileData] = useState([]);
   const { errors, isValid } = validateCSVFile(file);
 
-  const update = (field) => (event) => setForm((prev) => ({ ...prev, [field]: event.target.value }));
-
   const handleFile = async () => {
+    // update UI to include file name
+
+    setFile(file);
+  };
+
+  const handleUpload = async () => {
     setTouched(true);
     if (!isValid) return;
 
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (result) => {
+        if(result.errors.length > 0) {
+          console.log("Parsing error: " + result.errors[0].message);
+          return;
+        }
 
-  }
+        setFileData(result.data);
+      },
+      error: (e) => {
+        console.log("Parsing error: " + e.message);
+        return;
+      }
+    });
 
-  const handleUpload = async () => {
-
-  }
+    const result = await onUpload(fileData);
+    if(result?.ok) {
+      setFile(null);
+      setFileData([]);
+      setTouched(false);
+      onClose();
+    }
+  };
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
@@ -270,7 +296,7 @@ function UploadPageDialog({open, onClose, error}) {
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" onClick={handleUpload}>
+        <Button variant="contained" onClick={(e) => handleUpload(e.target.files[0])}>
           Send invites
         </Button>
       </DialogActions>
@@ -304,6 +330,10 @@ export function AdminPage() {
   });
   const remove = useAction(async (userId) => {
     await removeUser(userId);
+    await refresh();
+  });
+  const file = useAction(async (fileData) => {
+    await processCSVData(fileData);
     await refresh();
   });
 
@@ -511,7 +541,8 @@ export function AdminPage() {
       <UploadPageDialog 
         open={uploadPageOpen}
         onClose={() => setUploadPageOpen(false)}
-        //error={file.error}
+        onUpload={file.execute}
+        error={file.error}
       />
 
       <Dialog open={Boolean(pendingRemoval)} onClose={() => setPendingRemoval(null)}>

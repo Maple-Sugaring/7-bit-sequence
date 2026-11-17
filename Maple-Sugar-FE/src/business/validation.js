@@ -203,7 +203,7 @@ export async function validateCSVFile(file) {
 
   // check against expected fields
   const requiredFields = ["Name", "Pronouns", "UserName", "Email", "Role", "LastAccessed"];
-  if(requiredFields.every(field =>
+  if(!requiredFields.every(field =>
     fields.includes(field)
   )) {
     errors.file = "Incorrect file was uploaded or file has been corrupted.";

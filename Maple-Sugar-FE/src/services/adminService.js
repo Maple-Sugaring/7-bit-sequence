@@ -1,5 +1,6 @@
 import * as usersRepository from '../data/repositories/usersRepository';
 import { capabilitiesFor, expiryStatus, isAccountUsable, roleFromId, ROLE_LABELS } from '../business/permissions';
+import dayjs from 'dayjs';
 
 /**
  * User administration (FR-027, FR-041, FR-056, BRU-003, BRU-004, BRU-005).
@@ -72,4 +73,25 @@ export function setAccountExpiry(userId, accountExpiry) {
 
 export function removeUser(userId) {
   return usersRepository.removeUser(userId);
+}
+
+export function processCSVData(fileData) {
+  let result = true;
+  for (let i = 0; i < fileData.length; i++) {
+    const row = fileData[i];
+    if(row.Role == "Student") {
+      const roleId = 2;
+      const name = row.Name.split(",");
+      const firstName = name[1].trim();
+      const lastName = name[0].trim();
+      const email = row.Email.replace("@", "@g.");
+      const expiry = dayjs().add(120, "day").hour(23).minute(59).second(59);
+      const accountExpiry = expiry.toISOString();
+
+      const res = usersRepository.inviteUser({email, roleId, firstName, lastName, accountExpiry});
+      result = result && res;
+    }
+    
+  }
+  return result;
 }
