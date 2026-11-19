@@ -63,7 +63,11 @@ export function CollectionHistory({ entries, loading, error }) {
                   <Chip label={ROLE_LABELS[entry.Submitted_Role]} size="small" sx={ROLE_CHIP_COLORS[entry.Submitted_Role]} />
                 ) : null}
                 {entry.Round_Label ? <Chip label={entry.Round_Label} size="small" variant="outlined" /> : null}
-                {entry.Ice_Present ? <Chip label="Ice" size="small" color="info" /> : null}
+                {entry.Weight_Before_Ice_Lb != null ? (
+                  <Chip label="Ice removed · reweighed" size="small" color="warning" />
+                ) : entry.Ice_Present ? (
+                  <Chip label="Ice" size="small" color="info" />
+                ) : null}
               </Stack>
               <Typography variant="body2" color="text.secondary">
                 {dateTime(entry.Collected_At)}
@@ -74,6 +78,9 @@ export function CollectionHistory({ entries, loading, error }) {
               ) : null}
               <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
                 {entry.Weight_Lb != null ? <Chip label={`${entry.Weight_Lb} lb`} size="small" variant="outlined" /> : null}
+                {entry.Weight_Before_Ice_Lb != null ? (
+                  <Chip label={`${entry.Weight_Before_Ice_Lb} lb with ice`} size="small" variant="outlined" />
+                ) : null}
                 {entry.Sugar_Percent != null ? (
                   <Chip label={`${entry.Sugar_Percent}% sugar`} size="small" variant="outlined" />
                 ) : null}

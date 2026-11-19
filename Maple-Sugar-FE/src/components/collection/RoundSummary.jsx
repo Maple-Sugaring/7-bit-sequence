@@ -85,7 +85,11 @@ export function RoundSummary({ round, onNewRound, onKeepGoing }) {
                 <Typography sx={{ flexGrow: 1 }}>{entry.treeLabel}</Typography>
                 <Chip size="small" variant="outlined" label={`${entry.sapGallons.toFixed(1)} gal`} />
                 {entry.sugar != null ? <Chip size="small" variant="outlined" label={`${entry.sugar}% sugar`} /> : null}
-                {entry.ice ? <Chip size="small" color="info" label="Ice" /> : null}
+                {entry.weightBeforeIce != null ? (
+                  <Chip size="small" color="warning" label="Ice removed · reweighed" />
+                ) : entry.ice ? (
+                  <Chip size="small" color="info" label="Ice" />
+                ) : null}
                 {entry.queued ? <Chip size="small" color="warning" label="Waiting to upload" /> : null}
                 <Typography variant="caption" color="text.secondary">
                   {timeOnly(entry.collectedAt)}

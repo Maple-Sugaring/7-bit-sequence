@@ -15,6 +15,7 @@ import {
   YAxis,
 } from 'recharts';
 import { ritOrange } from '../../theme/ritColors';
+import { TREE_COLORS } from './chartColors';
 
 /*
  * Accessibility (WCAG 2.2):
@@ -83,7 +84,9 @@ function weightTooltip(value, name, item) {
 
 const WEIGHT_DOMAIN = [0, (max) => Math.max(10, Math.ceil(max))];
 const WEIGHT_MARGIN = { top: 8, right: 12, left: 0, bottom: 0 };
-const LEGEND_STYLE = { maxHeight: 36, overflowY: 'auto', fontSize: 12 };
+// The tooltip sits above the legend so it is never clipped behind it.
+const TOOLTIP_STYLE = { zIndex: 10 };
+const LEGEND_STYLE = { maxHeight: 36, overflowY: 'auto', fontSize: 12, zIndex: 1 };
 
 /*
  * Memoized, with animation off: Sugar Woods can chart thousands of points per
@@ -110,6 +113,7 @@ export const WeightChart = memo(function WeightChart({ rows, series, unit = 'day
           labelFormatter={tick}
           formatter={weightTooltip}
           isAnimationActive={false}
+          wrapperStyle={TOOLTIP_STYLE}
           {...tooltipProps}
         />
         <Legend
@@ -125,6 +129,7 @@ export const WeightChart = memo(function WeightChart({ rows, series, unit = 'day
             dataKey={item.key}
             name={item.name}
             stroke={TREE_COLORS[index % TREE_COLORS.length]}
+            strokeDasharray={item.dash}
             dot={false}
             strokeWidth={2}
             connectNulls
@@ -233,17 +238,6 @@ export function SiteForecastFigure({ rows, height = 240 }) {
     </AccessibilityChartWrapper>
   );
 }
-
-const TREE_COLORS = [
-  ritOrange,
-  'var(--chart-blue)',
-  'var(--chart-green)',
-  'var(--chart-contrast)',
-  'var(--chart-purple)',
-  'var(--chart-red)',
-  'var(--chart-orange)',
-  'var(--chart-gray)',
-];
 
 export function OverlayChart({ rows, flowSeries, tempSeries }) {
   return (
