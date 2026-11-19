@@ -365,7 +365,7 @@ describe('POST /ingest', () => {
     assert.equal(response.status, 422);
     assert.equal(response.json.code, 'VALIDATION');
     assert.equal(response.json.details.Rejected.length, 1);
-    assert.match(response.json.details.Rejected[0].message, /10 gallons/);
+    assert.match(response.json.details.Rejected[0].message, /5 gallons/);
     assert.equal(state.created.length, 0);
     assert.equal(state.heartbeats.length, 0);
     assert.equal(state.touches.length, 1);

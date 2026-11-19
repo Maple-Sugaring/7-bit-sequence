@@ -40,10 +40,10 @@ export const BUCKET_CAPACITY_GALLONS = 5;
 export const ICE_CAPACITY_GALLONS = 6;
 /**
  * Raw sap is mostly water (about 2–3% sugar), so a gallon weighs about 8.34 lb.
- * 10 gallons is 83.4 lb of sap. An empty bucket adds 2–3 lb. Ice can weigh more.
+ * 5 gallons is 41.7 lb of sap. An empty bucket adds 2–3 lb. Ice can weigh more.
  */
 export const LB_PER_GALLON = 8.34;
-/** Net sap weight at the 10 gallon liquid line. */
+/** Net sap weight at the 5 gallon liquid line. */
 export const BUCKET_CAPACITY_LB = BUCKET_CAPACITY_GALLONS * LB_PER_GALLON;
 /** Net sap weight allowed when the bucket is tagged as icy. */
 export const ICE_CAPACITY_LB = ICE_CAPACITY_GALLONS * LB_PER_GALLON;

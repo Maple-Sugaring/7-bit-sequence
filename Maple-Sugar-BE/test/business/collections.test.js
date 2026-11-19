@@ -79,10 +79,10 @@ describe('collection rules', () => {
   });
 
   test('an iced bucket is reweighed lighter after the ice comes out', () => {
-    const iced = { NodeID: 1, Ice_Present: true, Weight_Before_Ice: 60 };
-    assert.equal(validateCollection({ ...iced, Weight: 45 }).isValid, true);
-    assert.match(validateCollection({ ...iced, Weight: 60 }).errors.Weight, /less than the weight with ice \(60 lb\)/);
-    assert.match(validateCollection({ ...iced, Weight: 72 }).errors.Weight, /less than the weight with ice/);
+    const iced = { NodeID: 1, Ice_Present: true, Weight_Before_Ice: 40 };
+    assert.equal(validateCollection({ ...iced, Weight: 30 }).isValid, true);
+    assert.match(validateCollection({ ...iced, Weight: 40 }).errors.Weight, /less than the weight with ice \(40 lb\)/);
+    assert.match(validateCollection({ ...iced, Weight: 48 }).errors.Weight, /less than the weight with ice/);
     assert.match(
       validateCollection({ ...iced, Weight: 2 }, { tareWeight: 2.5 }).errors.Weight,
       /empty bucket/,
@@ -92,10 +92,10 @@ describe('collection rules', () => {
 
   test('a weight before ice needs the ice tag, and old ice entries without one still save', () => {
     assert.match(
-      validateCollection({ NodeID: 1, Weight: 45, Ice_Present: false, Weight_Before_Ice: 60 }).errors.Weight_Before_Ice,
+      validateCollection({ NodeID: 1, Weight: 30, Ice_Present: false, Weight_Before_Ice: 40 }).errors.Weight_Before_Ice,
       /tagged as having ice/,
     );
-    assert.equal(validateCollection({ NodeID: 1, Weight: 45, Ice_Present: true }).isValid, true);
+    assert.equal(validateCollection({ NodeID: 1, Weight: 30, Ice_Present: true }).isValid, true);
   });
 
   test('titles name the tree', () => {
