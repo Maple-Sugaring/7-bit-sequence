@@ -2,7 +2,8 @@ import dayjs from 'dayjs';
 import { ApiError } from '../ApiError';
 import { Capability, ROLE_LABELS, can, roleFromId } from '../../business/permissions';
 import { sapGallonsFor } from '../../business/collectionRound';
-import { validateCollectionEntry } from '../../business/validation';
+import { validateCollectionEntry, validateReading } from '../../business/validation';
+import { bucketAlertFor } from '../../business/bucketAlerts';
 import { testWeightError } from '../../business/calibration';
 import { SENSOR_KIT } from '../../business/sensorLifecycle';
 import * as seed from '../fixtures/seed';
@@ -26,6 +27,8 @@ const db = {
   scheduleSlots: structuredClone(seed.scheduleSlots),
   journal: structuredClone(seed.journal),
   guides: structuredClone(seed.guides),
+  // Newest first, like GET /audit-events. Append-only: nothing edits or removes a row.
+  auditEvents: [],
 };
 
 // A reduce, not Math.max(...ids): the readings table is large enough that
@@ -41,7 +44,50 @@ let nextId = {
   journal: maxId(db.journal, 'EntryID') + 1,
   command: 1,
   lifecycle: seed.nodes.length + 1,
+  audit: 1,
 };
+
+/**
+ * Records an admin action (FR-019 audit history). Same columns as the
+ * backend's audit_events table, plus the actor's name so the panel can show
+ * who without the user roster. The backend writes these in the same routes.
+ */
+function audit(eventType, targetId, note = null) {
+  const actor = signedInUser();
+  db.auditEvents.unshift({
+    id: nextId.audit++,
+    event_type: eventType,
+    actor_id: actor?.UserID ?? null,
+    actor_name: actor ? `${actor.First_Name} ${actor.Last_Name}`.trim() : null,
+    target_id: targetId,
+    note,
+    created_at: dayjs().toISOString(),
+  });
+}
+
+/**
+ * Opens an alert unless one of that type is already open for the node, the
+ * backend's duplicate rule. A Full Bucket supersedes the earlier Collection
+ * Needed for the same bucket, so the list shows one bucket warning per tree.
+ */
+function raiseAlert(nodeId, alert) {
+  const open = (type) => db.alerts.find((row) => row.NodeID === nodeId && !row.Is_Resolved && row.Alert_Type === type);
+  if (open(alert.Alert_Type)) return null;
+  if (alert.Alert_Type === 'Full Bucket') {
+    const earlier = open('Collection Needed');
+    if (earlier) earlier.Is_Resolved = true;
+  }
+  const row = {
+    AlertID: nextId.alert++,
+    NodeID: nodeId,
+    Alert_Type: alert.Alert_Type,
+    Description: alert.Description,
+    Created_At: dayjs().toISOString(),
+    Is_Resolved: false,
+  };
+  db.alerts.unshift(row);
+  return row;
+}
 
 const sensorHistory = new Map(seed.nodes.map((node, index) => [node.NodeID, [{
   id: index + 1, type: 'installation', date: '2026-10-25', sensorType: SENSOR_KIT, assumed: true,
@@ -393,10 +439,12 @@ const routes = [
 
       if (body?.Action === 'maintenance') {
         node.Status_Code = 3;
+        audit('node_maintenance', node.NodeID, `${node.Node_Name} parked in maintenance.`);
         return node;
       }
       if (body?.Action === 'online') {
         node.Status_Code = 1;
+        audit('node_online', node.NodeID, `${node.Node_Name} returned to service.`);
         return node;
       }
       if (body?.Action !== 'collect') invalid('Choose collect, maintenance or online.');
@@ -454,8 +502,9 @@ const routes = [
     handler: ([id]) => {
       const index = db.nodes.findIndex((node) => node.NodeID === Number(id));
       if (index < 0) notFound('Node');
-      db.nodes.splice(index, 1);
+      const [removed] = db.nodes.splice(index, 1);
       sensorHistory.delete(Number(id));
+      audit('node_deleted', removed.NodeID, `${removed.Node_Name} (${removed.Node_Code}) removed.`);
       return null;
     },
   },
@@ -471,12 +520,15 @@ const routes = [
     handler: ([id], { body }) => {
       const node = db.nodes.find((candidate) => candidate.NodeID === Number(id));
       if (!node) notFound('Node');
+      const before = { Node_Name: node.Node_Name, Stand: node.Stand, GatewayID: node.GatewayID, Rf_Tag: node.Rf_Tag, Notes: node.Notes };
       node.Node_Name = body?.Node_Name ?? node.Node_Name;
       node.Stand = body?.Stand ?? node.Stand;
       if (body?.GatewayID !== undefined) node.GatewayID = body.GatewayID ? Number(body.GatewayID) : null;
       node.Location = { lat: Number(body?.Latitude), lon: Number(body?.Longitude) };
       node.Rf_Tag = body?.Rf_Tag || null;
       node.Notes = body?.Notes || null;
+      const changed = Object.keys(before).filter((key) => before[key] !== node[key]);
+      audit('node_edited', node.NodeID, changed.length ? `Changed ${changed.join(', ')}.` : 'Saved details.');
       return node;
     },
   },
@@ -486,10 +538,12 @@ const routes = [
     handler: ([id], { body }) => {
       const node = db.nodes.find((candidate) => candidate.NodeID === Number(id));
       if (!node) notFound('Node');
+      const previous = node.Report_Interval_Seconds;
       node.Report_Interval_Seconds =
         body?.Report_Interval_Seconds != null
           ? Number(body.Report_Interval_Seconds)
           : Number(body?.Report_Interval_Minutes) * 60;
+      audit('node_interval_changed', node.NodeID, `Report interval ${previous ?? '?'}s to ${node.Report_Interval_Seconds}s.`);
       return node;
     },
   },
@@ -519,6 +573,11 @@ const routes = [
         Completed_At: null,
       };
       calibrationCommands.push(command);
+      audit(
+        body.Action === 'tare' ? 'node_tare' : 'node_calibrate',
+        node.NodeID,
+        body.Action === 'tare' ? `Tare sent to ${node.Node_Name}.` : `Calibrate ${node.Node_Name} to ${command.Pounds} lb.`,
+      );
       return command;
     },
   },
@@ -588,6 +647,7 @@ const routes = [
       if (latest && ['pending', 'sent'].includes(latest.Status)) {
         latest.Status = 'cancelled';
         latest.Completed_At = dayjs().toISOString();
+        audit('calibration_cancelled', node.NodeID, `Cancelled the waiting ${latest.Action} for ${node.Node_Name}.`);
       }
       return latest ? { ...latest } : null;
     },
@@ -618,6 +678,7 @@ const routes = [
         Is_Resolved: false,
       };
       db.alerts.unshift(alert);
+      audit('node_flagged', node.NodeID, alert.Description);
       return alert;
     },
   },
@@ -645,6 +706,11 @@ const routes = [
       const node = db.nodes.find((candidate) => candidate.NodeID === Number(body.NodeID));
       if (!node) notFound('Node');
 
+      // The backend re-checks every reading and answers 422 with a message per
+      // field, so a bad entry is never stored (EIR-001). Blank time means now.
+      const { errors, isValid } = validateReading({ ...body, Recorded_At: body.Recorded_At ?? dayjs().toISOString() });
+      if (!isValid) invalid('Some fields need attention.', errors);
+
       const row = {
         MetricID: nextId.metric++,
         NodeID: Number(body.NodeID),
@@ -659,6 +725,19 @@ const routes = [
       };
 
       db.metrics.push(row);
+
+      // Same rule as the backend's deriveAlerts: a heavy bucket raises Collection
+      // Needed at 75% and Full Bucket near the rim (FR-003).
+      const tare = db.buckets.find((bucket) => bucket.NodeID === node.NodeID)?.Tare_Weight ?? null;
+      if (row.Weight != null && tare != null) {
+        const alert = bucketAlertFor({
+          nodeName: node.Node_Name,
+          grossWeight: row.Weight,
+          tareWeight: tare,
+          icePresent: row.Ice_Present,
+        });
+        if (alert) raiseAlert(node.NodeID, alert);
+      }
       return row;
     },
   },
@@ -668,7 +747,10 @@ const routes = [
     handler: ([id], { body }) => {
       const row = db.metrics.find((candidate) => candidate.MetricID === Number(id));
       if (!row) notFound('Reading');
+      const changed = Object.keys(body ?? {}).filter((key) => row[key] !== body[key]);
+      const note = changed.map((key) => `${key} ${row[key] ?? '—'} to ${body[key] ?? '—'}`).join(', ');
       Object.assign(row, body);
+      if (changed.length) audit('measurement_overwritten', row.MetricID, `Reading ${row.MetricID}: ${note}.`);
       return row;
     },
   },
@@ -689,8 +771,35 @@ const routes = [
     handler: ([id], { body }) => {
       const alert = db.alerts.find((candidate) => candidate.AlertID === Number(id));
       if (!alert) notFound('Alert');
+      const wasResolved = Boolean(alert.Is_Resolved);
       Object.assign(alert, body);
+      // Who acknowledged it is the "resolution is recorded" step (FR-019).
+      if (body?.Is_Resolved !== undefined && Boolean(body.Is_Resolved) !== wasResolved) {
+        const node = db.nodes.find((candidate) => candidate.NodeID === alert.NodeID);
+        audit(
+          alert.Is_Resolved ? 'alert_resolved' : 'alert_reopened',
+          alert.AlertID,
+          `${alert.Alert_Type}${node ? ` at ${node.Node_Name}` : ''}.`,
+        );
+      }
       return alert;
+    },
+  },
+
+  // ---- Audit history (admins) -------------------------------------------
+  {
+    method: 'GET',
+    match: /^\/audit-events$/,
+    handler: (unused, { query }) => {
+      const user = currentUser();
+      if (!can(roleFromId(user.RoleID), Capability.MANAGE_USERS)) {
+        throw new ApiError('Only administrators can see the audit history.', { status: 403 });
+      }
+      const before = query?.before ? Number(query.before) : null;
+      const limit = Math.min(100, Math.max(1, Number(query?.limit) || 25));
+      const older = db.auditEvents.filter((event) => before == null || event.id < before);
+      const items = older.slice(0, limit);
+      return { items, next: older.length > limit ? items.at(-1).id : null };
     },
   },
 
@@ -861,7 +970,9 @@ const routes = [
     handler: ([id], { body }) => {
       const user = db.users.find((candidate) => candidate.UserID === Number(id));
       if (!user) notFound('User');
+      const changed = Object.keys(body ?? {}).filter((key) => user[key] !== body[key]);
       Object.assign(user, body);
+      if (changed.length) audit('user_updated', user.UserID, `${authorName(user)}: changed ${changed.join(', ')}.`);
       return user;
     },
   },
@@ -871,7 +982,8 @@ const routes = [
     handler: ([id]) => {
       const index = db.users.findIndex((candidate) => candidate.UserID === Number(id));
       if (index === -1) notFound('User');
-      db.users.splice(index, 1);
+      const [removed] = db.users.splice(index, 1);
+      audit('user_deleted', removed.UserID, `${authorName(removed)} (${removed.Email}) removed.`);
       return null;
     },
   },

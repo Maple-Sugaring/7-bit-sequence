@@ -213,8 +213,9 @@ const NODE_SPECS = [
   { id: 9, stand: 2, status: 1, battery: 77, rssi: -90, seen: 2, gal: 5.0, daily: 1.7, notes: null },
   // Tipped over about six hours ago, then set upright.
   { id: 10, stand: 2, status: 1, battery: 63, rssi: -97, seen: 6, gal: 0.4, daily: 1.5, tipAt: 380, notes: 'Windy corner of the barn.' },
-  // Dead battery: offline since last night.
-  { id: 11, stand: 2, status: 0, battery: 3, rssi: -121, seen: 560, gal: 5.8, daily: 1.5, notes: null },
+  // Dead battery: offline since last night, at 84% when it went quiet, so the
+  // dashboard has to say the bucket may be full now (FR-003 stale weight).
+  { id: 11, stand: 2, status: 0, battery: 3, rssi: -121, seen: 560, gal: 8.4, daily: 1.5, notes: null },
   // Registered but never reported yet.
   { id: 12, stand: 2, status: 0, battery: null, rssi: null, seen: null, notes: 'Newly registered. Waiting for the first packet.' },
 ];
@@ -563,7 +564,8 @@ export const ALERT_TYPES = [
 const ALERT_SPECS = [
   [3, 'Full Bucket', 'Net sap is 9.7 gal, at the 10 gallon bucket capacity. Schedule a collection before it overflows.', 22, false],
   [8, 'Low Battery', 'Battery at 14%. The panel has been in shade for three days.', 3 * 60, false],
-  [11, 'Node Offline', 'No packet in 9 hours. Battery was at 3% on its last report.', 540, false],
+  [11, 'Node Offline', 'No packet in 9 hours. Battery was at 3% on its last report. Last weight was 8.4 gal (84%). Sap may have kept running: treat this bucket as possibly full and check it in person.', 540, false],
+  [2, 'Collection Needed', 'Net sap is 8.1 gal at Alumni House - Tree 2, 81% of the 10 gallon line. Collect before it reaches capacity.', 40, false],
   [8, 'Missed Readings', 'Two report intervals have passed without a packet. Last heard 34 minutes ago.', 5, false],
   [8, 'Signal Loss', 'LoRa RSSI degraded to -108 dBm. Check antenna seating.', 50, false],
   [2, 'Spoilage', 'Sap temperature held above 40F for 5 consecutive hours. Collect or discard.', 95, false],

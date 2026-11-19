@@ -45,8 +45,13 @@ export function statusFromCode(code) {
   );
 }
 
-/** Open alerts of these types mean the hardware itself is in trouble. */
-export const FAULT_ALERT_TYPES = ['Tipped', 'Spill'];
+/**
+ * Open alerts of these types mean the hardware itself is in trouble. The
+ * load-cell faults are the ones the node reports itself (the backend's
+ * FAULT_ALERT_TYPES in business/alerting.js): its weights cannot be trusted
+ * until they clear, so the map must not show the node as healthy (EIR-001).
+ */
+export const FAULT_ALERT_TYPES = ['Tipped', 'Spill', 'Load Cell', 'Reversed Load Cell', 'Untared', 'Unstable Reading'];
 
 const STATUS_OFFLINE = 0;
 const STATUS_DEGRADED = 2;
@@ -117,6 +122,17 @@ export function buildFleetNodes({ nodes = [], board = [], alerts = [], now = new
       hasLocation: validCoordinates(node.Location),
     };
   });
+}
+
+/**
+ * The node stopped reporting after it had weighed something, so its last
+ * weight is history, not the bucket now. Sap keeps running while a node is
+ * silent, so the screen must not present that number as current (FR-003).
+ * Maintenance nodes are parked on purpose and are left out.
+ */
+export function weightIsStale(fleetNode) {
+  if (fleetNode?.Last_Seen == null) return false;
+  return fleetNode.mapStatus === MapStatus.OFFLINE || fleetNode.mapStatus === MapStatus.STALE;
 }
 
 export function statusCounts(rows) {
