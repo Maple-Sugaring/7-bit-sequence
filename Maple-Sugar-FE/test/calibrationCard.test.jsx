@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getCalibration = vi.fn();
@@ -59,8 +59,24 @@ describe('calibration card', () => {
     expect(screen.getByText('Radioed 40 s ago, on about 5 packets so far.')).toBeTruthy();
     expect(screen.getByText('Keep the 16.8 lb test weight on the platform until the node answers.')).toBeTruthy();
 
+    // Cancelling asks first (FR-019), then sends.
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(cancelCalibration).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel command' }));
     await vi.waitFor(() => expect(cancelCalibration).toHaveBeenCalledWith(1));
+  });
+
+  it('asks before taring, and backing out sends nothing (FR-019)', async () => {
+    await renderWith(calibration());
+    fireEvent.click(screen.getByRole('button', { name: 'Tare' }));
+    expect(await screen.findByText(/becomes 0 lb/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Go back' }));
+    expect(tareNode).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tare' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Tare' }));
+    await vi.waitFor(() => expect(tareNode).toHaveBeenCalledWith(1));
   });
 
   it("disables tare while the node can't read the load cell, and says why", async () => {
