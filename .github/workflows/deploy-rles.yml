@@ -139,13 +139,15 @@ jobs:
             exit 1
           fi
 
-          "${compose[@]}" build api
-          "${compose[@]}" build --build-arg "RLES_DEPLOY_SHA=$deploy_sha" web
+          "${compose[@]}" build api web
           "${compose[@]}" up -d --no-deps api web
 
           for attempt in $(seq 1 30); do
-            if curl --fail --silent --show-error http://127.0.0.1/deployment.json -o /tmp/rles-deployment.json; then
-              if grep -Fq "\"commit\":\"$deploy_sha\"" /tmp/rles-deployment.json; then
+            if curl --fail --silent --show-error http://127.0.0.1/deployment.json -o /tmp/rles-deployment.json \
+              && curl --fail --silent --show-error http://127.0.0.1/deployment.txt -o /tmp/rles-deployment.txt; then
+              if grep -Fq "\"commit\":\"$deploy_sha\"" /tmp/rles-deployment.json \
+                && [ "$(tr -d '[:space:]' < /tmp/rles-deployment.txt)" = "$deploy_sha" ]; then
+                printf '%s\n' "$deploy_sha" > /home/student/maple/deployed-commit.txt
                 printf 'Deployed commit: %s\n' "$deploy_sha"
                 cat /tmp/rles-deployment.json
                 exit 0
@@ -167,5 +169,6 @@ jobs:
             echo
             echo "- Commit: \`$GITHUB_SHA\`"
             echo "- Site: https://maplesugaring01.webdev.gccis.rit.edu"
-            echo "- Commit marker: https://maplesugaring01.webdev.gccis.rit.edu/deployment.json"
+            echo "- Commit marker: https://maplesugaring01.webdev.gccis.rit.edu/deployment.txt"
+            echo "- On the VM: \`~/maple/deployed-commit.txt\`"
           } >> "$GITHUB_STEP_SUMMARY"
