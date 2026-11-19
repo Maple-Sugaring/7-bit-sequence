@@ -2,8 +2,10 @@ import { describe, expect, test } from 'vitest';
 import { lastFillNote } from '../src/business/bucketAlerts';
 import { MapStatus, statusByNodeId, weightIsStale } from '../src/business/nodeMapStatus';
 import {
+  BUCKET_CAPACITY_GALLONS,
   BucketLevel,
   COLLECTION_NEEDED_FRACTION,
+  FULL_MARGIN_LB,
   LB_PER_GALLON,
   bucketLevel,
   needsCollection,
@@ -12,18 +14,29 @@ import {
 const TARE = 2.2;
 const gross = (gallons) => TARE + gallons * LB_PER_GALLON;
 
+// Written against the constants, so the tests hold for any bucket size.
+const CAPACITY = BUCKET_CAPACITY_GALLONS;
+const COLLECT_AT = CAPACITY * COLLECTION_NEEDED_FRACTION;
+const FULL_AT = CAPACITY - FULL_MARGIN_LB / LB_PER_GALLON;
+
 describe('bucket level (FR-003)', () => {
+  test('the collect warning comes before full', () => {
+    // If FULL_MARGIN_LB grows past the 75% line, Collection Needed can never show.
+    expect(COLLECT_AT).toBeLessThan(FULL_AT);
+  });
+
   test('warns to collect before the bucket is full', () => {
-    expect(bucketLevel(gross(5), TARE)).toBe(BucketLevel.OK);
-    expect(bucketLevel(gross(10 * COLLECTION_NEEDED_FRACTION - 0.1), TARE)).toBe(BucketLevel.OK);
-    expect(bucketLevel(gross(10 * COLLECTION_NEEDED_FRACTION + 0.01), TARE)).toBe(BucketLevel.COLLECT);
-    expect(bucketLevel(gross(8.1), TARE)).toBe(BucketLevel.COLLECT);
-    expect(needsCollection(gross(8.1), TARE)).toBe(true);
+    const between = (COLLECT_AT + FULL_AT) / 2;
+    expect(bucketLevel(gross(CAPACITY / 2), TARE)).toBe(BucketLevel.OK);
+    expect(bucketLevel(gross(COLLECT_AT - 0.1), TARE)).toBe(BucketLevel.OK);
+    expect(bucketLevel(gross(COLLECT_AT + 0.01), TARE)).toBe(BucketLevel.COLLECT);
+    expect(bucketLevel(gross(between), TARE)).toBe(BucketLevel.COLLECT);
+    expect(needsCollection(gross(between), TARE)).toBe(true);
   });
 
   test('full takes over from collect near the rim', () => {
-    expect(bucketLevel(gross(9.6), TARE)).toBe(BucketLevel.FULL);
-    expect(needsCollection(gross(9.6), TARE)).toBe(false);
+    expect(bucketLevel(gross(FULL_AT + 0.05), TARE)).toBe(BucketLevel.FULL);
+    expect(needsCollection(gross(FULL_AT + 0.05), TARE)).toBe(false);
   });
 
   test('no weight means no level', () => {
@@ -40,8 +53,11 @@ describe('stale weights (FR-003)', () => {
   });
 
   test('an offline alert carries the last fill, and says to check a heavy bucket', () => {
-    expect(lastFillNote({ grossWeight: gross(8.4), tareWeight: TARE })).toMatch(/8\.4 gal \(84%\).*possibly full/);
-    expect(lastFillNote({ grossWeight: gross(3), tareWeight: TARE })).not.toMatch(/possibly full/);
+    const heavy = CAPACITY * 0.84;
+    expect(lastFillNote({ grossWeight: gross(heavy), tareWeight: TARE })).toMatch(
+      new RegExp(`${heavy.toFixed(1).replace('.', '\\.')} gal \\(84%\\).*possibly full`),
+    );
+    expect(lastFillNote({ grossWeight: gross(CAPACITY * 0.3), tareWeight: TARE })).not.toMatch(/possibly full/);
     expect(lastFillNote({ grossWeight: null, tareWeight: TARE })).toBe('');
   });
 

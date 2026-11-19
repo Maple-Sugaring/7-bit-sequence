@@ -1,6 +1,11 @@
 import { beforeAll, describe, expect, test } from 'vitest';
 
-import { LB_PER_GALLON } from '../src/business/yieldMetrics';
+import {
+  BUCKET_CAPACITY_GALLONS,
+  COLLECTION_NEEDED_FRACTION,
+  FULL_MARGIN_LB,
+  LB_PER_GALLON,
+} from '../src/business/yieldMetrics';
 import { request } from '../src/data/transports/mockTransport';
 
 /**
@@ -37,16 +42,22 @@ describe('warning flows in the mock API', () => {
   test('a filling bucket warns at 75%, then full replaces it, then collecting clears both', async () => {
     const tare = (await get('/buckets')).find((bucket) => bucket.NodeID === 5).Tare_Weight;
 
-    await post('/metrics', { NodeID: 5, Weight: tare + 7.9 * LB_PER_GALLON });
+    // Gallons between the 75% line and the full margin, whatever the bucket size.
+    const collectAt = BUCKET_CAPACITY_GALLONS * COLLECTION_NEEDED_FRACTION;
+    const fullAt = BUCKET_CAPACITY_GALLONS - FULL_MARGIN_LB / LB_PER_GALLON;
+    const first = collectAt + 0.01;
+
+    await post('/metrics', { NodeID: 5, Weight: tare + first * LB_PER_GALLON });
     const [collect] = await openAlerts(5, 'Collection Needed');
-    expect(collect.Description).toMatch(/7\.9 gal.*79%/);
+    const percent = Math.round((first / BUCKET_CAPACITY_GALLONS) * 100);
+    expect(collect.Description).toMatch(new RegExp(`${first.toFixed(1).replace('.', '\\.')} gal.*${percent}%`));
     expect(await openAlerts(5, 'Full Bucket')).toHaveLength(0);
 
     // A second heavy reading does not stack a duplicate warning.
-    await post('/metrics', { NodeID: 5, Weight: tare + 8.2 * LB_PER_GALLON });
+    await post('/metrics', { NodeID: 5, Weight: tare + ((collectAt + fullAt) / 2) * LB_PER_GALLON });
     expect(await openAlerts(5, 'Collection Needed')).toHaveLength(1);
 
-    await post('/metrics', { NodeID: 5, Weight: tare + 9.8 * LB_PER_GALLON });
+    await post('/metrics', { NodeID: 5, Weight: tare + BUCKET_CAPACITY_GALLONS * LB_PER_GALLON });
     expect(await openAlerts(5, 'Full Bucket')).toHaveLength(1);
     expect(await openAlerts(5, 'Collection Needed')).toHaveLength(0);
 

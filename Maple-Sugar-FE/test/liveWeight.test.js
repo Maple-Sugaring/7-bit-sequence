@@ -21,7 +21,7 @@ describe('2026 node weight', () => {
     expect(rows[0]['1-lb']).toBe(9.5);
     expect(rows[0][2]).toBe(Math.round((11 / LB_PER_GALLON) * 10) / 10);
     expect(rows[0]['2-lb']).toBe(11);
-    expect(bucketPercent(10.5, 2.17)).toBeCloseTo(((10.5 - 2.17) / LB_PER_GALLON / 10) * 100);
+    expect(bucketPercent(10.5, 2.17)).toBeCloseTo(((10.5 - 2.17) / BUCKET_CAPACITY_LB) * 100);
     expect(series.map((item) => item.key).sort()).toEqual(['1', '2']);
     const byMinute = dailyWeightRows(
       [
@@ -53,9 +53,9 @@ describe('2026 node weight', () => {
     expect(year.from.toISOString().startsWith('2026-01-01')).toBe(true);
   });
 
-  test('a full 10 gallon bucket is 83.4 lb of sap plus the empty bucket', () => {
+  test('a full 5 gallon bucket is 41.7 lb of sap plus the empty bucket', () => {
     expect(LB_PER_GALLON).toBe(8.34);
-    expect(BUCKET_CAPACITY_LB).toBeCloseTo(83.4);
+    expect(BUCKET_CAPACITY_LB).toBeCloseTo(41.7);
     expect(bucketPercent(2.5 + BUCKET_CAPACITY_LB, 2.5)).toBeCloseTo(100);
     expect(bucketPercent(2.5, 2.5)).toBe(0);
   });

@@ -79,7 +79,7 @@ describe('reading validation', () => {
     assert.match(negative.errors.Weight, /negative/);
 
     const overflow = validateReading({ ...valid, Weight: BUCKET_CAPACITY_LB + 9, Ice_Present: false });
-    assert.match(overflow.errors.Weight, /10 gallons/);
+    assert.match(overflow.errors.Weight, /5 gallons/);
 
     const iced = validateReading({ ...valid, Weight: 200, Ice_Present: true });
     assert.match(iced.errors.Weight, /ice/i);
@@ -175,7 +175,7 @@ describe('spoilage alerts', () => {
       tareWeight: tare,
     });
     assert.equal(full[0].Alert_Type, 'Full Bucket');
-    assert.match(full[0].Description, /10 gallon/);
+    assert.match(full[0].Description, /5 gallon/);
 
     const iced = deriveAlerts({
       reading: {
