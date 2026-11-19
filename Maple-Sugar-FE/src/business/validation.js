@@ -108,6 +108,16 @@ export function validateReading(form) {
 }
 
 /**
+ * The collection form works in sap weight with the bucket already taken off,
+ * so there is usually no empty bucket to mention.
+ */
+function notMoreThanBucket(tareWeight) {
+  return tareWeight > 0
+    ? `That is not more than the empty bucket (${tareWeight} lb). Check the scale.`
+    : 'The sap weight must be more than 0 lb. Check the scale.';
+}
+
+/**
  * The error for an iced bucket's reweigh, or null. With ice tagged, the student
  * takes the bucket off the sensor, removes the ice, puts it back, and enters the
  * new weight. It must be lighter than the first weight (the ice came out) and
@@ -122,7 +132,7 @@ export function weightAfterIceError(afterIce, beforeIce, tareWeight = null) {
     return `Should be less than the weight with ice (${before} lb). Check the ice is out and the bucket is back on the sensor.`;
   }
   if (!(gallonsFromWeight(netWeight(after, tareWeight ?? 0)) > 0)) {
-    return `That is not more than the empty bucket (${tareWeight ?? 0} lb). Check the scale.`;
+    return notMoreThanBucket(tareWeight);
   }
   return null;
 }
@@ -150,7 +160,7 @@ export function validateCollectionEntry(form, { tareWeight = null } = {}) {
   if (isBlank(form.Weight)) {
     errors.Weight = 'Enter the sap weight.';
   } else if (!errors.Weight && !(gallonsFromWeight(netWeight(Number(form.Weight), tareWeight ?? 0)) > 0)) {
-    errors.Weight = `That is not more than the empty bucket (${tareWeight ?? 0} lb). Check the scale.`;
+    errors.Weight = notMoreThanBucket(tareWeight);
   }
 
   if (form.Ice_Present && 'Weight_After_Ice' in form) {
