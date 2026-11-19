@@ -26,20 +26,6 @@ Boot order: migrations, `clearSeededData`, promote bootstrap admins, load histor
 
 `migrations/003_seed.sql` inserts a fixture bush, but `db/clearSeed.js` removes it on each API start: nodes with the baked-in fixture LoRa ids, fixture stands (`Hill Bottom`, `Rabbi House`, `Sugar Shack`, `North Ridge`), and fixture gateways (`GW-SHACK`, `GW-RELAY`, `GW-CHABAD`, `GW-BARN`). Roles, users, guides, and nodes or gateways created from Deploy (including `GW-ALUMNI`) are kept. Migrations `010_drop_seed_metrics.sql` and `011_drop_seed_alerts.sql` removed fixture metrics (those with a temperature) and the first eight fixture alerts. Migration `009_two_nodes.sql` marks only `NODE-001` and `NODE-002` as tracked.
 
-## Routes added after the older API doc
-
-These exist in code but are missing from `Maple-Sugar-BE/docs/api.md` (verified in `routes/nodes.js` and `routes/reference.js`):
-
-| Method | Path | Capability |
-| --- | --- | --- |
-| POST | `/gateways` | `deploy_nodes` |
-| POST | `/nodes` | `deploy_nodes` |
-| DELETE | `/nodes/:id` | `deploy_nodes` |
-| PATCH | `/nodes/:id/details` | `deploy_nodes` |
-| PATCH | `/nodes/:id/interval` | `deploy_nodes` (`Report_Interval_Minutes`, 1 to 1440) |
-
-Ingest also accepts `Fault` (`load-cell`, `unstable`, `reversed`, `untared`) instead of a weight, returns `Desired_Interval_Seconds` per accepted reading, and answers 202 `Buffered: true` when Postgres is unreachable.
-
 ## Alerts
 
 Created by: metric derivation (`business/alerting.js`: Spoilage, Full Bucket, Tipped), weather (`weatherService`: Sap Run and harsh weather), node health (`nodeWatch`: Node Offline after 45 minutes, Missed Readings after two intervals), hardware faults from ingest, and manual flags (`POST /nodes/:id/flag`). An open alert of the same type on the same node is not duplicated.
