@@ -43,6 +43,30 @@ export function isFull(grossWeight, tareWeight = 0) {
   return net >= BUCKET_CAPACITY_LB - FULL_MARGIN_LB;
 }
 
+/**
+ * Share of the liquid line at which a collection should be scheduled (FR-003).
+ * Full only triggers within FULL_MARGIN_LB of the rim, which on a fast run is
+ * one or two reports from spilling; this leaves time to get a collector out.
+ * Mirrors COLLECTION_NEEDED_FRACTION in the backend's thresholds.js.
+ */
+export const COLLECTION_NEEDED_FRACTION = 0.75;
+
+export const BucketLevel = Object.freeze({ OK: 'ok', COLLECT: 'collect', FULL: 'full' });
+
+/** How urgent the bucket is: full, needs collecting soon, or fine. Null with no weight. */
+export function bucketLevel(grossWeight, tareWeight = 0) {
+  const net = netWeight(grossWeight, tareWeight);
+  if (net == null) return null;
+  if (net >= BUCKET_CAPACITY_LB - FULL_MARGIN_LB) return BucketLevel.FULL;
+  if (net >= BUCKET_CAPACITY_LB * COLLECTION_NEEDED_FRACTION) return BucketLevel.COLLECT;
+  return BucketLevel.OK;
+}
+
+/** Past the collection line but not yet full. */
+export function needsCollection(grossWeight, tareWeight = 0) {
+  return bucketLevel(grossWeight, tareWeight) === BucketLevel.COLLECT;
+}
+
 /** A negative net weight means the load cell lost the bucket entirely. */
 export function isTipped(grossWeight, tareWeight = 0) {
   if (grossWeight == null) return false;
