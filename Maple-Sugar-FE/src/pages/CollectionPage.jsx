@@ -28,7 +28,7 @@ import { bushAverageSugar, syrupEstimate } from '../business/sugarContent';
 import { validateCollectionEntry } from '../business/validation';
 import { CollectionLogHistory } from '../components/CollectionLogHistory';
 import { apiMode } from '../data/apiClient';
-import { loadDrafts, saveDrafts } from '../data/draftStore';
+import { loadDrafts, loadSelectedTree, saveDrafts, saveSelectedTree } from '../data/draftStore';
 import { CollectionHistory } from '../components/collection/CollectionHistory';
 import { RoundSummary } from '../components/collection/RoundSummary';
 import { SyrupEstimate } from '../components/collection/SyrupEstimate';
@@ -68,7 +68,8 @@ export function CollectionPage() {
   const save = useRecordCollection();
 
   const [round, setRound] = useState(() => collectionLocal.loadRound() ?? startRound());
-  const [selectedId, setSelectedId] = useState(null);
+  // Survives a reload, so a student who refreshes because data did not load lands on the same tree.
+  const [selectedId, setSelectedId] = useState(() => loadSelectedTree());
   const [finished, setFinished] = useState(false);
   const [drafts, setDrafts] = useState(() => loadDrafts());
   const [attempted, setAttempted] = useState(false);
@@ -92,6 +93,11 @@ export function CollectionPage() {
   useEffect(() => {
     saveDrafts(drafts);
   }, [drafts]);
+
+  // Keeps the open tree across a refresh too, typed in or not.
+  useEffect(() => {
+    saveSelectedTree(selectedId);
+  }, [selectedId]);
 
   // Uploads whatever was saved while out of signal, now and whenever the phone
   // comes back online while the page is open.
@@ -146,7 +152,9 @@ export function CollectionPage() {
       .sort((a, b) => (drafts[b.nodeId].savedAt ?? 0) - (drafts[a.nodeId].savedAt ?? 0));
     return open[0]?.nodeId ?? null;
   }, [trees, done, drafts]);
-  const activeId = selectedId ?? resumeId ?? pending?.nodeId ?? null;
+  // A remembered pick waits while the trees load, and is skipped if that tree is no longer in the list.
+  const pickedId = selectedId != null && trees.some((candidate) => candidate.nodeId === selectedId) ? selectedId : null;
+  const activeId = pickedId ?? resumeId ?? pending?.nodeId ?? null;
   const tree = trees.find((candidate) => candidate.nodeId === activeId) ?? null;
   const node = (bush.data ?? []).find((row) => row.NodeID === activeId) ?? null;
   const showSummary = round.entries.length > 0 && (finished || activeId == null);
