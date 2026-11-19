@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import AlertTitle from '@mui/material/AlertTitle';
 import Box from '@mui/material/Box';
@@ -14,11 +14,21 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import dayjs from 'dayjs';
-import { addToRound, loggedNodeIds, nextTreeToLog, sapGallonsFor, sensorDefaults, startRound } from '../business/collectionRound';
+import {
+  addToRound,
+  grossFromNet,
+  loggedNodeIds,
+  netFromGross,
+  nextTreeToLog,
+  sapGallonsFor,
+  sensorDefaults,
+  startRound,
+} from '../business/collectionRound';
 import { bushAverageSugar, syrupEstimate } from '../business/sugarContent';
 import { validateCollectionEntry } from '../business/validation';
 import { CollectionLogHistory } from '../components/CollectionLogHistory';
 import { apiMode } from '../data/apiClient';
+import { loadDrafts, saveDrafts } from '../data/draftStore';
 import { CollectionHistory } from '../components/collection/CollectionHistory';
 import { RoundSummary } from '../components/collection/RoundSummary';
 import { SyrupEstimate } from '../components/collection/SyrupEstimate';
@@ -42,13 +52,13 @@ function untouchedForm() {
 }
 
 function weightHelp(sensor, touched) {
-  if (touched) return 'Gross pounds, bucket included.';
+  if (touched) return 'Pounds of sap.';
   if (sensor.usable) return `From the sensor at ${timeOnly(sensor.recordedAt)}. Change it if your scale says different.`;
-  if (sensor.reason === 'offline') return "This tree's sensor is offline. Weigh the bucket and enter gross pounds.";
+  if (sensor.reason === 'offline') return "This tree's sensor is offline. Weigh the sap and enter it here.";
   if (sensor.reason === 'stale') {
-    return `The last sensor reading was ${dateTime(sensor.recordedAt)}. Weigh the bucket and enter gross pounds.`;
+    return `The last sensor reading was ${dateTime(sensor.recordedAt)}. Weigh the sap and enter it here.`;
   }
-  return 'Weigh the bucket and enter gross pounds, bucket included.';
+  return 'Weigh the sap and enter the pounds.';
 }
 
 export function CollectionPage() {
@@ -60,13 +70,15 @@ export function CollectionPage() {
   const [round, setRound] = useState(() => collectionLocal.loadRound() ?? startRound());
   const [selectedId, setSelectedId] = useState(null);
   const [finished, setFinished] = useState(false);
-  const [form, setForm] = useState(untouchedForm);
-  const [showNote, setShowNote] = useState(false);
+  const [drafts, setDrafts] = useState(() => loadDrafts());
   const [attempted, setAttempted] = useState(false);
   const [serverErrors, setServerErrors] = useState({});
   const [notice, setNotice] = useState(null);
   const [toast, setToast] = useState('');
   const [queued, setQueued] = useState(() => collectionLocal.queuedCount());
+  const formRef = useRef(null);
+  const weightRef = useRef(null);
+  const focusedTree = useRef(null);
 
   const refreshJournal = journal.refresh;
   const refreshBush = bush.refresh;
@@ -75,6 +87,11 @@ export function CollectionPage() {
   useEffect(() => {
     collectionLocal.saveRound(round.entries.length || round.label ? round : null);
   }, [round]);
+
+  // Keeps what has been typed for each tree across a refresh or a walk to another page.
+  useEffect(() => {
+    saveDrafts(drafts);
+  }, [drafts]);
 
   // Uploads whatever was saved while out of signal, now and whenever the phone
   // comes back online while the page is open.
@@ -122,15 +139,33 @@ export function CollectionPage() {
   const done = useMemo(() => loggedNodeIds(round), [round]);
 
   const pending = nextTreeToLog(trees, round, null);
-  const activeId = selectedId ?? pending?.nodeId ?? null;
+  // Back on the page after a refresh, pick up the tree the student was typing in.
+  const resumeId = useMemo(() => {
+    const open = trees
+      .filter((candidate) => !done.has(candidate.nodeId) && drafts[candidate.nodeId])
+      .sort((a, b) => (drafts[b.nodeId].savedAt ?? 0) - (drafts[a.nodeId].savedAt ?? 0));
+    return open[0]?.nodeId ?? null;
+  }, [trees, done, drafts]);
+  const activeId = selectedId ?? resumeId ?? pending?.nodeId ?? null;
   const tree = trees.find((candidate) => candidate.nodeId === activeId) ?? null;
   const node = (bush.data ?? []).find((row) => row.NodeID === activeId) ?? null;
   const showSummary = round.entries.length > 0 && (finished || activeId == null);
 
+  const draft = activeId == null ? null : drafts[activeId];
+  const form = useMemo(() => {
+    const collectedAt = draft?.collectedAt ? dayjs(draft.collectedAt) : null;
+    return { ...untouchedForm(), ...draft, collectedAt: collectedAt?.isValid() ? collectedAt : null };
+  }, [draft]);
+  const showNote = Boolean(draft?.showNote);
+
   const sensor = useMemo(() => sensorDefaults(node), [node]);
   const bushSugar = useMemo(() => bushAverageSugar(bush.data), [bush.data]);
 
-  const weightValue = form.weight ?? (sensor.usable ? sensor.weight.toFixed(1) : '');
+  // The student only ever deals in sap. The empty bucket comes off the sensor
+  // reading here and goes back on in the body that is saved, because the API
+  // and the sensor both work in gross pounds.
+  const tareLb = tree?.tareWeight ?? 0;
+  const weightValue = form.weight ?? (sensor.usable ? netFromGross(sensor.weight, tareLb).toFixed(1) : '');
   // The sensor cannot see ice: the person at the tree turns this on, and it starts off.
   const iceValue = form.ice ?? false;
 
@@ -144,14 +179,15 @@ export function CollectionPage() {
       ...(iceValue ? { Weight_After_Ice: form.weightAfterIce } : {}),
       Recorded_At: form.collectedAt?.toISOString(),
     },
-    { tareWeight: tree?.tareWeight ?? null },
+    // Every weight on the form is already sap, so there is no bucket left to subtract.
+    { tareWeight: 0 },
   );
   const errors = attempted ? { ...check.errors, ...serverErrors } : serverErrors;
 
   // Until an iced bucket is reweighed there is no sap weight to estimate from.
   const sapWeight = iceValue ? form.weightAfterIce : weightValue;
   const sapWeightError = iceValue ? check.errors.Weight_After_Ice || check.errors.Weight : check.errors.Weight;
-  const sapGallons = sapWeight === '' || sapWeightError ? null : sapGallonsFor(sapWeight, tree?.tareWeight);
+  const sapGallons = sapWeight === '' || sapWeightError ? null : sapGallonsFor(grossFromNet(sapWeight, tareLb), tareLb);
   // Save stays off until the bucket is reweighed without the ice.
   const iceBlocked = iceValue && Boolean(check.errors.Weight_After_Ice);
   const afterIceError =
@@ -170,19 +206,57 @@ export function CollectionPage() {
   const remainingAfter = trees.filter((candidate) => !done.has(candidate.nodeId) && candidate.nodeId !== activeId);
 
   const edit = (changes) => {
+    if (activeId == null) return;
     setServerErrors({});
-    setForm((prev) => ({ ...prev, ...changes }));
+    setDrafts((prev) => ({
+      ...prev,
+      [activeId]: {
+        ...prev[activeId],
+        ...changes,
+        collectedAt:
+          'collectedAt' in changes
+            ? (changes.collectedAt?.toISOString?.() ?? null)
+            : (prev[activeId]?.collectedAt ?? null),
+        savedAt: Date.now(),
+      },
+    }));
   };
 
+  const clearDraft = (nodeId) =>
+    setDrafts((prev) => {
+      if (!(nodeId in prev)) return prev;
+      const rest = { ...prev };
+      delete rest[nodeId];
+      return rest;
+    });
+
+  // Switching trees leaves the one you were on exactly as it was.
   const chooseTree = (nodeId) => {
     setSelectedId(nodeId);
     setFinished(false);
-    setForm(untouchedForm());
-    setShowNote(false);
     setAttempted(false);
     setServerErrors({});
     save.clearError();
   };
+
+  // Each tree brings the form into view with the weight ready to type, so a
+  // round is: tap or save, type a number, save.
+  const treeId = tree?.nodeId ?? null;
+  useEffect(() => {
+    if (treeId == null || showSummary) return;
+    if (focusedTree.current === null) {
+      focusedTree.current = treeId;
+      return;
+    }
+    if (focusedTree.current === treeId) return;
+    focusedTree.current = treeId;
+    formRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    const input = weightRef.current;
+    if (input) {
+      input.focus({ preventScroll: true });
+      input.select?.();
+    }
+  }, [treeId, showSummary]);
 
   const submit = async ({ finish = false } = {}) => {
     setNotice(null);
@@ -193,8 +267,8 @@ export function CollectionPage() {
     const body = {
       NodeID: tree.nodeId,
       // With ice, the sap is the reweigh after the ice came out; the first weight is kept too.
-      Weight: Number(iceValue ? form.weightAfterIce : weightValue),
-      Weight_Before_Ice: iceValue ? Number(weightValue) : null,
+      Weight: Number(grossFromNet(iceValue ? form.weightAfterIce : weightValue, tareLb)),
+      Weight_Before_Ice: iceValue ? Number(grossFromNet(weightValue, tareLb)) : null,
       // Null unless the student tested it. Never carried over or worked out.
       Sugar_Percent: form.sugar === '' ? null : Number(form.sugar),
       Ice_Present: iceValue,
@@ -223,8 +297,7 @@ export function CollectionPage() {
       const nextRound = addToRound(round, entryOf(isQueued));
       const upNext = nextTreeToLog(trees, nextRound, tree.nodeId);
       setRound(nextRound);
-      setForm(untouchedForm());
-      setShowNote(false);
+      clearDraft(tree.nodeId);
       setAttempted(false);
       setServerErrors({});
       setSelectedId(upNext?.nodeId ?? null);
@@ -267,8 +340,7 @@ export function CollectionPage() {
     setRound(startRound());
     setSelectedId(null);
     setFinished(false);
-    setForm(untouchedForm());
-    setShowNote(false);
+    setDrafts({});
     setAttempted(false);
     setNotice(null);
   };
@@ -338,6 +410,7 @@ export function CollectionPage() {
           ) : (
             <Card
               component="form"
+              ref={formRef}
               noValidate
               onSubmit={(event) => {
                 event.preventDefault();
@@ -359,7 +432,6 @@ export function CollectionPage() {
                     <>
                       <Typography variant="body2" color="text.secondary">
                         Bucket {tree.barcode ?? 'unassigned'}
-                        {tree.tareWeight != null ? ` · empty bucket ${tree.tareWeight} lb` : ''}
                       </Typography>
                       {tree.isOffline ? (
                         <Alert severity="warning">
@@ -371,6 +443,7 @@ export function CollectionPage() {
                       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                       <TextField
                         label={iceValue ? 'Weight with ice (lb)' : 'Sap weight (lb)'}
+                        inputRef={weightRef}
                         type="number"
                         value={weightValue}
                         onChange={(event) => edit({ weight: event.target.value })}
@@ -437,7 +510,7 @@ export function CollectionPage() {
                             onChange={(event) => edit({ weightAfterIce: event.target.value })}
                             required
                             error={Boolean(afterIceError)}
-                            helperText={afterIceError || 'Gross pounds with the ice out, bucket included.'}
+                            helperText={afterIceError || 'Pounds of sap with the ice out.'}
                             fullWidth
                             slotProps={{ htmlInput: { min: 0, step: 0.1, inputMode: 'decimal' } }}
                           />
@@ -463,7 +536,11 @@ export function CollectionPage() {
                           <DateTimePicker
                             label="Collected at"
                             value={form.collectedAt}
-                            onChange={(value) => edit({ collectedAt: value ?? dayjs() })}
+                            onChange={(value) => {
+                              // A half-typed date is not a date yet; wait for a whole one.
+                              if (value == null) edit({ collectedAt: dayjs() });
+                              else if (value.isValid()) edit({ collectedAt: value });
+                            }}
                             disableFuture
                             slotProps={{ textField: { fullWidth: true } }}
                           />
@@ -475,7 +552,7 @@ export function CollectionPage() {
 
                       {!(showNote || form.notes) || !form.collectedAt ? (
                         <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-                          {!(showNote || form.notes) ? <Button onClick={() => setShowNote(true)}>Add a note</Button> : null}
+                          {!(showNote || form.notes) ? <Button onClick={() => edit({ showNote: true })}>Add a note</Button> : null}
                           {!form.collectedAt ? (
                             <Button onClick={() => edit({ collectedAt: dayjs() })}>Collected earlier? Change the time</Button>
                           ) : null}

@@ -4,7 +4,9 @@ import {
   ROUND_MAX_AGE_HOURS,
   SENSOR_FRESH_MINUTES,
   addToRound,
+  grossFromNet,
   isRoundExpired,
+  netFromGross,
   nextTreeToLog,
   sapGallonsFor,
   sensorDefaults,
@@ -114,6 +116,7 @@ describe('validating a collection', () => {
   test('rejects a weight that is not above the empty bucket', () => {
     const result = validateCollectionEntry({ ...base, Weight: 2 }, { tareWeight: 2.5 });
     expect(result.errors.Weight).toMatch(/empty bucket \(2.5 lb\)/);
+    expect(validateCollectionEntry({ ...base, Weight: 0 }).errors.Weight).toMatch(/more than 0 lb/);
   });
 
   test('rejects an implausible sugar reading and warns on an unusual one', () => {
@@ -295,5 +298,19 @@ describe('building the request', () => {
   test('client references are unique', () => {
     const refs = new Set(Array.from({ length: 50 }, () => newClientRef()));
     expect(refs.size).toBe(50);
+  });
+});
+
+describe('taring the bucket behind the scenes', () => {
+  test('the student types sap weight and the empty bucket goes back on for saving', () => {
+    expect(grossFromNet('10', 2.5)).toBe(12.5);
+    expect(grossFromNet('', 2.5)).toBe('');
+    expect(grossFromNet('7.3')).toBe(7.3);
+  });
+
+  test('a sensor reading is shown as sap weight, never below zero', () => {
+    expect(netFromGross(12.5, 2.5)).toBe(10);
+    expect(netFromGross(1, 2.5)).toBe(0);
+    expect(netFromGross(null, 2.5)).toBeNull();
   });
 });
