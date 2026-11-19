@@ -66,4 +66,4 @@ Reconstructed from `git log` (newest first). There are no release tags or versio
 
 ## Unmerged remote work
 
-See [HANDOFF.md](HANDOFF.md#in-progress-or-not-confirmed): `30-email-notifications` and `31-edit-gateway-deployments` have commits not in `main`.
+See [HANDOFF.md](HANDOFF.md#open-branches-with-work-not-in-main): `#61_Complete_Invalid-input,device-fault_and_admin_recovery_workflows`, `106-bulk-add-students` and `issue-54/consistent-timestamps` have work not in `main`.
