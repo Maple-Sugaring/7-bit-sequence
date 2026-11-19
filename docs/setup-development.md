@@ -90,7 +90,3 @@ VITE values are baked in at image build time. After changing `VITE_*` rebuild: `
 | | `npm run check-ingest [-- <baseUrl>]` | Posts one sample to a running API and reads it back (needs `GATEWAY_INGEST_TOKEN` and `JWT_SECRET` in `.env`). Defaults to `http://localhost:8080/api`. |
 
 Tests need no Postgres, Redis, or Google (`test/env.js` sets fake values). Details: `Maple-Sugar-BE/docs/testing.md`.
-
-## Previewing in Claude Code
-
-`.claude/launch.json` (untracked) defines `frontend-mock`: Vite with `VITE_API_MODE=mock` on port 5174. Its paths are absolute to one machine; adjust before reuse.
