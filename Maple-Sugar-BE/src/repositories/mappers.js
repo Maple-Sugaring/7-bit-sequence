@@ -9,7 +9,7 @@
  */
 
 /** Timestamps go out as ISO 8601, which is what dayjs parses on the client. */
-function iso(value) {
+export function iso(value) {
   if (value == null) return null;
   return value instanceof Date ? value.toISOString() : String(value);
 }
@@ -25,7 +25,7 @@ function dateOnly(value) {
   return String(value).slice(0, 10);
 }
 
-function num(value) {
+export function num(value) {
   if (value == null) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
@@ -40,6 +40,7 @@ export function mapRole(row) {
 
 export function mapUser(row) {
   return {
+    Can_Overwrite_Measurements: row.can_overwrite_measurements,
     UserID: row.id,
     RoleID: row.role_id,
     First_Name: row.first_name ?? '',
@@ -97,6 +98,8 @@ export function mapNode(row) {
     Status_Code: row.status_code,
     Battery_Percent: num(row.battery_level),
     Signal_Rssi: row.signal_rssi,
+    Battery_Reported_At: iso(row.battery_reported_at),
+    Signal_Reported_At: iso(row.signal_reported_at),
     // Nested rather than flat: the device page passes this straight to a map
     // link, and a node with no recorded siting must be distinguishable from one
     // sited at the equator.
@@ -131,6 +134,15 @@ export function mapMetric(row) {
     Weather_Conditions: row.weather_conditions ?? null,
     Ice_Present: Boolean(row.ice_present),
     Sap_Flow_Rate_Lph: num(row.sap_flow_rate_lph),
+    // Who last corrected the reading through PATCH /metrics/:id, and when.
+    Data_Mode: row.data_mode,
+    Revision: row.revision ?? 0,
+    Correction_Note: row.correction_note ?? null,
+    Corrected_At: iso(row.corrected_at),
+    Corrected_By_UserID: row.corrected_by_user_id ?? null,
+    // A raw row is one reading. Rows built from metric_aggregates set this
+    // true and carry an `Aggregate` block (see metricAggregatesRepository).
+    Aggregated: false,
   };
 }
 
@@ -149,12 +161,15 @@ export function mapAlert(row) {
 export function mapCollectionLog(row) {
   return {
     LogID: row.id,
+    Data_Mode: row.data_mode,
     BucketID: row.bucket_id,
     UserID: row.user_id,
     NodeID: row.node_id,
     Collected_At: iso(row.collected_at),
     Volume_Collected: num(row.volume_collected),
     Quality_Notes: row.quality_notes ?? '',
+    Ice_Present: Boolean(row.ice_present),
+    Weight_Before_Ice_Lb: num(row.weight_before_ice_lb),
   };
 }
 

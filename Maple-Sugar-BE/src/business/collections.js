@@ -37,6 +37,22 @@ export function collectionVolumeGallons(grossLb, tareLb = 0) {
 }
 
 /**
+ * The checks on an iced bucket's reweigh. `Weight` is the weight after the ice
+ * came out, and `Weight_Before_Ice` the first weight with the ice still in.
+ * Returns the error for the after-ice field, or null.
+ */
+export function weightAfterIceError(afterIce, beforeIce) {
+  if (isBlank(afterIce)) return 'Remove the ice, reweigh the bucket, and enter the new weight.';
+  const after = Number(afterIce);
+  const before = Number(beforeIce);
+  if (!Number.isFinite(after) || after < 0) return 'Enter the weight in pounds.';
+  if (Number.isFinite(before) && after >= before) {
+    return `Should be less than the weight with ice (${before} lb). Check the ice is out and the bucket is back on the sensor.`;
+  }
+  return null;
+}
+
+/**
  * Field-keyed errors for a collection, in the shape the form attaches to
  * inputs. Reading checks (weight ceiling, sugar range, future dates) are reused
  * so a collection and a hand-entered reading can never disagree.
@@ -52,6 +68,23 @@ export function validateCollection(input, { tareWeight = null } = {}) {
     errors.Weight = 'Enter the sap weight.';
   } else if (!errors.Weight && collectionVolumeGallons(input.Weight, tareWeight) <= 0) {
     errors.Weight = `That is not more than the empty bucket (${tareWeight ?? 0} lb). Check the scale.`;
+  }
+
+  // An iced bucket sends both weights: Weight is the reweigh after the ice came
+  // out, Weight_Before_Ice the first one. Ice entries from before this flow, or
+  // still queued on a phone from an older version, have no first weight and are
+  // accepted as they were.
+  if (!isBlank(input.Weight_Before_Ice)) {
+    if (!input.Ice_Present) {
+      errors.Weight_Before_Ice = 'A weight before ice only goes with a bucket tagged as having ice.';
+    } else {
+      const before = validateReading({ Weight: input.Weight_Before_Ice, Ice_Present: true }).errors.Weight;
+      if (before) errors.Weight_Before_Ice = before;
+      else if (!errors.Weight) {
+        const after = weightAfterIceError(input.Weight, input.Weight_Before_Ice);
+        if (after) errors.Weight = after;
+      }
+    }
   }
 
   return { errors, isValid: Object.keys(errors).length === 0 };

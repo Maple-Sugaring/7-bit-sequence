@@ -10,6 +10,7 @@ export const EXPORT_COLUMNS = [
   { key: 'stand', csv: 'stand', label: 'Stand' },
   { key: 'weight', csv: 'weight_lb', label: 'Weight (lb)' },
   { key: 'sugar', csv: 'sugar_percent', label: 'Sugar (%)' },
+  { key: 'samples', csv: 'samples', label: 'Samples' },
 ];
 
 /** Keep only rows inside [from, to] (YYYY-MM-DD, inclusive), oldest first. */
@@ -26,6 +27,8 @@ export function exportRows(readings, from, to) {
       stand: row.stand ?? '',
       weight: row.Weight ?? '',
       sugar: row.Sugar_Percent ?? '',
+      samples: row.Aggregate?.Sample_Count ?? 1,
+      weightSamples: row.Aggregate ? (row.Aggregate.Counts?.Weight ?? row.Aggregate.Sample_Count) : 1,
     });
   }
   return rows.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
@@ -43,12 +46,19 @@ export function toCsv(rows) {
 }
 
 export function totals(rows) {
-  const weights = rows.filter((row) => row.weight !== '').map((row) => Number(row.weight)).filter(Number.isFinite);
-  const sum = weights.reduce((a, b) => a + b, 0);
+  let samples = 0;
+  let sum = 0;
+  for (const row of rows) {
+    const weight = row.weight === '' ? NaN : Number(row.weight);
+    if (!Number.isFinite(weight)) continue;
+    const n = row.weightSamples ?? 1;
+    samples += n;
+    sum += weight * n;
+  }
   return {
     count: rows.length,
     nodes: new Set(rows.map((row) => row.node)).size,
-    averageWeight: weights.length ? sum / weights.length : null,
+    averageWeight: samples ? sum / samples : null,
   };
 }
 

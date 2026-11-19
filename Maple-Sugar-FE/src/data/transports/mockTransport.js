@@ -2,8 +2,10 @@ import dayjs from 'dayjs';
 import { ApiError } from '../ApiError';
 import { Capability, ROLE_LABELS, can, roleFromId } from '../../business/permissions';
 import { sapGallonsFor } from '../../business/collectionRound';
-import { validateCollectionEntry } from '../../business/validation';
+import { validateCollectionEntry, validateReading } from '../../business/validation';
+import { bucketAlertFor } from '../../business/bucketAlerts';
 import { testWeightError } from '../../business/calibration';
+import { SENSOR_KIT } from '../../business/sensorLifecycle';
 import * as seed from '../fixtures/seed';
 
 /**
@@ -25,6 +27,8 @@ const db = {
   scheduleSlots: structuredClone(seed.scheduleSlots),
   journal: structuredClone(seed.journal),
   guides: structuredClone(seed.guides),
+  // Newest first, like GET /audit-events. Append-only: nothing edits or removes a row.
+  auditEvents: [],
 };
 
 // A reduce, not Math.max(...ids): the readings table is large enough that
@@ -39,11 +43,66 @@ let nextId = {
   log: maxId(db.collectionLogs, 'LogID') + 1,
   journal: maxId(db.journal, 'EntryID') + 1,
   command: 1,
+  lifecycle: seed.nodes.length + 1,
+  audit: 1,
 };
+
+/**
+ * Records an admin action (FR-019 audit history). Same columns as the
+ * backend's audit_events table, plus the actor's name so the panel can show
+ * who without the user roster. The backend writes these in the same routes.
+ */
+function audit(eventType, targetId, note = null) {
+  const actor = signedInUser();
+  db.auditEvents.unshift({
+    id: nextId.audit++,
+    event_type: eventType,
+    actor_id: actor?.UserID ?? null,
+    actor_name: actor ? `${actor.First_Name} ${actor.Last_Name}`.trim() : null,
+    target_id: targetId,
+    note,
+    created_at: dayjs().toISOString(),
+  });
+}
+
+/**
+ * Opens an alert unless one of that type is already open for the node, the
+ * backend's duplicate rule. A Full Bucket supersedes the earlier Collection
+ * Needed for the same bucket, so the list shows one bucket warning per tree.
+ */
+function raiseAlert(nodeId, alert) {
+  const open = (type) => db.alerts.find((row) => row.NodeID === nodeId && !row.Is_Resolved && row.Alert_Type === type);
+  if (open(alert.Alert_Type)) return null;
+  if (alert.Alert_Type === 'Full Bucket') {
+    const earlier = open('Collection Needed');
+    if (earlier) earlier.Is_Resolved = true;
+  }
+  const row = {
+    AlertID: nextId.alert++,
+    NodeID: nodeId,
+    Alert_Type: alert.Alert_Type,
+    Description: alert.Description,
+    Created_At: dayjs().toISOString(),
+    Is_Resolved: false,
+  };
+  db.alerts.unshift(row);
+  return row;
+}
+
+const sensorHistory = new Map(seed.nodes.map((node, index) => [node.NodeID, [{
+  id: index + 1, type: 'installation', date: '2026-10-25', sensorType: SENSOR_KIT, assumed: true,
+}]]));
+function requireLifecycleAccess() {
+  if (!session) throw new ApiError('Sign in to continue.', { status: 401 });
+  if (!can(roleFromId(session.user.RoleID), Capability.MANAGE_USERS)) {
+    throw new ApiError('Your role cannot manage sensor lifecycle.', { status: 403 });
+  }
+}
 
 // Calibration commands. A real node answers on its next packets; here each
 // GET moves a command one step (pending, sent, done) so the page shows them all.
 const calibrationCommands = [];
+const FAULT_ALERT_TYPES = { 'Load Cell': 'load-cell', 'Unstable Reading': 'unstable', 'Reversed Load Cell': 'reversed', Untared: 'untared' };
 
 let session = null;
 
@@ -203,6 +262,11 @@ function authorName(user) {
   return user ? `${user.First_Name} ${user.Last_Name}`.trim() : null;
 }
 
+/** The author's role when they submitted, matching the backend's stored tag. */
+function submittedRole(user) {
+  return user ? roleFromId(user.RoleID) : null;
+}
+
 const routes = [
   // ---- Auth -------------------------------------------------------------
   {
@@ -303,6 +367,33 @@ const routes = [
 
   // ---- Nodes ------------------------------------------------------------
   { method: 'GET', match: /^\/nodes$/, handler: () => db.nodes },
+  {
+    method: 'GET',
+    match: /^\/nodes\/lifecycle$/,
+    handler: () => {
+      requireLifecycleAccess();
+      return db.nodes.map((node) => ({
+        NodeID: node.NodeID, Name: node.Node_Name, Status: node.Status_Code,
+        Battery: node.Battery_Percent, Signal: node.Signal_Rssi, LastSeen: node.Last_Seen,
+        ReportInterval: node.Report_Interval_Seconds,
+        History: sensorHistory.get(node.NodeID) ?? [],
+      }));
+    },
+  },
+  {
+    method: 'POST',
+    match: /^\/nodes\/(\d+)\/lifecycle$/,
+    handler: ([id], { body }) => {
+      requireLifecycleAccess();
+      const nodeId = Number(id);
+      if (!db.nodes.some((node) => node.NodeID === nodeId)) return notFound('Node');
+      const event = { ...body, id: nextId.lifecycle++, assumed: false };
+      const history = [event, ...(sensorHistory.get(nodeId) ?? [])];
+      history.sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
+      sensorHistory.set(nodeId, history);
+      return { id: event.id };
+    },
+  },
   { method: 'GET', match: /^\/nodes\/board$/, handler: () => boardRows() },
   {
     method: 'POST',
@@ -348,10 +439,12 @@ const routes = [
 
       if (body?.Action === 'maintenance') {
         node.Status_Code = 3;
+        audit('node_maintenance', node.NodeID, `${node.Node_Name} parked in maintenance.`);
         return node;
       }
       if (body?.Action === 'online') {
         node.Status_Code = 1;
+        audit('node_online', node.NodeID, `${node.Node_Name} returned to service.`);
         return node;
       }
       if (body?.Action !== 'collect') invalid('Choose collect, maintenance or online.');
@@ -380,6 +473,7 @@ const routes = [
         EntryID: nextId.journal++,
         UserID: user?.UserID ?? null,
         Author: authorName(user),
+        Submitted_Role: submittedRole(user),
         NodeID: node.NodeID,
         Node_Name: node.Node_Name,
         BucketID: bucket?.BucketID ?? null,
@@ -408,7 +502,9 @@ const routes = [
     handler: ([id]) => {
       const index = db.nodes.findIndex((node) => node.NodeID === Number(id));
       if (index < 0) notFound('Node');
-      db.nodes.splice(index, 1);
+      const [removed] = db.nodes.splice(index, 1);
+      sensorHistory.delete(Number(id));
+      audit('node_deleted', removed.NodeID, `${removed.Node_Name} (${removed.Node_Code}) removed.`);
       return null;
     },
   },
@@ -424,12 +520,15 @@ const routes = [
     handler: ([id], { body }) => {
       const node = db.nodes.find((candidate) => candidate.NodeID === Number(id));
       if (!node) notFound('Node');
+      const before = { Node_Name: node.Node_Name, Stand: node.Stand, GatewayID: node.GatewayID, Rf_Tag: node.Rf_Tag, Notes: node.Notes };
       node.Node_Name = body?.Node_Name ?? node.Node_Name;
       node.Stand = body?.Stand ?? node.Stand;
       if (body?.GatewayID !== undefined) node.GatewayID = body.GatewayID ? Number(body.GatewayID) : null;
       node.Location = { lat: Number(body?.Latitude), lon: Number(body?.Longitude) };
       node.Rf_Tag = body?.Rf_Tag || null;
       node.Notes = body?.Notes || null;
+      const changed = Object.keys(before).filter((key) => before[key] !== node[key]);
+      audit('node_edited', node.NodeID, changed.length ? `Changed ${changed.join(', ')}.` : 'Saved details.');
       return node;
     },
   },
@@ -439,10 +538,12 @@ const routes = [
     handler: ([id], { body }) => {
       const node = db.nodes.find((candidate) => candidate.NodeID === Number(id));
       if (!node) notFound('Node');
+      const previous = node.Report_Interval_Seconds;
       node.Report_Interval_Seconds =
         body?.Report_Interval_Seconds != null
           ? Number(body.Report_Interval_Seconds)
           : Number(body?.Report_Interval_Minutes) * 60;
+      audit('node_interval_changed', node.NodeID, `Report interval ${previous ?? '?'}s to ${node.Report_Interval_Seconds}s.`);
       return node;
     },
   },
@@ -472,6 +573,11 @@ const routes = [
         Completed_At: null,
       };
       calibrationCommands.push(command);
+      audit(
+        body.Action === 'tare' ? 'node_tare' : 'node_calibrate',
+        node.NodeID,
+        body.Action === 'tare' ? `Tare sent to ${node.Node_Name}.` : `Calibrate ${node.Node_Name} to ${command.Pounds} lb.`,
+      );
       return command;
     },
   },
@@ -507,12 +613,43 @@ const routes = [
         node.Last_Seen = latest.Completed_At;
       }
       const calibrations = mine.filter((command) => command.Action === 'calibrate' && command.Status === 'done');
+      const scales = mine.filter((command) => command.Status === 'done' && command.Counts_Per_Lb != null);
+      const reading = db.metrics
+        .filter((metric) => metric.NodeID === node.NodeID)
+        .reduce((newest, metric) => (!newest || metric.Recorded_At > newest.Recorded_At ? metric : newest), null);
+      const fault = db.alerts.findLast(
+        (alert) => alert.NodeID === node.NodeID && !alert.Is_Resolved && FAULT_ALERT_TYPES[alert.Alert_Type],
+      );
       return {
         NodeID: node.NodeID,
         Report_Interval_Seconds: node.Report_Interval_Seconds ?? null,
         Command: latest ? { ...latest } : null,
         Last_Calibration: calibrations.length ? { ...calibrations.at(-1) } : null,
+        Last_Scale: scales.length ? { ...scales.at(-1) } : null,
+        Live: {
+          Weight: reading?.Weight ?? null,
+          Recorded_At: reading?.Recorded_At ?? null,
+          Last_Seen: node.Last_Seen ?? null,
+          Fault: fault
+            ? { Code: FAULT_ALERT_TYPES[fault.Alert_Type], Description: fault.Description, Since: fault.Created_At }
+            : null,
+        },
       };
+    },
+  },
+  {
+    method: 'DELETE',
+    match: /^\/nodes\/(\d+)\/calibration$/,
+    handler: ([id]) => {
+      const node = db.nodes.find((candidate) => candidate.NodeID === Number(id));
+      if (!node) notFound('Node');
+      const latest = calibrationCommands.filter((command) => command.NodeID === node.NodeID).at(-1) ?? null;
+      if (latest && ['pending', 'sent'].includes(latest.Status)) {
+        latest.Status = 'cancelled';
+        latest.Completed_At = dayjs().toISOString();
+        audit('calibration_cancelled', node.NodeID, `Cancelled the waiting ${latest.Action} for ${node.Node_Name}.`);
+      }
+      return latest ? { ...latest } : null;
     },
   },
   {
@@ -541,6 +678,7 @@ const routes = [
         Is_Resolved: false,
       };
       db.alerts.unshift(alert);
+      audit('node_flagged', node.NodeID, alert.Description);
       return alert;
     },
   },
@@ -568,6 +706,11 @@ const routes = [
       const node = db.nodes.find((candidate) => candidate.NodeID === Number(body.NodeID));
       if (!node) notFound('Node');
 
+      // The backend re-checks every reading and answers 422 with a message per
+      // field, so a bad entry is never stored (EIR-001). Blank time means now.
+      const { errors, isValid } = validateReading({ ...body, Recorded_At: body.Recorded_At ?? dayjs().toISOString() });
+      if (!isValid) invalid('Some fields need attention.', errors);
+
       const row = {
         MetricID: nextId.metric++,
         NodeID: Number(body.NodeID),
@@ -582,6 +725,19 @@ const routes = [
       };
 
       db.metrics.push(row);
+
+      // Same rule as the backend's deriveAlerts: a heavy bucket raises Collection
+      // Needed at 75% and Full Bucket near the rim (FR-003).
+      const tare = db.buckets.find((bucket) => bucket.NodeID === node.NodeID)?.Tare_Weight ?? null;
+      if (row.Weight != null && tare != null) {
+        const alert = bucketAlertFor({
+          nodeName: node.Node_Name,
+          grossWeight: row.Weight,
+          tareWeight: tare,
+          icePresent: row.Ice_Present,
+        });
+        if (alert) raiseAlert(node.NodeID, alert);
+      }
       return row;
     },
   },
@@ -591,7 +747,10 @@ const routes = [
     handler: ([id], { body }) => {
       const row = db.metrics.find((candidate) => candidate.MetricID === Number(id));
       if (!row) notFound('Reading');
+      const changed = Object.keys(body ?? {}).filter((key) => row[key] !== body[key]);
+      const note = changed.map((key) => `${key} ${row[key] ?? '—'} to ${body[key] ?? '—'}`).join(', ');
       Object.assign(row, body);
+      if (changed.length) audit('measurement_overwritten', row.MetricID, `Reading ${row.MetricID}: ${note}.`);
       return row;
     },
   },
@@ -612,8 +771,35 @@ const routes = [
     handler: ([id], { body }) => {
       const alert = db.alerts.find((candidate) => candidate.AlertID === Number(id));
       if (!alert) notFound('Alert');
+      const wasResolved = Boolean(alert.Is_Resolved);
       Object.assign(alert, body);
+      // Who acknowledged it is the "resolution is recorded" step (FR-019).
+      if (body?.Is_Resolved !== undefined && Boolean(body.Is_Resolved) !== wasResolved) {
+        const node = db.nodes.find((candidate) => candidate.NodeID === alert.NodeID);
+        audit(
+          alert.Is_Resolved ? 'alert_resolved' : 'alert_reopened',
+          alert.AlertID,
+          `${alert.Alert_Type}${node ? ` at ${node.Node_Name}` : ''}.`,
+        );
+      }
       return alert;
+    },
+  },
+
+  // ---- Audit history (admins) -------------------------------------------
+  {
+    method: 'GET',
+    match: /^\/audit-events$/,
+    handler: (unused, { query }) => {
+      const user = currentUser();
+      if (!can(roleFromId(user.RoleID), Capability.MANAGE_USERS)) {
+        throw new ApiError('Only administrators can see the audit history.', { status: 403 });
+      }
+      const before = query?.before ? Number(query.before) : null;
+      const limit = Math.min(100, Math.max(1, Number(query?.limit) || 25));
+      const older = db.auditEvents.filter((event) => before == null || event.id < before);
+      const items = older.slice(0, limit);
+      return { items, next: older.length > limit ? items.at(-1).id : null };
     },
   },
 
@@ -666,11 +852,25 @@ const routes = [
       if (existing) return { Entry: existing, Log: null, Duplicate: true };
 
       const bucket = db.buckets.find((candidate) => candidate.NodeID === node.NodeID) ?? null;
+      // An iced bucket sends the reweigh as Weight and the first weight as
+      // Weight_Before_Ice; the form validator takes them the other way round.
+      const beforeIce = body.Weight_Before_Ice == null ? null : Number(body.Weight_Before_Ice);
+      if (beforeIce != null && !body.Ice_Present) {
+        invalid('A weight before ice only goes with a bucket tagged as having ice.', {
+          Weight_Before_Ice: 'A weight before ice only goes with a bucket tagged as having ice.',
+        });
+      }
       const { errors, isValid } = validateCollectionEntry(
-        { ...body, Recorded_At: body.Collected_At },
+        beforeIce == null
+          ? { ...body, Recorded_At: body.Collected_At }
+          : { ...body, Weight: beforeIce, Weight_After_Ice: body.Weight, Recorded_At: body.Collected_At },
         { tareWeight: bucket?.Tare_Weight ?? null },
       );
-      if (!isValid) invalid(Object.values(errors)[0], errors);
+      if (!isValid) {
+        const { Weight_After_Ice: afterIce, ...rest } = errors;
+        const details = afterIce ? { ...rest, Weight: afterIce } : rest;
+        invalid(Object.values(details)[0], details);
+      }
 
       const collectedAt = body.Collected_At ?? dayjs().toISOString();
       const weight = Number(body.Weight);
@@ -698,6 +898,8 @@ const routes = [
         Collected_At: collectedAt,
         Volume_Collected: Math.round(sapGallonsFor(weight, bucket?.Tare_Weight ?? 0) * 100) / 100,
         Quality_Notes: notes,
+        Ice_Present: Boolean(body.Ice_Present),
+        Weight_Before_Ice_Lb: beforeIce,
       };
       db.collectionLogs.push(log);
 
@@ -705,6 +907,7 @@ const routes = [
         EntryID: nextId.journal++,
         UserID: user.UserID,
         Author: authorName(user),
+        Submitted_Role: submittedRole(user),
         NodeID: node.NodeID,
         Node_Name: node.Node_Name,
         BucketID: bucket?.BucketID ?? null,
@@ -714,6 +917,7 @@ const routes = [
         Weight_Lb: weight,
         Sugar_Percent: sugar,
         Ice_Present: Boolean(body.Ice_Present),
+        Weight_Before_Ice_Lb: beforeIce,
         Round_Label: body.Round_Label ?? null,
         Client_Ref: body.Client_Ref ?? null,
       };
@@ -766,7 +970,9 @@ const routes = [
     handler: ([id], { body }) => {
       const user = db.users.find((candidate) => candidate.UserID === Number(id));
       if (!user) notFound('User');
+      const changed = Object.keys(body ?? {}).filter((key) => user[key] !== body[key]);
       Object.assign(user, body);
+      if (changed.length) audit('user_updated', user.UserID, `${authorName(user)}: changed ${changed.join(', ')}.`);
       return user;
     },
   },
@@ -776,7 +982,8 @@ const routes = [
     handler: ([id]) => {
       const index = db.users.findIndex((candidate) => candidate.UserID === Number(id));
       if (index === -1) notFound('User');
-      db.users.splice(index, 1);
+      const [removed] = db.users.splice(index, 1);
+      audit('user_deleted', removed.UserID, `${authorName(removed)} (${removed.Email}) removed.`);
       return null;
     },
   },
@@ -977,6 +1184,7 @@ const routes = [
         EntryID: nextId.journal++,
         UserID: user?.UserID ?? null,
         Author: authorName(user),
+        Submitted_Role: submittedRole(user),
         NodeID: node?.NodeID ?? null,
         Node_Name: node?.Node_Name ?? null,
         BucketID: body?.BucketID ? Number(body.BucketID) : null,

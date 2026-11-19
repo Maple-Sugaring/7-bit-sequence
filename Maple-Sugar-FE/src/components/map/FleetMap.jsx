@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { Marker, Popup, useMap } from 'react-leaflet';
 import { groupByLocation, worstStatus } from '../../business/nodeMapStatus';
+import { AccessibleMapLabel } from './AccessibleMapLabel';
 import { BaseMap } from './mapCore';
 import { DEFAULT_CENTER } from './mapConstants';
 import { NodePopupContent } from './NodePopupContent';
@@ -11,6 +12,9 @@ const SELECT_SETTLE_MS = 150;
 
 const prefersReducedMotion = () =>
   typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+const statusWord = (status) =>
+  status ? String(status).charAt(0).toUpperCase() + String(status).slice(1) : '';
 
 function FitToMarkers({ groups }) {
   const map = useMap();
@@ -48,21 +52,52 @@ function GroupMarker({ group, selected }) {
     // Primitives, not the array: the array is rebuilt on every data refresh,
     // which would re-fly the map and reopen a popup the user closed.
   }, [selected, map, lat, lon]);
-  const label = group.nodes.map((node) => node.Node_Name).join(', ');
+    const names = group.nodes.map((node) => node.Node_Name).join(', ');
+    // WCAG 1.1.1 / 4.1.2: status is shown only by icon color/shape, so it must be
+      // in the marker's accessible name too. Leaflet ignores `alt` on divIcon
+      // markers (alt only applies to <img> icons), so set aria-label directly.
+
+
+  const label = `${names}${status ? `, ${statusWord(status)}` : ''}${selected ? ', selected' : ''}`;
+  useEffect(() => {
+    ref.current?.getElement()?.setAttribute('aria-label', label);
+  }, [label, icon]); // icon change re-renders the element, so re-apply
+ 
   return (
-    <Marker ref={ref} position={group.position} icon={icon} title={label} alt={label} keyboard>
+    <Marker
+      ref={ref}
+      position={group.position}
+      icon={icon}
+      title={names}
+      alt={label}
+      keyboard
+      eventHandlers={{ add: (e) => e.target.getElement()?.setAttribute('aria-label', label) }}
+    >
       <Popup>
         <NodePopupContent nodes={group.nodes} />
       </Popup>
     </Marker>
   );
 }
-
-/** Status-coded markers; nodes sharing a point share one marker and popup. */
-export function FleetMap({ nodes, selectedId = null, height = 520, scrollWheelZoom = true }) {
+ 
+/**
+ * Status-coded markers; nodes sharing a point share one marker and popup.
+ *
+ * WCAG 4.1.2 (V12): the map container is named via AccessibleMapLabel.
+ * `description` should point to the non-map alternative on the same page.
+ */
+export function FleetMap({
+  nodes,
+  selectedId = null,
+  height = 520,
+  scrollWheelZoom = true,
+  label = 'Fleet Map',
+  description = 'Use arrow keys to pan and plus or minus to zoom. Tab to reach each tree marker and press Enter to open its details. Every node is also listed on this page.',
+}) {
   const groups = useMemo(() => groupByLocation(nodes), [nodes]);
   return (
     <BaseMap center={DEFAULT_CENTER} zoom={16} height={height} scrollWheelZoom={scrollWheelZoom}>
+      <AccessibleMapLabel label={label} description={description} />
       <FitToMarkers groups={groups} />
       {groups.map((group) => (
         <GroupMarker
@@ -74,3 +109,4 @@ export function FleetMap({ nodes, selectedId = null, height = 520, scrollWheelZo
     </BaseMap>
   );
 }
+ 

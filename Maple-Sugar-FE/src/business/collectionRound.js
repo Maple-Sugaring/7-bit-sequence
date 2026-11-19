@@ -86,6 +86,24 @@ export function sensorDefaults(node, now = new Date()) {
   return { ...base, usable: true, reason: null };
 }
 
+/**
+ * The scale is tared for the student: they only ever see and type the weight
+ * of the sap. The empty bucket is added back here before anything is saved or
+ * validated, because the API and the sensor both work in gross pounds.
+ */
+export function grossFromNet(netLb, tareLb = 0) {
+  if (netLb == null || netLb === '') return '';
+  const net = Number(netLb);
+  if (!Number.isFinite(net)) return netLb;
+  return Math.round((net + (tareLb ?? 0)) * 100) / 100;
+}
+
+/** The sap weight a sensor reading stands for, with the empty bucket taken off. */
+export function netFromGross(grossLb, tareLb = 0) {
+  if (grossLb == null || grossLb === '') return null;
+  return Math.max(0, Math.round((Number(grossLb) - (tareLb ?? 0)) * 100) / 100);
+}
+
 /** Sap gallons for a gross weight, with the empty bucket taken off. */
 export function sapGallonsFor(grossLb, tareLb = 0) {
   if (grossLb == null || grossLb === '') return null;

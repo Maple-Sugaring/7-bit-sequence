@@ -2,8 +2,8 @@ import { Router } from 'express';
 import { invalid, notFound } from '../lib/ApiError.js';
 import { Capability } from '../business/permissions.js';
 import { requireAnyCapability, requireCapability } from '../middleware/authenticate.js';
-import { cacheKeys, cacheNamespaces, TTL } from '../cache/cacheKeys.js';
-import { invalidateNamespaces, readThrough } from '../cache/redisCache.js';
+import { cacheNamespaces } from '../cache/cacheKeys.js';
+import { invalidateNamespaces } from '../cache/redisCache.js';
 import { validateCollectionLog } from '../business/validation.js';
 import * as collectionLogsRepository from '../repositories/collectionLogsRepository.js';
 import * as bucketsRepository from '../repositories/bucketsRepository.js';
@@ -17,17 +17,14 @@ collectionLogsRouter.get(
   async (req, res) => {
   const filters = collectionLogsQuery.parse(req.query);
 
-  // Only the season-only query is cached under the shared key; adding a date
-  // range makes it a one-off that is not worth an entry.
-  const seasonOnly = filters.season != null && !filters.from && !filters.to;
-  if (!seasonOnly) {
-    return res.json(await collectionLogsRepository.listCollectionLogs(filters));
+  if (filters.limit != null || filters.before != null) {
+    const limit = filters.limit ?? 20;
+    const logs = await collectionLogsRepository.listCollectionLogs({ ...filters, limit: limit + 1 });
+    const items = logs.slice(0, limit);
+    return res.json({ items, next: logs.length > limit ? items.at(-1).LogID : null });
   }
 
-  const logs = await readThrough(cacheKeys.collectionLogs(filters.season), TTL.COLLECTION_LOGS, () =>
-    collectionLogsRepository.listCollectionLogs(filters),
-  );
-  res.json(logs);
+  res.json(await collectionLogsRepository.listCollectionLogs(filters));
 });
 
 collectionLogsRouter.post('/', requireCapability(Capability.RECORD_DATA), async (req, res) => {

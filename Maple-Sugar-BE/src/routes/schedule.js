@@ -58,7 +58,7 @@ scheduleRouter.post('/slots', requireCapability(Capability.MANAGE_SCHEDULE), asy
   const buckets = await queryAll(
     `select b.id, n.id as node_id, n.stand, n.node_name
        from buckets b
-       join node n on n.id = b.node_id
+       join node n on n.id = b.node_id and (not n.demo_fixture or active_data_mode() = 'test')
       where b.id = any($1::int[])`,
     [body.BucketIDs],
   );

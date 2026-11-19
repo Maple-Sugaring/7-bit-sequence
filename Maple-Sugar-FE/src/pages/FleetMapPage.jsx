@@ -9,6 +9,7 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
+import Typography from '@mui/material/Typography';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { statusCounts } from '../business/nodeMapStatus';
 import { EmptyBlock, ErrorBlock, LoadingBlock } from '../components/common/StateBlock';
@@ -17,9 +18,9 @@ import { FleetMap } from '../components/map/FleetMap';
 import { FleetMapLegend } from '../components/map/FleetMapLegend';
 import { FleetNodeList } from '../components/map/FleetNodeList';
 import { useFleetMap } from '../services/hooks';
-
+ 
 const ALL_SITES = 'all';
-
+ 
 export function FleetMapPage() {
   const fleet = useFleetMap();
   const [params, setParams] = useSearchParams();
@@ -27,7 +28,7 @@ export function FleetMapPage() {
   const [query, setQuery] = useState('');
   const [mobileView, setMobileView] = useState('list');
   const wide = useMediaQuery('(min-width:900px)');
-
+ 
   const sites = useMemo(
     () => [...new Set(fleet.nodes.map((node) => node.Stand).filter(Boolean))].sort(),
     [fleet.nodes],
@@ -37,7 +38,7 @@ export function FleetMapPage() {
   const siteParam = params.get('site');
   const site = siteParam && sites.includes(siteParam) ? siteParam : ALL_SITES;
   const nodeParam = Number.parseInt(params.get('node') ?? '', 10);
-
+ 
   const bySite = useMemo(
     () => (site === ALL_SITES ? fleet.nodes : fleet.nodes.filter((node) => node.Stand === site)),
     [fleet.nodes, site],
@@ -57,7 +58,7 @@ export function FleetMapPage() {
     Number.isInteger(nodeParam) && visible.some((node) => node.NodeID === nodeParam && node.hasLocation)
       ? nodeParam
       : null;
-
+ 
   const update = (key, value) => {
     const next = new URLSearchParams(params);
     if (value == null || value === ALL_SITES) next.delete(key);
@@ -75,10 +76,21 @@ export function FleetMapPage() {
     update('node', nodeId);
     setMobileView('map');
   };
-
+ 
   const list = <FleetNodeList nodes={visible} selectedId={selectedId} onSelect={select} />;
-  const map = <FleetMap nodes={visible} selectedId={selectedId} height={wide ? 'calc(100vh - 260px)' : '70vh'} />;
-
+  const map = (
+    <FleetMap
+      nodes={visible}
+      selectedId={selectedId}
+      height={wide ? 'calc(100vh - 260px)' : '70vh'}
+      description={
+        wide
+          ? 'Use arrow keys to pan and plus or minus to zoom. Tab to reach each tree marker and press Enter to open its details. Every node is also in the list beside the map.'
+          : 'Use arrow keys to pan and plus or minus to zoom. Tab to reach each tree marker and press Enter to open its details. Switch to List view for the same nodes as a list.'
+      }
+    />
+  );
+ 
   let body;
   if (fleet.error && fleet.nodes.length === 0) {
     body = <ErrorBlock error={fleet.error} onRetry={fleet.refresh} />;
@@ -98,12 +110,12 @@ export function FleetMapPage() {
   } else {
     body = mobileView === 'map' ? map : <Paper variant="outlined">{list}</Paper>;
   }
-
+ 
   return (
     <>
       <PageHeader
         title="Fleet map"
-        subtitle="Every node by status. Pick a degraded or stale tree to open it."
+        subtitle="The fleet map displays every node by status. Pick a degraded or stale tree to open it."
         actions={
           <Button onClick={fleet.refresh} sx={{ minHeight: 44 }}>
             Refresh
@@ -148,6 +160,13 @@ export function FleetMapPage() {
           ) : null}
         </Stack>
         <FleetMapLegend counts={counts} active={statuses} onToggle={toggleStatus} noLocation={noLocation} />
+        {/* WCAG 4.1.3: announce filter/search results without moving focus */}
+        {!fleet.loading && fleet.nodes.length > 0 ? (
+          <Typography variant="body2" color="text.secondary" role="status" aria-live="polite">
+            Showing {visible.length} of {bySite.length} node{bySite.length === 1 ? '' : 's'}
+            {site !== ALL_SITES ? ` at ${site}` : ''}
+          </Typography>
+        ) : null}
       </Stack>
       {fleet.stale ? (
         <Alert severity="warning" sx={{ mb: 2 }}>

@@ -3,22 +3,36 @@ import { useNavigate } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
+import Divider from '@mui/material/Divider';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import FormGroup from '@mui/material/FormGroup';
 import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
+import ToggleButton from '@mui/material/ToggleButton';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import dayjs from 'dayjs';
-import { LIVE_FROM, LIVE_TO, TIME_UNITS, dailyWeightRows, presetRange } from '../business/liveWeight';
+import { 
+  COMPARE_REF_YEAR,
+  LIVE_FROM,
+  LIVE_TO,
+  LIVE_YEAR,
+  TIME_UNITS,
+  dailyWeightRows,
+  presetRange,
+  yearlyWeightRows, 
+} from '../business/liveWeight';
 import { exportFileName, exportRows, buildPdf, toCsv } from '../business/weightExport';
 import { Capability } from '../business/permissions';
 import { ChartCard } from '../components/charts/ChartCard';
+import { TREE_COLORS } from '../components/charts/chartColors';
 import { WeightChart } from '../components/charts/SeriesChart';
 import { PageHeader } from '../components/common/PageHeader';
 import { EmptyBlock } from '../components/common/StateBlock';
+import { ReadingCorrections } from '../components/ReadingCorrections';
 import { useAuth } from '../context/auth';
 import { useBush, useReadings } from '../services/hooks';
 
@@ -43,9 +57,64 @@ const PRESETS = [
   ['2026', 'Overall year'],
 ];
 
+// Years offered in Compare mode. Years with no node readings simply draw no lines.
+const YEAR_OPTIONS = Array.from({ length: 5 }, (_, index) => LIVE_YEAR - index);
+
+// In Compare mode color = year, dash = tree.
+const TREE_DASHES = [undefined, '6 3', '2 3', '10 3 2 3'];
+
+const monthDay = (iso) => String(iso).slice(5, 10);
+const yearOf = (iso) => Number(String(iso).slice(0, 4));
+
 function nodeLabel(node) {
   const code = node.Node_Code ? ` · ${node.Node_Code}` : '';
   return `${node.Node_Name}${code}`;
+}
+
+const TOTAL_KEY = 'total';
+
+// Sum the given series keys on one row. Missing readings are skipped; null only if every key is empty.
+function sumKeys(row, keys, suffix = '') {
+  let total = 0;
+  let seen = false;
+  for (const key of keys) {
+    const value = row[`${key}${suffix}`];
+    if (value == null || value === '' || !Number.isFinite(Number(value))) continue;
+    total += Number(value);
+    seen = true;
+  }
+  return seen ? Math.round(total * 10) / 10 : null;
+}
+
+/** Range mode: one "All trees" line. Compare mode: one line per year. Same row shape as the helpers return. */
+function collapseToTotal({ rows, series }, { compare, years }) {
+  const groups = compare
+    ? years
+        .map((year) => ({
+          key: `${TOTAL_KEY}-${year}`,
+          name: `${year} total`,
+          year,
+          members: series.filter((item) => item.year === year).map((item) => item.key),
+        }))
+        .filter((group) => group.members.length > 0)
+    : [{ key: TOTAL_KEY, name: 'All trees (total)', members: series.map((item) => item.key) }];
+
+  return {
+    // Same series shape as before, without the internal `members` list.
+    series: groups.map((group) => {
+      const item = { ...group };
+      delete item.members;
+      return item;
+    }),
+    rows: rows.map((row) => {
+      const out = { Date: row.Date };
+      for (const group of groups) {
+        out[group.key] = sumKeys(row, group.members);
+        out[`${group.key}-lb`] = sumKeys(row, group.members, '-lb');
+      }
+      return out;
+    }),
+  };
 }
 
 export function SapDataPage() {
@@ -61,8 +130,34 @@ export function SapDataPage() {
   const [unit, setUnit] = useState('day');
   // null = untouched (every tree selected); an array is the user's explicit choice, possibly empty.
   const [picked, setPicked] = useState(null);
+    // When on, individual trees are unselected and the chart shows the sum of every tree.
+  const [showTotal, setShowTotal] = useState(false);
   const [pdfState, setPdfState] = useState({ busy: false, error: '' });
-  const readings = useReadings({ from: LIVE_FROM, to: LIVE_TO });
+  const [mode, setMode] = useState('range'); // 'range' | 'compare'
+  const [years, setYears] = useState([LIVE_YEAR, LIVE_YEAR - 1]);
+  // Earliest year fetched so far. Only ever moves back, so deselecting a year never refetches.
+  const [loadedFrom, setLoadedFrom] = useState(LIVE_YEAR);
+  const [windowFrom, setWindowFrom] = useState(dayjs(`${COMPARE_REF_YEAR}-01-01`));
+  const [windowTo, setWindowTo] = useState(dayjs(`${COMPARE_REF_YEAR}-12-31`));
+  const compare = mode === 'compare';
+  const readings = useReadings({
+    from: loadedFrom === LIVE_YEAR ? LIVE_FROM : `${loadedFrom}-01-01T00:00:00.000Z`,
+    to: LIVE_TO,
+  });
+
+  const sortedYears = useMemo(() => [...years].sort((a, b) => b - a), [years]);
+
+  function changeMode(next) {
+    if (!next) return;
+    setMode(next);
+    if (next === 'compare') setLoadedFrom((current) => Math.min(current, ...years));
+  }
+
+  function changeYears(value) {
+    const next = typeof value === 'string' ? value.split(',').map(Number) : value;
+    setYears(next);
+    if (next.length) setLoadedFrom((current) => Math.min(current, ...next));
+  }
 
   const nodes = useMemo(() => {
     return [...(bush.data ?? [])].sort((a, b) => {
@@ -73,7 +168,10 @@ export function SapDataPage() {
   }, [bush.data]);
 
   const boardIds = useMemo(() => new Set(nodes.map((node) => node.NodeID)), [nodes]);
-  const selectedIds = useMemo(() => picked ?? nodes.map((node) => node.NodeID), [picked, nodes]);
+  const allIds = useMemo(() => nodes.map((node) => node.NodeID), [nodes]);
+  const selectedIds = useMemo(() => picked ?? allIds, [picked, allIds]);
+  // Total mode needs every tree's data to sum, even though no tree checkbox is ticked.
+  const chartIds = showTotal ? allIds : selectedIds;
 
   const tracked = useMemo(
     () => (readings.data ?? []).filter((row) => boardIds.has(row.NodeID)),
@@ -81,43 +179,89 @@ export function SapDataPage() {
   );
 
   const weights = useMemo(() => {
+    if (compare) {
+      const startMd = windowFrom?.isValid() ? windowFrom.format('MM-DD') : '01-01';
+      const endMd = windowTo?.isValid() ? windowTo.format('MM-DD') : '12-31';
+      const yearSet = new Set(years);
+      const ranged = tracked.filter((row) => {
+        if (!chartIds.includes(row.NodeID)) return false;
+        if (!yearSet.has(yearOf(row.Recorded_At))) return false;
+        const day = monthDay(row.Recorded_At);
+        return day >= startMd && day <= endMd;
+      });
+      const result = yearlyWeightRows(ranged, { nodeIds: chartIds, years: sortedYears, unit });
+      return {
+        ranged,
+        ...(showTotal ? collapseToTotal(result, { compare: true, years: sortedYears }) : result),
+      };
+    }
     const start = from?.format('YYYY-MM-DD');
     const end = to?.format('YYYY-MM-DD');
     const ranged = tracked.filter((row) => {
-      if (!selectedIds.includes(row.NodeID)) return false;
+      if (!chartIds.includes(row.NodeID)) return false;
       const date = String(row.Recorded_At).slice(0, 10);
       if (start && date < start) return false;
       if (end && date > end) return false;
       return true;
     });
+    const result = dailyWeightRows(ranged, { nodeIds: chartIds, unit });
     return {
       ranged,
-      ...dailyWeightRows(ranged, {
-        nodeIds: selectedIds,
-        unit,
-      }),
+      ...(showTotal ? collapseToTotal(result, { compare: false }) : result),
     };
-  }, [tracked, selectedIds, from, to, unit]);
+  }, [tracked, chartIds, showTotal, from, to, unit, compare, years, sortedYears, windowFrom, windowTo]);
+
+  // Compare mode: color by year, dash by tree, so many lines stay readable.
+  const chartSeries = useMemo(() => {
+    if (!compare) return weights.series;
+    const nodeOrder = nodes.map((node) => String(node.NodeID));
+    return weights.series.map((item) => ({
+      ...item,
+      color: TREE_COLORS[sortedYears.indexOf(item.year) % TREE_COLORS.length],
+      dash: showTotal ? undefined : TREE_DASHES[nodeOrder.indexOf(item.nodeId) % TREE_DASHES.length],
+    }));
+  }, [compare, showTotal, weights.series, nodes, sortedYears]);
+
+  // Export covers the span of the selected years; `ranged` is already trimmed to the chosen
+  // years, trees and month/day window, so unselected years never reach the file.
+  const exportStart = compare ? `${Math.min(...years, LIVE_YEAR)}-01-01` : from?.format('YYYY-MM-DD');
+  const exportEnd = compare ? `${Math.max(...years, 0) || LIVE_YEAR}-12-31` : to?.format('YYYY-MM-DD');
 
   const stands = useMemo(() => {
     const names = [...new Set(nodes.map((node) => node.Stand).filter(Boolean))];
     return names;
   }, [nodes]);
 
+  const treeSummary = `${stands.length === 1 ? stands[0] : 'Deployed trees'} · ${nodes.length} node${nodes.length === 1 ? '' : 's'}`;
   const chartDescription = nodes.length
-    ? `${stands.length === 1 ? stands[0] : 'Deployed trees'} · ${nodes.length} node${nodes.length === 1 ? '' : 's'}. All start selected.`
+    ? showTotal
+      ? compare
+        ? `${treeSummary}. One line per year, each the combined sap of every tree.`
+        : `${treeSummary}. Combined sap of every tree.`
+      : compare
+      ? `${treeSummary}. Color is the year, line style is the tree.`
+      : `${treeSummary}. All start selected.`
     : 'Weight history for every tree registered on Deploy.';
+  const chartTitle = compare ? 'Year-over-year weight' : `${LIVE_YEAR} weight`;
 
   const emptyTitle = nodes.length === 0
     ? 'No trees deployed yet'
-    : selectedIds.length === 0
+    : chartIds.length === 0
       ? 'No trees selected'
-      : 'No weight in this range';
+      : compare && years.length === 0
+        ? 'No years selected'
+        : compare
+          ? 'No weight in these years'
+          : 'No weight in this range';
   const emptyDescription = nodes.length === 0
     ? 'Register a gateway and add nodes on Deploy, then flash the Heltecs. Readings show up here once packets arrive.'
-    : selectedIds.length === 0
+    : chartIds.length === 0
       ? 'Pick at least one tree to chart its weight.'
-      : 'Widen the dates, or wait for the next LoRa packet from a selected tree.';
+      : compare && years.length === 0
+        ? 'Pick at least one year to compare.'
+        : compare
+          ? 'Widen the date window or add another year. Years before the nodes went live have no readings.'
+          : 'Widen the dates, or wait for the next LoRa packet from a selected tree.';
 
   const loading = bush.loading || readings.loading;
 
@@ -127,7 +271,7 @@ export function SapDataPage() {
         size="small"
         variant="outlined"
         disabled={weights.ranged.length === 0}
-        onClick={() => exportCsv(weights.ranged, from?.format('YYYY-MM-DD'), to?.format('YYYY-MM-DD'))}
+        onClick={() => exportCsv(weights.ranged, exportStart, exportEnd)}
       >
         Export CSV
       </Button>
@@ -136,8 +280,8 @@ export function SapDataPage() {
         variant="outlined"
         disabled={weights.ranged.length === 0 || pdfState.busy}
         onClick={async () => {
-          const start = from?.format('YYYY-MM-DD');
-          const end = to?.format('YYYY-MM-DD');
+          const start = exportStart;
+          const end = exportEnd;
           setPdfState({ busy: true, error: '' });
           try {
             const doc = await buildPdf(exportRows(weights.ranged, start, end), {
@@ -164,11 +308,20 @@ export function SapDataPage() {
         subtitle="Chart gallons in each bucket over time, then export a CSV or PDF when you need it."
       />
 
+      
+        {/* <ToggleButtonGroup size="small" exclusive value={mode} onChange={(_, next) => changeMode(next)} aria-label="View">
+          <ToggleButton value="range">Current range</ToggleButton>
+          <ToggleButton value="compare">Compare years</ToggleButton>
+        </ToggleButtonGroup> */}
+
       <Box
         sx={{
           display: 'grid',
           // One column on phones, where `order` puts each heading above its own control.
-          gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.7fr)' },
+          gridTemplateColumns: { 
+            xs: 'minmax(0, 1fr)',
+            md: 'auto minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.7fr)'
+          },
           gridTemplateRows: { md: 'auto auto' },
           columnGap: 2,
           rowGap: 1.5,
@@ -177,15 +330,50 @@ export function SapDataPage() {
           mb: 2,
         }}
       >
+        <Typography variant="subtitle2" component="h2" sx={{ order: 0 }}>
+          View
+        </Typography>
         <Typography variant="subtitle2" component="h2" sx={{ order: { xs: 1, md: 0 } }}>
-          Time period
+          {compare ? 'Years' : 'Time period'}
         </Typography>
         <Typography variant="subtitle2" component="h2" sx={{ order: { xs: 3, md: 0 } }}>
           Time increment
         </Typography>
         <Typography variant="subtitle2" component="h2" sx={{ order: { xs: 5, md: 0 } }}>
-          Date selection
+          {compare ? 'Date window (each year)' : 'Date selection'}
         </Typography>
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={mode}
+          onChange={(_, next) => changeMode(next)}
+          aria-label="View"
+          sx={{ order: 0, alignSelf: 'start' }}
+        >
+          <ToggleButton value="range">Current range</ToggleButton>
+          <ToggleButton value="compare">Compare years</ToggleButton>
+        </ToggleButtonGroup>
+        {compare ? (
+          <TextField
+            select
+            size="small"
+            label="Select"
+            value={years}
+            onChange={(event) => changeYears(event.target.value)}
+            slotProps={{
+              select: { multiple: true, renderValue: (value) => [...value].sort((a, b) => b - a).join(', ') },
+              inputLabel: { shrink: true },
+            }}
+            sx={{ order: { xs: 2, md: 0 } }}
+          >
+            {YEAR_OPTIONS.map((year) => (
+              <MenuItem key={year} value={year}>
+                <Checkbox size="small" checked={years.includes(year)} />
+                {year}
+              </MenuItem>
+            ))}
+          </TextField>
+        ) : (
         <TextField
           select
           size="small"
@@ -211,6 +399,7 @@ export function SapDataPage() {
             </MenuItem>
           ))}
         </TextField>
+        )}
         <TextField
           select
           size="small"
@@ -225,7 +414,30 @@ export function SapDataPage() {
             </MenuItem>
           ))}
         </TextField>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ order: { xs: 6, md: 0 } }}>
+        {compare ? (
+        <Stack direction="row" spacing={1} sx={{ order: { xs: 6, md: 0 } }}>
+          <DatePicker
+            label="From"
+            value={windowFrom}
+            views={['month', 'day']}
+            format="MMM D"
+            onChange={setWindowFrom}
+            slotProps={{ textField: { size: 'small' } }}
+            sx={{ flex: 1, minWidth: 0 }}
+          />
+          <DatePicker
+            label="To"
+            value={windowTo}
+            views={['month', 'day']}
+            format="MMM D"
+            minDate={windowFrom ?? undefined}
+            onChange={setWindowTo}
+            slotProps={{ textField: { size: 'small' } }}
+            sx={{ flex: 1, minWidth: 0 }}
+          />
+        </Stack>
+        ) : (
+        <Stack direction="row" spacing={1} sx={{ order: { xs: 6, md: 0 } }}>
           <DatePicker
             label="From"
             value={from}
@@ -248,6 +460,7 @@ export function SapDataPage() {
             sx={{ flex: 1, minWidth: 0 }}
           />
         </Stack>
+        )}
       </Box>
 
       {pdfState.error ? (
@@ -289,21 +502,47 @@ export function SapDataPage() {
               </Typography>
             ) : (
               <FormGroup>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      size="small"
+                      checked={showTotal}
+                      onChange={(event) => {
+                        // On: clear every tree. Off: go back to all trees.
+                        setShowTotal(event.target.checked);
+                        setPicked(event.target.checked ? [] : null);
+                      }}
+                    />
+                  }
+                  label={
+                    <Box>
+                      <Typography variant="body2">Total of all trees</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {compare ? 'One line per year' : `Sum of ${nodes.length} node${nodes.length === 1 ? '' : 's'}`}
+                      </Typography>
+                    </Box>
+                  }
+                />
+                <Divider sx={{ my: 0.5 }} />
                 {nodes.map((node) => (
                   <FormControlLabel
                     key={node.NodeID}
                     control={
                       <Checkbox
                         size="small"
-                        checked={selectedIds.includes(node.NodeID)}
-                        onChange={() =>
+                        checked={!showTotal && selectedIds.includes(node.NodeID)}
+                        onChange={() => {
+                          if (showTotal) {
+                            setShowTotal(false);
+                            setPicked([node.NodeID]);
+                          }
                           setPicked((current) => {
                             const base = current ?? nodes.map((item) => item.NodeID);
                             return base.includes(node.NodeID)
                               ? base.filter((id) => id !== node.NodeID)
                               : [...base, node.NodeID];
-                          })
-                        }
+                          });
+                        }}
                       />
                     }
                     label={
@@ -324,15 +563,19 @@ export function SapDataPage() {
               <Button
                 size="small"
                 sx={{ mt: 1 }}
-                onClick={() => setPicked(selectedIds.length === nodes.length ? [] : null)}
+                onClick={() => {
+                  const allOn = !showTotal && selectedIds.length === nodes.length;
+                  setShowTotal(false);
+                  setPicked(allOn ? [] : null);
+                }}
               >
-                {selectedIds.length === nodes.length ? 'Clear all' : 'Select all'}
+                {!showTotal && selectedIds.length === nodes.length ? 'Clear all' : 'Select all'}
               </Button>
             ) : null}
           </Box>
           <Box data-tour="sugar-woods-chart" sx={{ flex: 1, minWidth: 0 }}>
             <ChartCard
-              title="2026 weight"
+              title={chartTitle}
               description={chartDescription}
               action={exportActions}
               height={phone ? 300 : 420}
@@ -341,11 +584,12 @@ export function SapDataPage() {
               emptyTitle={emptyTitle}
               emptyDescription={emptyDescription}
             >
-              <WeightChart rows={weights.rows} series={weights.series} unit={unit} />
+              <WeightChart rows={weights.rows} series={chartSeries} unit={unit} />
             </ChartCard>
           </Box>
         </Stack>
       )}
+      <ReadingCorrections readings={weights.ranged} refresh={readings.refresh} canOverwrite={user?.canOverwriteMeasurements} />
     </>
   );
 }

@@ -5,7 +5,7 @@ import { describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import '../env.js';
-import { ackOutcome, downlinkFor, isOpen } from '../../src/business/calibration.js';
+import { ackOutcome, downlinkFor, isOpen, liveState } from '../../src/business/calibration.js';
 import {
   calibrationBody,
   ingestReadingBody,
@@ -59,6 +59,47 @@ describe('calibration commands', () => {
     assert.equal(ackOutcome(open, { Command_Id: 7, Command_Ok: true }), null);
     assert.equal(ackOutcome(open, {}), null);
     assert.equal(ackOutcome({ ...open, Status: 'done' }, { Command_Id: 8, Command_Ok: true }), null);
+  });
+
+  test('a tare ack still reports the scale factor the node is using', () => {
+    const open = { CommandID: 9, Action: 'tare', Status: 'sent' };
+    assert.deepEqual(ackOutcome(open, { Command_Id: 9, Command_Ok: 1, Counts_Per_Lb: 7358 }), {
+      status: 'done',
+      countsPerLb: 7358,
+    });
+  });
+
+  test('the live state is the last weight, the last packet, and the fault the node is reporting', () => {
+    const live = liveState(
+      { NodeID: 1, Last_Seen: '2026-10-25T23:59:10.000Z' },
+      { Weight: 4.64, Recorded_At: '2026-10-25T23:58:40.000Z' },
+      {
+        Alert_Type: 'Unstable Reading',
+        Description: 'Tree 1 samples disagreed during one measurement.',
+        Created_At: '2026-10-25T23:59:10.000Z',
+      },
+    );
+    assert.deepEqual(live, {
+      Weight: 4.64,
+      Recorded_At: '2026-10-25T23:58:40.000Z',
+      Last_Seen: '2026-10-25T23:59:10.000Z',
+      Fault: {
+        Code: 'unstable',
+        Description: 'Tree 1 samples disagreed during one measurement.',
+        Since: '2026-10-25T23:59:10.000Z',
+      },
+    });
+    assert.equal(liveState({}, null, { Alert_Type: 'Load Cell', Description: '', Created_At: null }).Fault.Code, 'load-cell');
+    assert.equal(liveState({}, null, { Alert_Type: 'Reversed Load Cell', Description: '', Created_At: null }).Fault.Code, 'reversed');
+  });
+
+  test('a node that has sent nothing has an empty live state', () => {
+    assert.deepEqual(liveState({ NodeID: 2, Last_Seen: null }, null, null), {
+      Weight: null,
+      Recorded_At: null,
+      Last_Seen: null,
+      Fault: null,
+    });
   });
 
   test('calibrate needs a test weight the cell can hold', () => {

@@ -23,6 +23,8 @@ export function toRequest(entry) {
     // Null when the sap was not tested. Never a guess.
     Sugar_Percent: entry.Sugar_Percent ?? null,
     Ice_Present: Boolean(entry.Ice_Present),
+    // An iced bucket's first weight; Weight is then the reweigh with the ice out.
+    Weight_Before_Ice: entry.Ice_Present ? (entry.Weight_Before_Ice ?? null) : null,
     Collected_At: entry.Collected_At,
     Notes: (entry.Notes ?? entry.Process_Notes ?? '').trim(),
     Round_Label: entry.Round_Label?.trim() || null,

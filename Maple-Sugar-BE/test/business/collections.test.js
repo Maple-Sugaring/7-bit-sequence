@@ -31,7 +31,7 @@ describe('optional numbers in request bodies', () => {
     const collection = createCollectionBody.parse({ NodeID: 1, Weight: 20, Sugar_Percent: null });
     assert.equal(collection.Sugar_Percent, null);
 
-    assert.equal(updateMetricBody.parse({ Sugar_Percent: null }).Sugar_Percent, null);
+    assert.equal(updateMetricBody.parse({ Sugar_Percent: null, Expected_Revision: 0, Correction_Reason: 'Invalid reading' }).Sugar_Percent, null);
   });
 
   test('numbers and numeric strings still parse, and an absent field stays absent', () => {
@@ -76,6 +76,26 @@ describe('collection rules', () => {
     const result = validateCollection({ NodeID: 1, Weight: 2 }, { tareWeight: 2.5 });
     assert.equal(result.isValid, false);
     assert.match(result.errors.Weight, /empty bucket/);
+  });
+
+  test('an iced bucket is reweighed lighter after the ice comes out', () => {
+    const iced = { NodeID: 1, Ice_Present: true, Weight_Before_Ice: 60 };
+    assert.equal(validateCollection({ ...iced, Weight: 45 }).isValid, true);
+    assert.match(validateCollection({ ...iced, Weight: 60 }).errors.Weight, /less than the weight with ice \(60 lb\)/);
+    assert.match(validateCollection({ ...iced, Weight: 72 }).errors.Weight, /less than the weight with ice/);
+    assert.match(
+      validateCollection({ ...iced, Weight: 2 }, { tareWeight: 2.5 }).errors.Weight,
+      /empty bucket/,
+      'the after-ice weight is the sap weight, so it still has to be above the empty bucket',
+    );
+  });
+
+  test('a weight before ice needs the ice tag, and old ice entries without one still save', () => {
+    assert.match(
+      validateCollection({ NodeID: 1, Weight: 45, Ice_Present: false, Weight_Before_Ice: 60 }).errors.Weight_Before_Ice,
+      /tagged as having ice/,
+    );
+    assert.equal(validateCollection({ NodeID: 1, Weight: 45, Ice_Present: true }).isValid, true);
   });
 
   test('titles name the tree', () => {
@@ -140,6 +160,8 @@ function journalRow(entry) {
     sugar_percent: entry.sugar_percent,
     ice_present: entry.ice_present,
     round_label: entry.round_label,
+    submitted_role: entry.submitted_role,
+    weight_before_ice_lb: entry.weight_before_ice_lb,
     author_name: 'Sam Student',
     node_name: 'Alumni House - Tree 1',
   };
@@ -197,6 +219,8 @@ function handle(text, params = []) {
       collected_at: params[3],
       volume_collected: params[4],
       quality_notes: params[5],
+      ice_present: params[6],
+      weight_before_ice_lb: params[7],
     };
     db.logs.push(row);
     return rows([row]);
@@ -216,6 +240,8 @@ function handle(text, params = []) {
       ice_present: params[8],
       round_label: params[9],
       client_ref: params[10],
+      submitted_role: params[11],
+      weight_before_ice_lb: params[12],
     };
     db.journal.push(entry);
     return rows([{ id: entry.id }]);
@@ -311,6 +337,8 @@ describe('POST /collections', () => {
     assert.equal(db.journal[0].round_label, 'Morning round');
     assert.equal(db.journal[0].client_ref, REF);
     assert.equal(response.json.Entry.Round_Label, 'Morning round');
+    assert.equal(db.journal[0].submitted_role, 'Student', 'the entry keeps the role its author submitted as');
+    assert.equal(response.json.Entry.Submitted_Role, 'Student');
     assert.equal(response.json.Log.Volume_Collected, 4);
   });
 
@@ -331,6 +359,31 @@ describe('POST /collections', () => {
     assert.equal(response.status, 201);
     assert.equal(db.metrics[0].sugar_percent, 2.3);
     assert.equal(db.journal[0].sugar_percent, 2.3);
+  });
+
+  test('an iced bucket saves the after-ice weight as the sap and keeps the first weight', async () => {
+    reset();
+    const after = 2.5 + 8.34 * 4;
+    const response = await post({ ...untested, Weight: after, Ice_Present: true, Weight_Before_Ice: 52 });
+
+    assert.equal(response.status, 201);
+    assert.equal(db.metrics[0].weight, after, 'the reading is the weight without the ice');
+    assert.equal(db.logs[0].volume_collected, 4, 'gallons come from the after-ice weight');
+    assert.equal(db.journal[0].weight_lb, after);
+    assert.equal(db.journal[0].weight_before_ice_lb, 52);
+    assert.equal(response.json.Entry.Weight_Before_Ice_Lb, 52);
+    assert.equal(db.logs[0].ice_present, true, 'the history list reads the log, so it carries the flag too');
+    assert.equal(db.logs[0].weight_before_ice_lb, 52);
+    assert.equal(response.json.Log.Weight_Before_Ice_Lb, 52);
+  });
+
+  test('refuses a reweigh that is not lighter, and writes nothing', async () => {
+    reset();
+    const response = await post({ ...untested, Weight: 52, Ice_Present: true, Weight_Before_Ice: 50 });
+
+    assert.equal(response.status, 422);
+    assert.match(response.json.details.Weight, /less than the weight with ice/);
+    assert.equal(db.metrics.length + db.logs.length + db.journal.length, 0);
   });
 
   test('closes the open full-bucket alerts for that tree', async () => {

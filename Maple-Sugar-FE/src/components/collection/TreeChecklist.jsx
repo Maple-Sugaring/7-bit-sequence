@@ -7,8 +7,8 @@ import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 
 /** "Alumni House - Tree 1" under an "Alumni House" heading reads better as "Tree 1". */
 function shortLabel(tree) {
-  const prefix = tree.stand ? `${tree.stand} - ` : '';
-  return prefix && tree.label.startsWith(prefix) ? tree.label.slice(prefix.length) : tree.label;
+  const prefix = tree.stand ? `${tree.stand.trim()} - ` : '';
+  return prefix && tree.label.toLowerCase().startsWith(prefix.toLowerCase()) ? tree.label.slice(prefix.length) : tree.label;
 }
 
 /**
@@ -17,23 +17,25 @@ function shortLabel(tree) {
  * waste a heading row, so runs of them share one row under their full names.
  */
 function layout(trees) {
-  const stands = [];
+  // Keyed on the cleaned-up name and not on neighbours, so a stand is one
+  // group however its trees are ordered and however it was typed.
+  const byKey = new Map();
   for (const tree of trees) {
-    const key = tree.stand ?? 'Other trees';
-    const last = stands[stands.length - 1];
-    if (last?.stand === key) last.trees.push(tree);
-    else stands.push({ stand: key, trees: [tree] });
+    const name = (tree.stand ?? '').trim() || 'Other trees';
+    const key = name.toLowerCase();
+    if (!byKey.has(key)) byKey.set(key, { stand: name, trees: [] });
+    byKey.get(key).trees.push(tree);
   }
 
   const blocks = [];
-  for (const group of stands) {
+  for (const [key, group] of byKey) {
     if (group.trees.length > 1) {
-      blocks.push({ key: group.stand, heading: group.stand, trees: group.trees, short: true });
+      blocks.push({ key, heading: group.stand, trees: group.trees, short: true });
       continue;
     }
     const previous = blocks[blocks.length - 1];
     if (previous && !previous.heading) previous.trees.push(group.trees[0]);
-    else blocks.push({ key: `singles-${group.stand}`, heading: null, trees: [group.trees[0]], short: false });
+    else blocks.push({ key: `singles-${key}`, heading: null, trees: [group.trees[0]], short: false });
   }
   return blocks;
 }

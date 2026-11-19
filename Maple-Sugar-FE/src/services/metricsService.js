@@ -33,7 +33,8 @@ export function enrichReadings(metrics, nodes, buckets) {
 
     return {
       ...row,
-      id: row.MetricID,
+      // Hourly aggregates from the hub have no MetricID (BRU-007).
+      id: row.MetricID ?? `agg-${row.Aggregate?.AggregateID}`,
       nodeName: node?.Node_Name ?? `Node ${row.NodeID}`,
       stand: node?.Stand ?? null,
       barcode: bucket?.Barcode_ID ?? null,
@@ -50,7 +51,7 @@ export function enrichReadings(metrics, nodes, buckets) {
       season: seasonOf(row.Recorded_At),
       semester: semesterOf(row.Recorded_At),
       // Null Recorded_By_UserID means the ESP32 sent it unattended.
-      source: row.Recorded_By_UserID == null ? 'Sensor' : 'Manual',
+      source: row.Aggregated ? 'Sensor (hourly average)' : row.Recorded_By_UserID == null ? 'Sensor' : 'Manual',
     };
   });
 }
@@ -101,7 +102,13 @@ export async function getRecordingTargets() {
         isOffline: node.Status_Code === 0,
       };
     })
-    .sort((a, b) => a.label.localeCompare(b.label));
+    // By stand and then name, so a round walks one stand at a time and the
+    // checklist never shows the same stand twice.
+    .sort(
+      (a, b) =>
+        (a.stand ?? '\uffff').trim().localeCompare((b.stand ?? '\uffff').trim(), undefined, { sensitivity: 'base' }) ||
+        a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' }),
+    );
 }
 
 export function submitReading(reading) {

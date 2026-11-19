@@ -78,8 +78,35 @@ A sensor or manual reading.
 | `weather_conditions` | Short label. |
 | `ice_present` | Frozen sap may weigh more than 10 gallons. |
 | `fill_level_percent`, `sap_flow_rate_lph` | Legacy hardware columns. The app computes fill from weight. |
+| `corrected_at`, `corrected_by_user_id` | Set by `PATCH /metrics/:id`. A corrected row is never aggregated. |
+| `recorded_manually` | Sticky manual-source flag, retained when deleting an author detaches `recorded_by_user_id`. |
 
-Indexed on `(node_id, recorded_at desc)`, `recorded_at`, `sap_season(recorded_at)`, `bucket_id`.
+Indexed on `(node_id, recorded_at desc)`, `recorded_at`, `sap_season(recorded_at)`, `bucket_id`. The partial index `metrics_retention_eligible_idx` covers the rows the retention job may compact.
+
+### Retention and aggregation (BRU-007, migration 018)
+
+`METRICS_RAW_RETENTION_DAYS` (default 400, so last season stays raw for comparisons) sets the raw window. `0` turns aggregation off. Any other value below 30 is refused at boot. The cutoff is `now − days`, floored to a UTC hour. An eligible row strictly before the cutoff is moved into `metric_aggregates`, and a row at or after the cutoff stays raw.
+
+Eligible means a sensor reading (`recorded_manually = false` and `recorded_by_user_id is null`) that was never corrected (`corrected_at is null`). Manual and corrected readings stay raw forever so their provenance stays visible, including after an author is deleted. The migration marks existing attributed readings as manual; an insert/update trigger preserves that flag. Aggregates are kept indefinitely.
+
+#### `metric_aggregates`
+
+One row per `node_id`, `bucket_id` and UTC hour (`period_start`, `period_seconds = 3600`). The rows are unique on `(node_id, coalesce(bucket_id, 0), period_start, period_seconds)`.
+
+| Column | Notes |
+| --- | --- |
+| `reading_count`, `first_recorded_at`, `last_recorded_at` | How many raw rows the period holds, and the time span they cover. |
+| `<field>_count`, `_sum`, `_min`, `_max` | For `weight`, `temperature`, `sugar_percent` and `sap_flow_rate_lph`. The count is the number of non-null values. The sum is exact `numeric`. The average is `sum / count`, and it is null when the count is 0. |
+| `ice_present_count` | Readings flagged icy. |
+| `last_run_id`, `created_at`, `updated_at` | Which run last folded readings into this row. |
+
+Sums are stored instead of means. A coarser average is `Σsum / Σcount`, which weights every hour by the readings it holds. `weather_conditions` is not kept, because sensor rows do not set it.
+
+Hours suit this data because America/New_York is offset from UTC by whole hours, and that stays true across DST. A UTC hour therefore never crosses a local day, week, month or sap season, and those rollups come out exact. In a zone with a fractional offset, an hour is counted in the local period that contains its start.
+
+#### `metric_retention_runs`
+
+One row per run: `status` (`running`, `succeeded`, `failed`, `interrupted`), `trigger` (`schedule` or `manual`), `dry_run`, `triggered_by_user_id`, `raw_retention_days`, `cutoff`, `rows_compacted`, `buckets_written`, `started_at`, `finished_at` and `error`.
 
 ### `collection_logs`
 

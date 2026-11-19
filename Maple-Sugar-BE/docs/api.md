@@ -79,10 +79,11 @@ Redirect URIs must match `PUBLIC_API_URL`:
 | POST | `/nodes/:id/flag` | Flag node | `{ type, description }` creates an alert. |
 | POST | `/nodes/:id/actions` | Session, then a finer check | `{ Action, Notes }`. |
 | PATCH | `/nodes/:id/interval` | Deploy nodes | `{ Report_Interval_Seconds }` from 10 to 86400 (or the older `{ Report_Interval_Minutes }`, 1 to 1440). The node picks it up on its next packet. |
-| GET | `/nodes/:id/calibration` | Deploy nodes | `{ NodeID, Report_Interval_Seconds, Command, Last_Calibration }`. `Command` is the newest calibration request; `Last_Calibration` the newest successful test-weight one. |
+| GET | `/nodes/:id/calibration` | Deploy nodes | `{ NodeID, Report_Interval_Seconds, Command, Last_Calibration, Last_Scale, Live }`. `Command` is the newest calibration request; `Last_Calibration` the newest successful test-weight one; `Last_Scale` the newest command the node acked with its counts per pound (a tare's ack carries it too). `Live` is `{ Weight, Recorded_At, Last_Seen, Fault }`: the newest stored weight, the node's last packet, and the fault it is reporting (`{ Code, Description, Since }` with `Code` one of `load-cell`, `unstable`, `reversed`, `untared`, or null). |
 | POST | `/nodes/:id/calibration` | Deploy nodes | `{ Action: "tare" }` or `{ Action: "calibrate", Pounds }` (0.5 to 400). 202 with the queued command. Replaces a request still waiting. |
+| DELETE | `/nodes/:id/calibration` | Deploy nodes | Cancels the waiting command so the next ingest reply no longer carries it. 200 with the node's latest command: the cancelled one, or the settled one when the node answered first. A node that already heard the downlink may still apply it. |
 
-A calibration command has `CommandID`, `Action`, `Pounds`, `Status` (`pending` → `sent` → `done` or `failed`, or `cancelled` when replaced), `Counts_Per_Lb` (what the node reported), and the times. It reaches the node through the ingest reply below. See `docs/hardware.md#calibration-from-the-app`.
+A calibration command has `CommandID`, `Action`, `Pounds`, `Status` (`pending` → `sent` → `done` or `failed`, or `cancelled` when replaced or cancelled), `Counts_Per_Lb` (what the node reported), and the times. It reaches the node through the ingest reply below. See `docs/hardware.md#calibration-from-the-app`.
 
 `Action`:
 
@@ -93,11 +94,43 @@ A calibration command has `CommandID`, `Action`, `Pounds`, `Status` (`pending` �
 
 | Method | Path | Auth | |
 | --- | --- | --- | --- |
-| GET | `/metrics` | Dashboard or data table | Query: `nodeId`, `season`, `from`, `to`. |
+| GET | `/metrics` | Dashboard or data table | Query: `nodeId`, `season`, `from`, `to`, `aggregates` (default `true`). |
+| GET | `/metrics/rollup` | Dashboard or data table | Weighted averages per local period. Query: `nodeId`, `season`, `from`, `to`, `interval` (`hour`, `day` (default), `week`, `month`), `timeZone` (IANA, default `America/New_York`). |
+| GET | `/metrics/retention` | Edit (admin) | Retention policy, raw and aggregate row counts, table sizes, estimated bytes saved, the last 10 runs. |
+| POST | `/metrics/retention/run` | Edit (admin) | Runs the retention job now. Body `{ "dryRun": true }` reports `Rows_Eligible` and `Periods_Affected` and changes nothing. 409 `RETENTION_BUSY` while another run holds the lock, 409 `RETENTION_DISABLED` when retention is off. |
 | POST | `/metrics` | Record | Manual reading. `Recorded_By` is the session, not the body. |
-| PATCH | `/metrics/:id` | Edit (admin) | Cannot change `NodeID`. |
+| PATCH | `/metrics/:id` | Edit (admin) | Cannot change `NodeID`. Stamps `Corrected_At` and `Corrected_By_UserID`. |
 
 Body fields: `NodeID`, `BucketID`, `Recorded_At`, `Weight`, `Temperature`, `Sugar_Percent`, `Weather_Conditions`, `Ice_Present`.
+
+Every row also has `Corrected_At`, `Corrected_By_UserID` and `Aggregated`.
+
+### Compacted periods (BRU-007)
+
+After `METRICS_RAW_RETENTION_DAYS` (400 by default), sensor readings are folded into hourly aggregates. `GET /metrics` still returns those periods, so season comparisons and exports keep working. Each one comes back as one row per node, bucket and UTC hour:
+
+```json
+{
+  "MetricID": null, "NodeID": 1, "BucketID": 1,
+  "Recorded_At": "2025-03-20T13:00:00.000Z",
+  "Weight": 20, "Temperature": null, "Sugar_Percent": 2, "Ice_Present": false,
+  "Aggregated": true,
+  "Aggregate": {
+    "AggregateID": 77, "Period_Start": "2025-03-20T13:00:00.000Z", "Period_End": "2025-03-20T14:00:00.000Z",
+    "Period_Seconds": 3600, "Sample_Count": 3,
+    "First_Recorded_At": "...", "Last_Recorded_At": "...", "Ice_Present_Count": 0,
+    "Counts": { "Weight": 3, "Temperature": 0, "Sugar_Percent": 1, "Sap_Flow_Rate_Lph": 0 },
+    "Min": { "Weight": 10, "...": null }, "Max": { "Weight": 30, "...": null },
+    "Averaging": "arithmetic mean of the readings in the period", "Compacted_At": "...", "Run_ID": 4
+  }
+}
+```
+
+The field values are the means of the readings in that hour. A field no reading in the hour had is `null` and its count is 0. The value is never 0. `from`, `to` and `season` match an aggregate on its `Period_Start`, the same way a raw row matches on `Recorded_At`. An hour that starts before `from` is left out, even if it ends after `from`. An aggregate has no `MetricID`, so it cannot be PATCHed.
+
+When you average rows from `GET /metrics` yourself, weight each row by `Aggregate.Counts[field]`, or by 1 for a raw row. A plain mean of the rows gives an hour of 3 readings the same weight as an hour of 60. `/metrics/rollup` already does this weighting. Each rollup period returns `Reading_Count`, `Raw_Count`, `Aggregated_Count`, and per-field `Counts`, `Average`, `Min` and `Max`. Periods with no readings are left out, not returned as zeros. `Period_Start` and `Period_End` are UTC instants for the local period boundaries, so a 23-hour DST day stays 23 hours.
+
+The ingest endpoint rejects a sample older than the raw window: `Rejected` gets a message, and `details.Recorded_At` names the cutoff. That hour may already be compacted, and a resend could not be recognised as a duplicate there.
 
 ## Sensor ingest
 
@@ -171,11 +204,12 @@ The collection form's save. Body:
 ```
 
 - `Weight` is required, in gross pounds off the scale. Volume is the net weight (the tree's bucket tare comes off) divided by 8.34 lb per gallon.
+- Ice: with `Ice_Present: true` the form has the student remove the ice and reweigh. `Weight` is then the after-ice weight (the sap weight that volume comes from) and `Weight_Before_Ice` the first weight with the ice in. `Weight_Before_Ice` is rejected without `Ice_Present`, and `Weight` must be less than it. An ice entry without `Weight_Before_Ice` is still accepted, for entries queued by older app versions. The journal entry returns it as `Weight_Before_Ice_Lb`.
 - `Sugar_Percent` is optional and null unless the student tested the sap. Nothing is estimated or carried over server-side.
 - The bucket comes from the tree, never from the body.
 - One transaction writes a `metrics` reading, a `collection_logs` row, and a `collection_journal` entry, then resolves the tree's open Full Bucket and Collection Needed alerts. If any write fails, none are kept.
 - `Client_Ref` (UUID) makes a retry safe. The same reference returns `200` with the entry already stored and `"Duplicate": true`, including when several uploads race. A new collection returns `201`.
-- Response: `{ Entry, Log, Duplicate }`. `Entry` is the journal shape, with `Round_Label`. `422` carries field-keyed `details` (`Weight`, `Sugar_Percent`, `Collected_At`).
+- Response: `{ Entry, Log, Duplicate }`. `Entry` is the journal shape, with `Round_Label`. `422` carries field-keyed `details` (`Weight`, `Weight_Before_Ice`, `Sugar_Percent`, `Collected_At`).
 
 ## Schedule
 

@@ -14,7 +14,7 @@ const ALERT_COLUMNS = `
 `;
 
 export async function listAlerts({ resolved } = {}) {
-  const conditions = [];
+  const conditions = ['data_mode = active_data_mode()'];
   const values = [];
 
   if (resolved != null) {
@@ -34,7 +34,7 @@ export async function listAlerts({ resolved } = {}) {
 }
 
 export async function findAlertById(id) {
-  const row = await queryOne(`select ${ALERT_COLUMNS} from alerts where id = $1`, [id]);
+  const row = await queryOne(`select ${ALERT_COLUMNS} from alerts where id = $1 and data_mode = active_data_mode()`, [id]);
   return row ? mapAlert(row) : null;
 }
 
@@ -42,11 +42,12 @@ export async function createAlert({ NodeID, Alert_Type, Description, severity = 
   const row = await queryOne(
     `insert into alerts (node_id, alert_type, severity, message, is_resolved)
      values ($1, $2, $3, $4, false)
-     returning ${ALERT_COLUMNS}`,
+     returning ${ALERT_COLUMNS}, exists (select 1 from node n where n.id = $1 and n.demo_fixture) as demo_node`,
     [NodeID, Alert_Type, severity, Description],
   );
   const alert = mapAlert(row);
   // Delivery is best-effort. A mail outage must not roll back the alert row.
+  if (row.demo_node) return alert;
   void notifyCriticalAlert({ ...alert, severity, Alert_Type }).catch((error) => {
     logger.error({ err: error, alertId: alert.AlertID }, 'Critical notification failed');
   });
@@ -63,7 +64,7 @@ export async function createAlert({ NodeID, Alert_Type, Description, severity = 
 export async function hasOpenAlertOfType(nodeId, alertType) {
   const row = await queryOne(
     `select 1 from alerts
-      where alert_type = $2
+      where alert_type = $2 and data_mode = active_data_mode()
         and is_resolved = false
         and node_id is not distinct from $1
       limit 1`,
@@ -72,9 +73,24 @@ export async function hasOpenAlertOfType(nodeId, alertType) {
   return Boolean(row);
 }
 
+/** The newest unresolved alert on a node among the given types, or null. */
+export async function findOpenAlertOfTypes(nodeId, types) {
+  const row = await queryOne(
+    `select ${ALERT_COLUMNS}
+       from alerts
+      where node_id = $1 and data_mode = active_data_mode()
+        and is_resolved = false
+        and alert_type = any($2::text[])
+      order by created_at desc, id desc
+      limit 1`,
+    [nodeId, types],
+  );
+  return row ? mapAlert(row) : null;
+}
+
 export async function setResolved(id, isResolved) {
   const row = await queryOne(
-    `update alerts set is_resolved = $2 where id = $1 returning ${ALERT_COLUMNS}`,
+    `update alerts set is_resolved = $2 where id = $1 and data_mode = active_data_mode() returning ${ALERT_COLUMNS}`,
     [id, isResolved],
   );
   return row ? mapAlert(row) : null;
@@ -86,7 +102,7 @@ export async function resolveOpenByTypes(nodeId, types, client) {
   const result = await (client ?? { query }).query(
     `update alerts
         set is_resolved = true
-      where node_id = $1
+      where node_id = $1 and data_mode = active_data_mode()
         and is_resolved = false
         and alert_type = any($2::text[])`,
     [nodeId, types],
@@ -104,7 +120,8 @@ export async function claimAlertsForEscalation(minutes, alwaysNotifyTypes) {
   const rows = await queryAll(
     `update alerts
         set escalated_at = CURRENT_TIMESTAMP
-      where is_resolved = false
+      where is_resolved = false and data_mode = active_data_mode()
+        and not exists (select 1 from node where id = alerts.node_id and demo_fixture)
         and escalated_at is null
         and created_at <= CURRENT_TIMESTAMP - make_interval(mins => $1)
         and (severity = 'critical' or alert_type = any($2::text[]))
