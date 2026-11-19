@@ -34,7 +34,7 @@ The banner should move from **Waiting for packets** to **Link up** once a node O
 After the page shows both `NODE-001` and `NODE-002`:
 
 1. Put the server ingest secret in `.env` as `GATEWAY_INGEST_TOKEN`. Do not commit that file.
-2. Set `MAPLE_API_URL=https://ritmaplesugaring.privatedns.org/api/ingest`.
+2. Set `MAPLE_API_URL=https://maplesugaring01.webdev.gccis.rit.edu/api/ingest`.
 3. Set `FORWARD_TO_SERVER=1`.
 4. Leave `GATEWAY_CODE=GW-ALUMNI` unless these nodes were registered on another Pi.
 5. Restart `python3 app.py`, or `sudo systemctl restart maple-gateway.service` when running as a service.
