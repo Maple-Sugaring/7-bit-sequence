@@ -47,7 +47,7 @@ Both values are read at build time (`import.meta.env`). The Docker image sets `h
 
 `business/` keeps client copies of numbers the UI needs without a round trip (permissions, sugar bands, bucket capacity, season). Change both sides together. `test/parity.test.js` checks the sap season boundary matches the backend.
 
-`business/liveWeight.js` is hard-coded to the 2026 calendar year and node ids `[1, 2]` (`LIVE_YEAR`, `LIVE_FROM`, `LIVE_TO`, `LIVE_NODE_IDS`). It converts gross pounds to gallons for the live charts. **TODO**: this will need updating for a new season or more nodes.
+`business/liveWeight.js` is hard-coded to the 2026 calendar year and node ids `[1, 2]` (`LIVE_YEAR`, `LIVE_FROM`, `LIVE_TO`, `LIVE_NODE_IDS`). It converts gross pounds to gallons for the live charts.
 
 ## Tests (`Maple-Sugar-FE/test`)
 
@@ -60,4 +60,3 @@ Both values are read at build time (`import.meta.env`). The Docker image sets `h
 ## Housekeeping notes
 
 - `Maple-Sugar-FE/README.md` is mostly leftover Vite template text.
-- `Maple-Sugar-FE/.vscode/github-accounts.json` is tracked despite `.vscode` being in `.gitignore` (it was committed before). **TODO**: decide whether to remove it from the repo.
