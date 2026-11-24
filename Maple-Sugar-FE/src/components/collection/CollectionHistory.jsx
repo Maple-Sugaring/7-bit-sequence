@@ -65,6 +65,8 @@ export function CollectionHistory({ entries, loading, error }) {
                 {entry.Round_Label ? <Chip label={entry.Round_Label} size="small" variant="outlined" /> : null}
                 {entry.Weight_Before_Ice_Lb != null ? (
                   <Chip label="Ice removed · reweighed" size="small" color="warning" />
+                ) : entry.Ice_Not_Reweighed ? (
+                  <Chip label="Ice · not reweighed" size="small" color="error" />
                 ) : entry.Ice_Present ? (
                   <Chip label="Ice" size="small" color="info" />
                 ) : null}

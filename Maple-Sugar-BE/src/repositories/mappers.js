@@ -170,6 +170,7 @@ export function mapCollectionLog(row) {
     Quality_Notes: row.quality_notes ?? '',
     Ice_Present: Boolean(row.ice_present),
     Weight_Before_Ice_Lb: num(row.weight_before_ice_lb),
+    Ice_Not_Reweighed: Boolean(row.ice_not_reweighed),
   };
 }
 

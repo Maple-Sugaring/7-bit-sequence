@@ -22,7 +22,7 @@ const outline = (as) =>
 
 describe('tutorials by role', () => {
   it('gives a student the Collection and Schedule tutorials without the faculty steps', () => {
-    expect(outline(Role.STUDENT)).toEqual([['ui', ['collection:7', 'ice:8', 'schedule:4']]]);
+    expect(outline(Role.STUDENT)).toEqual([['ui', ['collection:7', 'ice:9', 'schedule:4']]]);
   });
 
   it('gives an MSS member Deploy and both hardware fixes', () => {
@@ -34,7 +34,7 @@ describe('tutorials by role', () => {
 
   it('gives an admin everything', () => {
     expect(outline(Role.ADMIN)).toEqual([
-      ['ui', ['deploy:8', 'collection:7', 'ice:8', 'schedule:6']],
+      ['ui', ['deploy:8', 'collection:7', 'ice:9', 'schedule:6']],
       ['hardware', ['recalibration:8', 'solar:6']],
     ]);
   });
@@ -89,7 +89,7 @@ describe('the Tutorials page', () => {
     for (let i = 0; i < 6; i += 1) fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     expect(screen.getByRole('heading', { name: 'Confirm it saved' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Next task' }));
-    expect(screen.getByText('Ice in the bucket · Step 1 of 8')).toBeTruthy();
+    expect(screen.getByText('Ice in the bucket · Step 1 of 9')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Back' }));
     expect(screen.getByRole('heading', { name: 'Confirm it saved' })).toBeTruthy();
   });
@@ -98,19 +98,20 @@ describe('the Tutorials page', () => {
     renderPage(Role.STUDENT);
     fireEvent.click(screen.getByRole('button', { name: 'Ice in the bucket' }));
     const titles = [];
-    for (let i = 0; i < 8; i += 1) {
+    for (let i = 0; i < 9; i += 1) {
       titles.push(screen.getByRole('heading', { level: 2 }).textContent);
-      if (i < 7) fireEvent.click(screen.getByRole('button', { name: i === 7 ? 'Next task' : 'Next' }));
+      if (i < 8) fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     }
     expect(titles).toEqual([
-      'Enter the weight',
+      'Check the weight',
       'Turn on Ice in the bucket',
-      'Save is turned off',
-      'Remove the ice',
-      'Put the bucket back and read the new weight',
-      'Enter Weight after ice removed',
+      'Take the bucket off and remove the ice',
+      'Put the bucket back and turn the node off and on',
+      'Wait for the new weight',
+      'The weight fills in',
       'Save',
-      'Check the Ice removed tag',
+      'No new reading after a minute?',
+      'Check the tags',
     ]);
   });
 

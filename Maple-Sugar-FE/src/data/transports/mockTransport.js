@@ -268,6 +268,38 @@ function submittedRole(user) {
 }
 
 const routes = [
+  // ---- Sensor ingest ----------------------------------------------------
+  // What a gateway posts for a node's packet, as in the API: a gross weight
+  // becomes that node's newest reading. A node that was just turned off and on
+  // reports this way within seconds.
+  {
+    method: 'POST',
+    match: /^\/ingest$/,
+    handler: (unused, { body }) => {
+      const readings = Array.isArray(body?.Readings) ? body.Readings : [body ?? {}];
+      const accepted = [];
+      for (const reading of readings) {
+        const node = db.nodes.find((candidate) => candidate.Node_Code === reading.Node_Code);
+        if (!node || reading.Weight == null) continue;
+        const bucket = db.buckets.find((candidate) => candidate.NodeID === node.NodeID) ?? null;
+        db.metrics.push({
+          MetricID: nextId.metric++,
+          NodeID: node.NodeID,
+          BucketID: bucket?.BucketID ?? null,
+          Recorded_By_UserID: null,
+          Recorded_At: reading.Recorded_At ?? dayjs().toISOString(),
+          Weight: Number(reading.Weight),
+          Temperature: null,
+          Sugar_Percent: null,
+          Weather_Conditions: null,
+          Ice_Present: false,
+          Sap_Flow_Rate_Lph: null,
+        });
+        accepted.push({ Node_Code: node.Node_Code });
+      }
+      return { Accepted: accepted, Rejected: [] };
+    },
+  },
   // ---- Auth -------------------------------------------------------------
   {
     method: 'POST',
@@ -860,6 +892,14 @@ const routes = [
           Weight_Before_Ice: 'A weight before ice only goes with a bucket tagged as having ice.',
         });
       }
+      // Ice with no new reading after the power cycle: saved with the last reading, flagged.
+      const notReweighed = Boolean(body.Ice_Not_Reweighed);
+      if (notReweighed && (!body.Ice_Present || beforeIce != null)) {
+        const message = body.Ice_Present
+          ? 'A reweighed bucket cannot also be flagged as not reweighed.'
+          : 'Only a bucket tagged as having ice can be flagged as not reweighed.';
+        invalid(message, { Ice_Not_Reweighed: message });
+      }
       const { errors, isValid } = validateCollectionEntry(
         beforeIce == null
           ? { ...body, Recorded_At: body.Collected_At }
@@ -900,6 +940,7 @@ const routes = [
         Quality_Notes: notes,
         Ice_Present: Boolean(body.Ice_Present),
         Weight_Before_Ice_Lb: beforeIce,
+        Ice_Not_Reweighed: notReweighed,
       };
       db.collectionLogs.push(log);
 
@@ -918,6 +959,7 @@ const routes = [
         Sugar_Percent: sugar,
         Ice_Present: Boolean(body.Ice_Present),
         Weight_Before_Ice_Lb: beforeIce,
+        Ice_Not_Reweighed: notReweighed,
         Round_Label: body.Round_Label ?? null,
         Client_Ref: body.Client_Ref ?? null,
       };

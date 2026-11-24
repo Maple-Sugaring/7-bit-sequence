@@ -360,12 +360,18 @@ function CollectionSavedScreen() {
 
 /**
  * The tree card of the Collection page through an iced bucket: `start` (weight
- * in, ice off), `blocked` (ice on, Save off until the reweigh), and `ready`
- * (weight after ice removed entered, Save back on).
+ * filled in, ice off), `waiting` (ice on, looking for the node's reading),
+ * `ready` (the reading filled in the weight after ice removed), and
+ * `timed-out` (no reading after a minute; it saves flagged). Save is always on.
  */
 function IceCollectionScreen({ stage }) {
   const iced = stage !== 'start';
-  const blocked = stage === 'blocked';
+  const title = {
+    waiting: 'Remove the ice and reweigh',
+    ready: 'Reweighed without the ice',
+    'timed-out': 'No new reading from the sensor',
+  }[stage];
+  const severity = { waiting: 'info', ready: 'success', 'timed-out': 'warning' }[stage];
   return (
     <>
       <PageTitle title="Collection" subtitle="Log each bucket as you empty it. The weight is the only thing you have to enter." />
@@ -379,8 +385,8 @@ function IceCollectionScreen({ stage }) {
                 <ReadOnlyField
                   label={iced ? 'Weight with ice (lb)' : 'Sap weight (lb)'}
                   required
-                  defaultValue="60"
-                  helperText="Gross pounds, bucket included."
+                  defaultValue="40.0"
+                  helperText="From the sensor at 4:16 PM."
                 />
               </Spot>
               <Box sx={{ flex: 1 }}>
@@ -392,22 +398,32 @@ function IceCollectionScreen({ stage }) {
             </Spot>
             {iced ? (
               <Spot id="steps">
-                <Alert severity={blocked ? 'warning' : 'success'}>
-                  <Typography sx={{ fontWeight: 600, mb: 0.5 }}>
-                    {blocked ? 'Remove the ice and reweigh' : 'Reweighed without the ice'}
-                  </Typography>
-                  {blocked ? (
+                <Alert severity={severity}>
+                  <Typography sx={{ fontWeight: 600, mb: 0.5 }}>{title}</Typography>
+                  {stage === 'ready' ? (
+                    'New weight from the sensor at 4:21 PM. This collection saves it and is tagged Ice removed.'
+                  ) : (
                     <>
                       <Box component="ol" sx={{ m: 0, pl: 2.5 }}>
                         <li>Take the bucket off the sensor.</li>
                         <li>Remove the ice from the bucket.</li>
                         <li>Put the bucket back on the sensor.</li>
-                        <li>Enter the new weight in Weight after ice removed.</li>
+                        <li>Turn the node off and back on.</li>
                       </Box>
-                      <Typography variant="body2" sx={{ mt: 1 }}>Save turns on once the new weight is in.</Typography>
+                      {stage === 'waiting' ? (
+                        <Spot id="waiting" sx={{ mt: 1 }}>
+                          <Typography variant="body2">
+                            Waiting for the node’s new reading. It fills in the weight after ice removed.
+                          </Typography>
+                          <LinearProgress sx={{ mt: 1 }} />
+                        </Spot>
+                      ) : (
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                          No new reading came in after a minute. This collection saves with the last reading (40.0 lb) and
+                          is flagged Not reweighed.
+                        </Typography>
+                      )}
                     </>
-                  ) : (
-                    'This collection saves the weight after ice removed and is tagged Ice removed.'
                   )}
                 </Alert>
               </Spot>
@@ -416,22 +432,25 @@ function IceCollectionScreen({ stage }) {
               <Spot id="after-ice">
                 <ReadOnlyField
                   label="Weight after ice removed (lb)"
-                  required
-                  defaultValue={blocked ? '' : '45'}
-                  helperText="Gross pounds with the ice out, bucket included."
+                  defaultValue={stage === 'ready' ? '30.0' : ''}
+                  helperText={
+                    stage === 'ready'
+                      ? 'From the sensor. Change it if your scale says different.'
+                      : 'Fills in from the sensor after the power cycle.'
+                  }
                 />
               </Spot>
             ) : null}
             {stage === 'ready' ? (
               <Alert icon={false} severity="info">
-                <Typography variant="h6" component="p">About 0.16 gal of syrup</Typography>
-                <Typography variant="body2">From 5.1 gal of sap, using this tree’s last test, 2.7%.</Typography>
+                <Typography variant="h6" component="p">About 0.11 gal of syrup</Typography>
+                <Typography variant="body2">From 3.6 gal of sap, using this tree’s last test, 2.7%.</Typography>
               </Alert>
             ) : null}
             <Spot id="save">
               <Stack direction="row" spacing={1}>
-                <Button variant="contained" sx={{ flex: 1 }} disabled={blocked} tabIndex={-1}>Save &amp; next tree</Button>
-                <Button variant="outlined" disabled={blocked} tabIndex={-1}>Save &amp; stop here</Button>
+                <Button variant="contained" sx={{ flex: 1 }} tabIndex={-1}>Save &amp; next tree</Button>
+                <Button variant="outlined" tabIndex={-1}>Save &amp; stop here</Button>
               </Stack>
             </Spot>
           </Stack>
@@ -445,15 +464,19 @@ function IceSavedScreen() {
   return (
     <>
       <PageTitle title="Collection" subtitle="Log each bucket as you empty it. The weight is the only thing you have to enter." />
-      <Alert severity="success" sx={{ mb: 2 }}>Saved Alumni House - Tree 1: 5.1 gal of sap.</Alert>
       <Card sx={{ mb: 2 }}>
         <CardContent>
-          <Typography variant="h6" component="p" sx={{ mb: 1 }}>This round · 1 of 12 trees logged</Typography>
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }} useFlexGap>
-            <Typography sx={{ flexGrow: 1 }}>Alumni House - Tree 1</Typography>
-            <Chip size="small" variant="outlined" label="5.1 gal" />
-            <Chip size="small" color="warning" label="Ice removed · reweighed" />
-          </Stack>
+          <Typography variant="h6" component="p" sx={{ mb: 1 }}>This round · 2 of 12 trees logged</Typography>
+          {[
+            ['Alumni House - Tree 1', '3.6 gal', 'warning', 'Ice removed · reweighed'],
+            ['Alumni House - Tree 2', '4.3 gal', 'error', 'Ice · not reweighed'],
+          ].map(([tree, gallons, color, tag]) => (
+            <Stack key={tree} direction="row" spacing={1} sx={{ alignItems: 'center', py: 0.5, flexWrap: 'wrap' }} useFlexGap>
+              <Typography sx={{ flexGrow: 1 }}>{tree}</Typography>
+              <Chip size="small" variant="outlined" label={gallons} />
+              <Chip size="small" color={color} label={tag} />
+            </Stack>
+          ))}
         </CardContent>
       </Card>
       <Card>
@@ -463,8 +486,8 @@ function IceSavedScreen() {
             <Chip size="small" color="warning" label="Ice removed · reweighed" />
           </Stack>
           <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-            <Chip size="small" variant="outlined" label="45 lb" />
-            <Chip size="small" variant="outlined" label="60 lb with ice" />
+            <Chip size="small" variant="outlined" label="32.21 lb" />
+            <Chip size="small" variant="outlined" label="42.21 lb with ice" />
           </Stack>
         </CardContent>
       </Card>
@@ -761,17 +784,26 @@ const SCREENS = {
   collection: { current: 'Collection', render: () => <CollectionScreen /> },
   'collection-saved': { current: 'Collection', render: () => <CollectionSavedScreen /> },
   'ice-start': { current: 'Collection', render: () => <IceCollectionScreen stage="start" /> },
-  'ice-blocked': { current: 'Collection', render: () => <IceCollectionScreen stage="blocked" /> },
-  'ice-reading': {
+  'ice-waiting': { current: 'Collection', render: () => <IceCollectionScreen stage="waiting" /> },
+  'ice-power': {
     render: () => (
-      <Bench title="Read the new weight" subtitle="Bucket back on the sensor, ice out.">
-        <Spot id="reading">
-          <Board lines={['NODE-001', 'Weight 45.0 lb', 'Next report 41 s']} />
+      <Bench title="Turn the node off and back on" subtitle="Bucket back on the sensor, ice out.">
+        <Board lines={['NODE-001', 'Starting up', 'Sending a reading']} />
+        <Spot id="power" sx={{ width: 240, mx: 'auto', mt: 1.5 }}>
+          <Stack direction="row" spacing={1} sx={{ justifyContent: 'center', alignItems: 'center' }}>
+            <Chip label="Off" variant="outlined" />
+            <span aria-hidden="true">→</span>
+            <Chip label="On" color="success" />
+          </Stack>
+          <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 1 }}>
+            It reports within seconds of powering up.
+          </Typography>
         </Spot>
       </Bench>
     ),
   },
   'ice-ready': { current: 'Collection', render: () => <IceCollectionScreen stage="ready" /> },
+  'ice-timed-out': { current: 'Collection', render: () => <IceCollectionScreen stage="timed-out" /> },
   'ice-saved': { current: 'Collection', render: () => <IceSavedScreen /> },
   schedule: { current: 'Schedule', render: (role) => <ScheduleScreen canManage={can(role, Capability.MANAGE_SCHEDULE)} /> },
   'pick-time': { current: 'Schedule', render: () => <PickTimeScreen /> },

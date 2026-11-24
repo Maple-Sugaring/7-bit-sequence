@@ -87,6 +87,16 @@ export function validateCollection(input, { tareWeight = null } = {}) {
     }
   }
 
+  // No new reading after the power cycle: saved with the last reading and
+  // flagged. That only makes sense for ice, and never next to a reweigh.
+  if (input.Ice_Not_Reweighed) {
+    if (!input.Ice_Present) {
+      errors.Ice_Not_Reweighed = 'Only a bucket tagged as having ice can be flagged as not reweighed.';
+    } else if (!isBlank(input.Weight_Before_Ice)) {
+      errors.Ice_Not_Reweighed = 'A reweighed bucket cannot also be flagged as not reweighed.';
+    }
+  }
+
   return { errors, isValid: Object.keys(errors).length === 0 };
 }
 

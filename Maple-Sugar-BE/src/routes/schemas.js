@@ -180,6 +180,8 @@ export const createCollectionBody = z.object({
   Ice_Present: z.boolean().optional().default(false),
   // The first weight of an iced bucket, before the ice came out; Weight is then the reweigh.
   Weight_Before_Ice: nullableNumber,
+  // Ice tagged but no new reading came in after the power cycle: saved with the last reading.
+  Ice_Not_Reweighed: z.boolean().optional().default(false),
   Collected_At: isoDateTime.optional(),
   Notes: z.string().trim().max(8000).optional().default(''),
   Round_Label: z.string().trim().max(100).nullish(),

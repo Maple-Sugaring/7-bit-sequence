@@ -144,7 +144,8 @@ export function weightAfterIceError(afterIce, beforeIce, tareWeight = null) {
  * saves the round trip.
  *
  * With ice tagged, `Weight` is the first weight (ice still in) and
- * `Weight_After_Ice` the reweigh, which is required before the entry can save.
+ * `Weight_After_Ice` the reweigh. The reweigh is checked when there is one; a
+ * collection without one saves with the last reading, flagged as not reweighed.
  */
 export function validateCollectionEntry(form, { tareWeight = null } = {}) {
   // The form stamps the time when it saves, so a blank one means "now".
@@ -163,7 +164,7 @@ export function validateCollectionEntry(form, { tareWeight = null } = {}) {
     errors.Weight = notMoreThanBucket(tareWeight);
   }
 
-  if (form.Ice_Present && 'Weight_After_Ice' in form) {
+  if (form.Ice_Present && 'Weight_After_Ice' in form && !isBlank(form.Weight_After_Ice)) {
     const afterIce = weightAfterIceError(form.Weight_After_Ice, form.Weight, tareWeight);
     if (afterIce) errors.Weight_After_Ice = afterIce;
   }
