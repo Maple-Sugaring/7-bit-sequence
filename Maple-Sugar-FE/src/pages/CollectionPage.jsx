@@ -7,6 +7,7 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/Grid';
+import LinearProgress from '@mui/material/LinearProgress';
 import Snackbar from '@mui/material/Snackbar';
 import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
@@ -24,6 +25,11 @@ import {
   sensorDefaults,
   startRound,
 } from '../business/collectionRound';
+import {
+  REWEIGH_POLL_MS,
+  reweighFromReading,
+  reweighStatus,
+} from '../business/iceReweigh';
 import { bushAverageSugar, syrupEstimate } from '../business/sugarContent';
 import { validateCollectionEntry } from '../business/validation';
 import { CollectionLogHistory } from '../components/CollectionLogHistory';
@@ -48,7 +54,18 @@ import { collectionLocal, useBush, useJournal, useRecordCollection, useRecording
 
 /** Fields the student has not touched are null and fall back to the sensor. */
 function untouchedForm() {
-  return { weight: null, ice: null, weightAfterIce: '', sugar: '', notes: '', collectedAt: null };
+  return {
+    weight: null,
+    ice: null,
+    weightAfterIce: '',
+    // When ice was tagged, the node's last reading at that moment, and whether the reweigh was typed.
+    iceAt: null,
+    iceBaselineAt: null,
+    afterIceTyped: false,
+    sugar: '',
+    notes: '',
+    collectedAt: null,
+  };
 }
 
 function weightHelp(sensor, touched) {
@@ -77,6 +94,8 @@ export function CollectionPage() {
   const [notice, setNotice] = useState(null);
   const [toast, setToast] = useState('');
   const [queued, setQueued] = useState(() => collectionLocal.queuedCount());
+  // Ticks while an iced bucket waits for the node's reading, so the minute runs out on screen.
+  const [now, setNow] = useState(() => Date.now());
   const formRef = useRef(null);
   const weightRef = useRef(null);
   const focusedTree = useRef(null);
@@ -177,6 +196,16 @@ export function CollectionPage() {
   // The sensor cannot see ice: the person at the tree turns this on, and it starts off.
   const iceValue = form.ice ?? false;
 
+  // Ice: the student removes it, puts the bucket back, and turns the node off
+  // and on. The node's first reading after that fills in the weight after ice
+  // removed (unless the student typed one); with none inside a minute, the
+  // collection saves with the last reading, flagged as not reweighed.
+  const fromSensor =
+    iceValue && form.weightAfterIce === '' && !form.afterIceTyped
+      ? reweighFromReading(node, { baselineAt: form.iceBaselineAt, iceAt: form.iceAt, firstWeight: weightValue, tareLb })
+      : null;
+  const afterIceValue = form.weightAfterIce !== '' ? form.weightAfterIce : (fromSensor?.weight ?? '');
+
   const check = validateCollectionEntry(
     {
       NodeID: activeId,
@@ -184,7 +213,8 @@ export function CollectionPage() {
       Sugar_Percent: form.sugar,
       Ice_Present: iceValue,
       // With ice, the bucket is reweighed after the ice comes out; that weight is the sap.
-      ...(iceValue ? { Weight_After_Ice: form.weightAfterIce } : {}),
+      // A collection without one saves with the last reading instead, flagged.
+      ...(iceValue ? { Weight_After_Ice: afterIceValue } : {}),
       Recorded_At: form.collectedAt?.toISOString(),
     },
     // Every weight on the form is already sap, so there is no bucket left to subtract.
@@ -192,14 +222,17 @@ export function CollectionPage() {
   );
   const errors = attempted ? { ...check.errors, ...serverErrors } : serverErrors;
 
-  // Until an iced bucket is reweighed there is no sap weight to estimate from.
-  const sapWeight = iceValue ? form.weightAfterIce : weightValue;
-  const sapWeightError = iceValue ? check.errors.Weight_After_Ice || check.errors.Weight : check.errors.Weight;
+  const reweigh = reweighStatus({ ice: iceValue, weightAfterIce: afterIceValue, iceAt: form.iceAt, now });
+  const reweighed = reweigh === 'reweighed';
+  const notReweighed = iceValue && !reweighed;
+  // Not reweighed: the last reading, which is the weight on the form (filled in from the
+  // sensor's last reading unless the student corrected it).
+  const lastReading = weightValue;
+
+  const sapWeight = !iceValue ? weightValue : reweighed ? afterIceValue : lastReading;
+  const sapWeightError = reweighed ? check.errors.Weight_After_Ice || check.errors.Weight : check.errors.Weight;
   const sapGallons = sapWeight === '' || sapWeightError ? null : sapGallonsFor(grossFromNet(sapWeight, tareLb), tareLb);
-  // Save stays off until the bucket is reweighed without the ice.
-  const iceBlocked = iceValue && Boolean(check.errors.Weight_After_Ice);
-  const afterIceError =
-    iceValue && (attempted || form.weightAfterIce !== '') ? check.errors.Weight_After_Ice : null;
+  const afterIceError = iceValue && afterIceValue !== '' ? check.errors.Weight_After_Ice : null;
   const estimate =
     sapGallons == null
       ? null
@@ -212,6 +245,18 @@ export function CollectionPage() {
         });
 
   const remainingAfter = trees.filter((candidate) => !done.has(candidate.nodeId) && candidate.nodeId !== activeId);
+
+  // While an iced bucket waits for the node, look for its reading every few
+  // seconds and keep the clock moving so the minute runs out on time.
+  const waitingForReading = reweigh === 'waiting';
+  useEffect(() => {
+    if (!waitingForReading) return undefined;
+    const timer = setInterval(() => {
+      setNow(Date.now());
+      refreshBush();
+    }, REWEIGH_POLL_MS);
+    return () => clearInterval(timer);
+  }, [waitingForReading, refreshBush]);
 
   const edit = (changes) => {
     if (activeId == null) return;
@@ -269,14 +314,16 @@ export function CollectionPage() {
   const submit = async ({ finish = false } = {}) => {
     setNotice(null);
     setAttempted(true);
-    if (!check.isValid || !tree || iceBlocked) return;
+    if (!check.isValid || !tree) return;
 
     const collectedAt = (form.collectedAt ?? dayjs()).toISOString();
     const body = {
       NodeID: tree.nodeId,
-      // With ice, the sap is the reweigh after the ice came out; the first weight is kept too.
-      Weight: Number(grossFromNet(iceValue ? form.weightAfterIce : weightValue, tareLb)),
-      Weight_Before_Ice: iceValue ? Number(grossFromNet(weightValue, tareLb)) : null,
+      // With ice, the sap is the reweigh after the ice came out and the first weight is kept
+      // too. Not reweighed (no reading in time, or saved first): the last reading, flagged.
+      Weight: Number(grossFromNet(sapWeight, tareLb)),
+      Weight_Before_Ice: reweighed ? Number(grossFromNet(weightValue, tareLb)) : null,
+      Ice_Not_Reweighed: notReweighed,
       // Null unless the student tested it. Never carried over or worked out.
       Sugar_Percent: form.sugar === '' ? null : Number(form.sugar),
       Ice_Present: iceValue,
@@ -295,6 +342,7 @@ export function CollectionPage() {
       sugar: body.Sugar_Percent,
       ice: body.Ice_Present,
       weightBeforeIce: body.Weight_Before_Ice,
+      notReweighed: body.Ice_Not_Reweighed,
       sapGallons: estimate?.sapGallons ?? 0,
       syrupGallons: estimate?.syrupGallons ?? 0,
       basis: estimate?.basis ?? null,
@@ -485,40 +533,76 @@ export function CollectionPage() {
                         control={
                           <Switch
                             checked={iceValue}
-                            // A fresh toggle starts the reweigh over; turning ice off drops it.
-                            onChange={(event) => edit({ ice: event.target.checked, weightAfterIce: '' })}
+                            // A fresh toggle starts the reweigh (and its minute) over; turning ice off drops it.
+                            onChange={(event) => {
+                              const on = event.target.checked;
+                              setNow(Date.now());
+                              edit({
+                                ice: on,
+                                weightAfterIce: '',
+                                iceAt: on ? Date.now() : null,
+                                iceBaselineAt: on ? (node?.Recorded_At ?? null) : null,
+                                afterIceTyped: false,
+                              });
+                            }}
                           />
                         }
                         label="Ice in the bucket"
                       />
                       {iceValue ? (
                         <>
-                          <Alert severity={iceBlocked ? 'warning' : 'success'} aria-live="polite">
-                            <AlertTitle>{iceBlocked ? 'Remove the ice and reweigh' : 'Reweighed without the ice'}</AlertTitle>
-                            {iceBlocked ? (
+                          <Alert
+                            severity={reweigh === 'reweighed' ? 'success' : reweigh === 'timed-out' ? 'warning' : 'info'}
+                            aria-live="polite"
+                          >
+                            <AlertTitle>
+                              {reweigh === 'reweighed'
+                                ? 'Reweighed without the ice'
+                                : reweigh === 'timed-out'
+                                  ? 'No new reading from the sensor'
+                                  : 'Remove the ice and reweigh'}
+                            </AlertTitle>
+                            {reweigh === 'reweighed' ? (
+                              fromSensor
+                                ? `New weight from the sensor at ${timeOnly(fromSensor.recordedAt)}. This collection saves it and is tagged Ice removed.`
+                                : 'This collection saves the weight after ice removed and is tagged Ice removed.'
+                            ) : (
                               <>
                                 <Box component="ol" sx={{ m: 0, pl: 2.5 }}>
                                   <li>Take the bucket off the sensor.</li>
                                   <li>Remove the ice from the bucket.</li>
                                   <li>Put the bucket back on the sensor.</li>
-                                  <li>Enter the new weight in Weight after ice removed.</li>
+                                  <li>Turn the node off and back on.</li>
                                 </Box>
-                                <Typography variant="body2" sx={{ mt: 1 }}>
-                                  Save turns on once the new weight is in.
-                                </Typography>
+                                {reweigh === 'waiting' ? (
+                                  <>
+                                    <Typography variant="body2" sx={{ mt: 1 }}>
+                                      Waiting for the node's new reading. It fills in the weight after ice removed.
+                                    </Typography>
+                                    <LinearProgress sx={{ mt: 1 }} aria-label="Waiting for the sensor" />
+                                  </>
+                                ) : (
+                                  <Typography variant="body2" sx={{ mt: 1 }}>
+                                    No new reading came in after a minute. This collection saves with the last reading
+                                    {lastReading !== '' ? ` (${lastReading} lb)` : ''} and is flagged Not reweighed. A
+                                    reading that comes in, or a weight typed below, is used instead.
+                                  </Typography>
+                                )}
                               </>
-                            ) : (
-                              'This collection saves the weight after ice removed and is tagged Ice removed.'
                             )}
                           </Alert>
                           <TextField
                             label="Weight after ice removed (lb)"
                             type="number"
-                            value={form.weightAfterIce}
-                            onChange={(event) => edit({ weightAfterIce: event.target.value })}
-                            required
+                            value={afterIceValue}
+                            onChange={(event) => edit({ weightAfterIce: event.target.value, afterIceTyped: true })}
                             error={Boolean(afterIceError)}
-                            helperText={afterIceError || 'Pounds of sap with the ice out.'}
+                            helperText={
+                              afterIceError ||
+                              (fromSensor
+                                ? 'From the sensor. Change it if your scale says different.'
+                                : 'Fills in from the sensor after the power cycle. Pounds of sap with the ice out.')
+                            }
                             fullWidth
                             slotProps={{ htmlInput: { min: 0, step: 0.1, inputMode: 'decimal' } }}
                           />
@@ -571,7 +655,7 @@ export function CollectionPage() {
                         <Button
                           type="submit"
                           variant="contained"
-                          disabled={save.pending || iceBlocked}
+                          disabled={save.pending}
                           sx={{ minHeight: 48, flexGrow: 1 }}
                         >
                           {remainingAfter.length ? 'Save & next tree' : 'Save & finish round'}
@@ -579,7 +663,7 @@ export function CollectionPage() {
                         {remainingAfter.length ? (
                           <Button
                             variant="outlined"
-                            disabled={save.pending || iceBlocked}
+                            disabled={save.pending}
                             onClick={() => submit({ finish: true })}
                             sx={{ minHeight: 48 }}
                           >

@@ -35,6 +35,8 @@ function LogRow({ log, largest, showTest }) {
           <Typography sx={{ fontWeight: 600 }}>Node {log.NodeID}</Typography>
           {log.Weight_Before_Ice_Lb != null ? (
             <Chip size="small" color="warning" label="Ice removed · reweighed" />
+          ) : log.Ice_Not_Reweighed ? (
+            <Chip size="small" color="error" label="Ice · not reweighed" />
           ) : log.Ice_Present ? (
             <Chip size="small" color="info" label="Ice" />
           ) : null}

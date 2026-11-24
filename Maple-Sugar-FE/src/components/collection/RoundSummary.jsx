@@ -87,6 +87,8 @@ export function RoundSummary({ round, onNewRound, onKeepGoing }) {
                 {entry.sugar != null ? <Chip size="small" variant="outlined" label={`${entry.sugar}% sugar`} /> : null}
                 {entry.weightBeforeIce != null ? (
                   <Chip size="small" color="warning" label="Ice removed · reweighed" />
+                ) : entry.notReweighed ? (
+                  <Chip size="small" color="error" label="Ice · not reweighed" />
                 ) : entry.ice ? (
                   <Chip size="small" color="info" label="Ice" />
                 ) : null}

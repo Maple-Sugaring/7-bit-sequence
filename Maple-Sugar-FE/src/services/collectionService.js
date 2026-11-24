@@ -25,6 +25,8 @@ export function toRequest(entry) {
     Ice_Present: Boolean(entry.Ice_Present),
     // An iced bucket's first weight; Weight is then the reweigh with the ice out.
     Weight_Before_Ice: entry.Ice_Present ? (entry.Weight_Before_Ice ?? null) : null,
+    // Ice with no new reading after the power cycle: saved with the last reading, flagged.
+    Ice_Not_Reweighed: Boolean(entry.Ice_Present && entry.Ice_Not_Reweighed),
     Collected_At: entry.Collected_At,
     Notes: (entry.Notes ?? entry.Process_Notes ?? '').trim(),
     Round_Label: entry.Round_Label?.trim() || null,

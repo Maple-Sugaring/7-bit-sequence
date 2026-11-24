@@ -11,6 +11,7 @@ const LOG_COLUMNS = `
   quality_notes,
   ice_present,
   weight_before_ice_lb,
+  ice_not_reweighed,
   data_mode
 `;
 
@@ -50,8 +51,9 @@ export async function createCollectionLog(entry, client = null) {
   const row = await queryOneOn(
     client,
     `insert into collection_logs (bucket_id, node_id, user_id, collected_at,
-                                 volume_collected, quality_notes, ice_present, weight_before_ice_lb)
-     values ($1, $2, $3, coalesce($4, CURRENT_TIMESTAMP), $5, $6, $7, $8)
+                                 volume_collected, quality_notes, ice_present, weight_before_ice_lb,
+                                 ice_not_reweighed)
+     values ($1, $2, $3, coalesce($4, CURRENT_TIMESTAMP), $5, $6, $7, $8, $9)
      returning ${LOG_COLUMNS}`,
     [
       entry.BucketID,
@@ -62,6 +64,7 @@ export async function createCollectionLog(entry, client = null) {
       entry.Quality_Notes ?? '',
       Boolean(entry.Ice_Present),
       entry.Weight_Before_Ice ?? null,
+      Boolean(entry.Ice_Not_Reweighed),
     ],
   );
   await client.query(

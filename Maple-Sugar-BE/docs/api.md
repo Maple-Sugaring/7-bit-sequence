@@ -205,11 +205,12 @@ The collection form's save. Body:
 
 - `Weight` is required, in gross pounds off the scale. Volume is the net weight (the tree's bucket tare comes off) divided by 8.34 lb per gallon.
 - Ice: with `Ice_Present: true` the form has the student remove the ice and reweigh. `Weight` is then the after-ice weight (the sap weight that volume comes from) and `Weight_Before_Ice` the first weight with the ice in. `Weight_Before_Ice` is rejected without `Ice_Present`, and `Weight` must be less than it. An ice entry without `Weight_Before_Ice` is still accepted, for entries queued by older app versions. The journal entry returns it as `Weight_Before_Ice_Lb`.
+- Ice without a reweigh: the steps end with turning the node off and on, so it sends a fresh reading the form fills in. If none arrives within a minute, or the student saves first, the form sends the last reading as `Weight` with `Ice_Not_Reweighed: true` and no `Weight_Before_Ice`. The flag is rejected without `Ice_Present` or alongside `Weight_Before_Ice`, and is returned as `Ice_Not_Reweighed` on the entry and the log.
 - `Sugar_Percent` is optional and null unless the student tested the sap. Nothing is estimated or carried over server-side.
 - The bucket comes from the tree, never from the body.
 - One transaction writes a `metrics` reading, a `collection_logs` row, and a `collection_journal` entry, then resolves the tree's open Full Bucket and Collection Needed alerts. If any write fails, none are kept.
 - `Client_Ref` (UUID) makes a retry safe. The same reference returns `200` with the entry already stored and `"Duplicate": true`, including when several uploads race. A new collection returns `201`.
-- Response: `{ Entry, Log, Duplicate }`. `Entry` is the journal shape, with `Round_Label`. `422` carries field-keyed `details` (`Weight`, `Weight_Before_Ice`, `Sugar_Percent`, `Collected_At`).
+- Response: `{ Entry, Log, Duplicate }`. `Entry` is the journal shape, with `Round_Label`. `422` carries field-keyed `details` (`Weight`, `Weight_Before_Ice`, `Ice_Not_Reweighed`, `Sugar_Percent`, `Collected_At`).
 
 ## Schedule
 

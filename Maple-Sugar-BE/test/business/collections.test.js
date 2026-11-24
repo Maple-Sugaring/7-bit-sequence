@@ -98,6 +98,19 @@ describe('collection rules', () => {
     assert.equal(validateCollection({ NodeID: 1, Weight: 30, Ice_Present: true }).isValid, true);
   });
 
+  test('only ice without a reweigh can be flagged as not reweighed', () => {
+    assert.equal(validateCollection({ NodeID: 1, Weight: 30, Ice_Present: true, Ice_Not_Reweighed: true }).isValid, true);
+    assert.match(
+      validateCollection({ NodeID: 1, Weight: 30, Ice_Present: false, Ice_Not_Reweighed: true }).errors.Ice_Not_Reweighed,
+      /tagged as having ice/,
+    );
+    assert.match(
+      validateCollection({ NodeID: 1, Weight: 30, Ice_Present: true, Weight_Before_Ice: 40, Ice_Not_Reweighed: true }).errors
+        .Ice_Not_Reweighed,
+      /cannot also be flagged/,
+    );
+  });
+
   test('titles name the tree', () => {
     assert.equal(collectionTitle('Alumni 1'), 'Collected Alumni 1');
     assert.equal(collectionTitle(null), 'Collection');
@@ -162,6 +175,7 @@ function journalRow(entry) {
     round_label: entry.round_label,
     submitted_role: entry.submitted_role,
     weight_before_ice_lb: entry.weight_before_ice_lb,
+    ice_not_reweighed: entry.ice_not_reweighed,
     author_name: 'Sam Student',
     node_name: 'Alumni House - Tree 1',
   };
@@ -221,6 +235,7 @@ function handle(text, params = []) {
       quality_notes: params[5],
       ice_present: params[6],
       weight_before_ice_lb: params[7],
+      ice_not_reweighed: params[8],
     };
     db.logs.push(row);
     return rows([row]);
@@ -242,6 +257,7 @@ function handle(text, params = []) {
       client_ref: params[10],
       submitted_role: params[11],
       weight_before_ice_lb: params[12],
+      ice_not_reweighed: params[13],
     };
     db.journal.push(entry);
     return rows([{ id: entry.id }]);
@@ -359,6 +375,26 @@ describe('POST /collections', () => {
     assert.equal(response.status, 201);
     assert.equal(db.metrics[0].sugar_percent, 2.3);
     assert.equal(db.journal[0].sugar_percent, 2.3);
+  });
+
+  test('an iced bucket with no new reading saves the last reading, flagged on the entry and the log', async () => {
+    reset();
+    const response = await post({ ...untested, Weight: 30, Ice_Present: true, Ice_Not_Reweighed: true });
+
+    assert.equal(response.status, 201);
+    assert.equal(db.journal[0].weight_lb, 30);
+    assert.equal(db.journal[0].ice_not_reweighed, true);
+    assert.equal(db.journal[0].weight_before_ice_lb, null);
+    assert.equal(db.logs[0].ice_not_reweighed, true, 'the history list reads the log, so it carries the flag too');
+    assert.equal(response.json.Entry.Ice_Not_Reweighed, true);
+    assert.equal(response.json.Log.Ice_Not_Reweighed, true);
+  });
+
+  test('a collection without the flag saves it as false', async () => {
+    reset();
+    await post({ ...untested, Weight: 30 });
+    assert.equal(db.journal[0].ice_not_reweighed, false);
+    assert.equal(db.logs[0].ice_not_reweighed, false);
   });
 
   test('an iced bucket saves the after-ice weight as the sap and keeps the first weight', async () => {
